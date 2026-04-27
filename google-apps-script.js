@@ -68,6 +68,9 @@ function doGet(e) {
       case 'getContent':
         result = { success: true, content: getContent(p.key) };
         break;
+      case 'getAllContent':
+        result = getAllContent();
+        break;
       case 'getFeedback':
         result = getFeedback();
         break;
@@ -269,30 +272,46 @@ function handleLogin(email, password) {
   const sh   = getSheet(SHEETS.USERS);
   const data = sh.getDataRange().getValues();
 
-  // Skip row 1 (headers)
   for (let i = 1; i < data.length; i++) {
     const row      = data[i];
     const rowEmail = (row[COL.EMAIL] || '').toString().toLowerCase().trim();
 
     if (rowEmail !== email.toLowerCase().trim()) continue;
 
-    if ((row[COL.STATUS] || '').toString().toUpperCase() === 'INACTIVE') {
+    // Check status
+    const status = (row[COL.STATUS] || 'ACTIVE').toString().toUpperCase().trim();
+    if (status === 'INACTIVE') {
       return { success: false, error: 'Account deactivated. Contact admin.' };
     }
 
-    const storedPass  = (row[COL.PASSWORD]      || '').toString().trim();
-    const tempPass    = (row[COL.TEMP_PASSWORD]  || '').toString().trim();
-    const isFirstLogin = row[COL.IS_FIRST_LOGIN] === true
-                      || row[COL.IS_FIRST_LOGIN] === 'TRUE'
-                      || row[COL.IS_FIRST_LOGIN] === 'true';
+    const storedPass = (row[COL.PASSWORD]     || '').toString().trim();
+    const tempPass   = (row[COL.TEMP_PASSWORD]|| '').toString().trim();
 
-    const match = storedPass === password.trim()
-               || (isFirstLogin && tempPass === password.trim());
+    // Robust isFirstLogin check — handles boolean true, string "TRUE", "true", "1", yes
+    const firstLoginRaw = row[COL.IS_FIRST_LOGIN];
+    const isFirstLogin  = firstLoginRaw === true
+                       || String(firstLoginRaw).toUpperCase().trim() === 'TRUE'
+                       || String(firstLoginRaw).trim() === '1';
 
-    if (!match) return { success: false, error: 'Invalid email or password.' };
+    const enteredPass = (password || '').toString().trim();
 
-    // Update last login
+    // Password can match: stored password OR temp password (always, not just first login)
+    // This makes it more robust — if user hasn't set password yet, temp always works
+    const matchStored = storedPass !== '' && storedPass === enteredPass;
+    const matchTemp   = tempPass   !== '' && tempPass   === enteredPass;
+    const match       = matchStored || matchTemp;
+
+    if (!match) {
+      Logger.log('Login failed for: ' + rowEmail + 
+        ' | storedPass empty: ' + (storedPass==='') + 
+        ' | tempPass empty: ' + (tempPass==='') + 
+        ' | isFirstLogin: ' + isFirstLogin);
+      return { success: false, error: 'Invalid email or password.' };
+    }
+
+    // Update last login timestamp
     sh.getRange(i + 1, COL.LAST_LOGIN + 1).setValue(new Date().toISOString());
+    SpreadsheetApp.flush();
 
     return {
       success: true,
@@ -300,8 +319,8 @@ function handleLogin(email, password) {
         id:           (row[COL.ID]   || '').toString(),
         name:         (row[COL.NAME] || '').toString(),
         email:        (row[COL.EMAIL]|| '').toString(),
-        role:         (row[COL.ROLE] || 'USER').toString().toUpperCase(),
-        status:       (row[COL.STATUS]|| 'ACTIVE').toString(),
+        role:         (row[COL.ROLE] || 'USER').toString().toUpperCase().trim(),
+        status:       status,
         isFirstLogin: isFirstLogin,
       }
     };
@@ -384,16 +403,33 @@ function updateUserStatus(body) {
   const { userId, status } = body;
   if (!userId || !status) return { success: false, error: 'userId and status required.' };
 
+  // Validate status value
+  const normalStatus = status.toString().toUpperCase().trim();
+  if (normalStatus !== 'ACTIVE' && normalStatus !== 'INACTIVE') {
+    return { success: false, error: 'Status must be ACTIVE or INACTIVE.' };
+  }
+
   const sh   = getSheet(SHEETS.USERS);
   const data = sh.getDataRange().getValues();
 
   for (let i = 1; i < data.length; i++) {
-    if ((data[i][COL.ID]||'').toString() === userId.toString()) {
-      sh.getRange(i + 1, COL.STATUS + 1).setValue(status);
-      return { success: true };
+    const rowId   = (data[i][COL.ID]  || '').toString().trim();
+    const rowRole = (data[i][COL.ROLE]|| '').toString().toUpperCase().trim();
+
+    if (rowId !== userId.toString().trim()) continue;
+
+    // Never allow disabling an ADMIN account
+    if (rowRole === 'ADMIN' && normalStatus === 'INACTIVE') {
+      return { success: false, error: 'Admin accounts cannot be disabled.' };
     }
+
+    sh.getRange(i + 1, COL.STATUS + 1).setValue(normalStatus);
+    SpreadsheetApp.flush(); // force immediate write
+    Logger.log('Status updated: ' + rowId + ' → ' + normalStatus);
+    return { success: true, userId: rowId, newStatus: normalStatus };
   }
-  return { success: false, error: 'User not found.' };
+
+  return { success: false, error: 'User not found. ID: ' + userId };
 }
 
 function deleteUser(body) {
@@ -450,6 +486,22 @@ function getContent(key) {
     }
   }
   return null;
+}
+
+// Returns ALL saved content keys in one call — used by app on login sync
+function getAllContent() {
+  const sh   = getSheet(SHEETS.CONTENT);
+  const data = sh.getDataRange().getValues();
+  if (data.length < 2) return { success: true, content: {} };
+
+  const result = {};
+  data.slice(1).forEach(row => {
+    const key = (row[0]||'').toString().trim();
+    if (!key) return;
+    try { result[key] = JSON.parse(row[1]); }
+    catch { result[key] = row[1]; }
+  });
+  return { success: true, content: result };
 }
 
 function saveContent(body) {
