@@ -57,7 +57,7 @@ async function loadAdminUsers() {
 }
 
 function renderUsersList(users) {
-  const logs = Store.getLogs();
+  const logs      = Store.getLogs();
   const container = document.getElementById('admin-users-list');
 
   if (!users.length) {
@@ -66,45 +66,82 @@ function renderUsersList(users) {
   }
 
   container.innerHTML = users.map(u => {
-    const userLogs = logs.filter(l=>l.userId===u.id);
-    const lastLog  = userLogs.sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
-    const isAdmin  = u.role === 'ADMIN';
-    const isFirst  = u.isFirstLogin===true || u.isFirstLogin==='TRUE';
-    const statusColor = u.status==='ACTIVE' ? 'badge-green' : 'badge-red';
+    // Normalise values — sheet may return mixed case
+    const role       = (u.role   || 'USER').toString().toUpperCase().trim();
+    const status     = (u.status || 'ACTIVE').toString().toUpperCase().trim();
+    const isAdmin    = role === 'ADMIN';
+    const isActive   = status === 'ACTIVE';
+    const isFirst    = u.isFirstLogin === true || u.isFirstLogin === 'TRUE' || u.isFirstLogin === 'true';
+    const badgeCls   = isActive ? 'badge-green' : 'badge-red';
+    const userLogs   = logs.filter(l => l.userId === u.id);
+    const lastLog    = userLogs.sort((a,b) => (b.date||'').localeCompare(a.date||''))[0];
+    // Escape id for safe inline onclick
+    const safeId     = (u.id || '').toString().replace(/'/g, "\'");
+    const newStatus  = isActive ? 'INACTIVE' : 'ACTIVE';
+    const btnLabel   = isActive ? '🚫 Disable' : '✅ Enable';
+    const btnColor   = isActive ? 'color:#ef9a9a' : 'color:var(--g5)';
 
     return `
-      <div class="user-row" style="margin-bottom:8px">
+      <div class="user-row" style="margin-bottom:8px" id="user-row-${safeId}">
         <div class="user-avatar">${(u.name||'?').charAt(0).toUpperCase()}</div>
         <div class="user-info">
-          <div class="user-name">${u.name}${isAdmin ? ' 👑' : ''}</div>
-          <div class="user-email">${u.email}</div>
+          <div class="user-name">${u.name || '—'}${isAdmin ? ' 👑' : ''}</div>
+          <div class="user-email">${u.email || '—'}</div>
           <div style="font-size:11px;color:var(--text3);margin-top:3px">
             ${isFirst
-              ? '<span style="color:var(--accent)">🔑 Awaiting first login · password not yet set</span>'
+              ? '<span style="color:var(--accent)">🔑 Awaiting first login</span>'
               : `Last active: ${lastLog?.date || u.lastLogin || 'Never'}`}
           </div>
           <div style="font-size:11px;color:var(--text3)">
-            Created: ${u.createdDate||'—'} · ${userLogs.length} workouts
+            Created: ${u.createdDate || '—'} · ${userLogs.length} workouts
           </div>
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex-shrink:0">
-          <span class="badge ${statusColor}">${u.status}</span>
+          <span class="badge ${badgeCls}" id="status-badge-${safeId}">${status}</span>
           ${!isAdmin ? `
-            <button class="btn btn-ghost btn-sm"
-              onclick="toggleStatus('${u.id}','${u.status==='ACTIVE'?'INACTIVE':'ACTIVE'}',this)">
-              ${u.status==='ACTIVE' ? '🚫 Disable' : '✅ Enable'}
-            </button>` : ''}
+            <button class="btn btn-ghost btn-sm" id="toggle-btn-${safeId}" style="${btnColor}"
+              onclick="toggleStatus('${safeId}','${newStatus}','${safeId}')">
+              ${btnLabel}
+            </button>` : '<span style="font-size:11px;color:var(--text3)">Admin</span>'}
         </div>
       </div>`;
   }).join('');
 }
 
 // ── TOGGLE STATUS ─────────────────────────────────────────────────
-async function toggleStatus(userId, newStatus, btn) {
-  btn.disabled = true; btn.textContent = '…';
+async function toggleStatus(userId, newStatus, safeId) {
+  const btn   = document.getElementById('toggle-btn-'  + safeId);
+  const badge = document.getElementById('status-badge-'+ safeId);
+
+  // Immediate UI feedback
+  if (btn)   { btn.disabled = true; btn.textContent = '…'; }
+  if (badge) { badge.textContent = '…'; }
+
   const res = await Sheets.post('updateUserStatus', { userId, status: newStatus });
-  if (res?.success) { showToast(`User ${newStatus==='ACTIVE'?'enabled':'disabled'}.`,'success'); loadAdminUsers(); }
-  else { showToast('Failed to update.','error'); btn.disabled=false; btn.textContent = newStatus==='ACTIVE'?'✅ Enable':'🚫 Disable'; }
+
+  if (res?.success) {
+    const isNowActive = newStatus === 'ACTIVE';
+    // Update badge
+    if (badge) {
+      badge.textContent = newStatus;
+      badge.className   = 'badge ' + (isNowActive ? 'badge-green' : 'badge-red');
+    }
+    // Update button for next toggle
+    if (btn) {
+      btn.disabled    = false;
+      btn.textContent = isNowActive ? '🚫 Disable' : '✅ Enable';
+      btn.style.color = isNowActive ? '#ef9a9a' : 'var(--g5)';
+      // Swap the onclick to reverse direction
+      const reverseStatus = isNowActive ? 'INACTIVE' : 'ACTIVE';
+      btn.setAttribute('onclick', `toggleStatus('${userId}','${reverseStatus}','${safeId}')`);
+    }
+    showToast(`User ${isNowActive ? 'enabled ✅' : 'disabled 🚫'}.`, 'success');
+  } else {
+    // Revert UI
+    if (btn)   { btn.disabled = false; btn.textContent = newStatus==='ACTIVE'?'✅ Enable':'🚫 Disable'; }
+    if (badge) { badge.textContent = newStatus==='ACTIVE'?'INACTIVE':'ACTIVE'; }
+    showToast(res?.error || 'Failed to update status.', 'error');
+  }
 }
 
 // ── ADD USER MODAL ────────────────────────────────────────────────
