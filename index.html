@@ -18,13 +18,14 @@
 <div class="bg-mesh"></div>
 <div id="toast"></div>
 
-<!-- Push Notification Permission Banner -->
+<!-- Push Notification Permission Banner — only shown on dashboard after login -->
 <div id="push-banner" class="hidden" style="
-  position:fixed; bottom:90px; left:16px; right:16px; z-index:999;
+  position:fixed; bottom:90px; left:16px; right:16px; z-index:300;
   background:linear-gradient(135deg,#1a3328,#0a3d1f);
   border:1px solid var(--g3); border-radius:16px;
   padding:16px; box-shadow:0 8px 32px rgba(0,0,0,0.5);
-  max-width:448px; margin:0 auto;">
+  max-width:448px; margin:0 auto;
+  display:none;">
   <div style="display:flex;align-items:flex-start;gap:12px">
     <span style="font-size:28px;flex-shrink:0">🔔</span>
     <div style="flex:1">
