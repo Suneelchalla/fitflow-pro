@@ -155,6 +155,84 @@ window.addEventListener('popstate', () => {
   }, { passive: true });
 })();
 
+// ── CUSTOM PULL-TO-REFRESH ────────────────────────────────────────
+// Intercepts the pull gesture and does an in-app refresh
+// instead of letting the browser reload the page (which causes login flash)
+(function () {
+  let startY    = 0;
+  let pulling   = false;
+  let indicator = null;
+
+  function createIndicator() {
+    const el = document.createElement('div');
+    el.id = 'ptr-indicator';
+    el.style.cssText = `
+      position: fixed; top: 0; left: 0; right: 0; z-index: 9999;
+      height: 0; overflow: hidden; transition: height 0.2s;
+      background: var(--g2); display: flex; align-items: center;
+      justify-content: center; gap: 8px; font-size: 13px;
+      color: var(--g5); font-weight: 600;
+    `;
+    el.innerHTML = '<div class="loader" style="width:18px;height:18px;border-width:2px"></div> Refreshing…';
+    document.body.appendChild(el);
+    return el;
+  }
+
+  document.addEventListener('touchstart', e => {
+    // Only on root pages (dashboard, admin) and when scrolled to top
+    const rootPages = ['page-dashboard', 'page-admin', 'page-history-global'];
+    if (!rootPages.includes(APP.currentPage)) return;
+    const scrollEl = document.querySelector('#' + APP.currentPage + ' .scroll-content');
+    if (scrollEl && scrollEl.scrollTop > 5) return; // not at top
+    startY  = e.touches[0].clientY;
+    pulling = true;
+  }, { passive: true });
+
+  document.addEventListener('touchmove', e => {
+    if (!pulling) return;
+    const dy = e.touches[0].clientY - startY;
+    if (dy > 60) {
+      // Show indicator
+      if (!indicator) indicator = createIndicator();
+      indicator.style.height = Math.min(dy - 40, 52) + 'px';
+    }
+  }, { passive: true });
+
+  document.addEventListener('touchend', e => {
+    if (!pulling) return;
+    pulling = false;
+    const dy = e.changedTouches[0].clientY - startY;
+
+    if (dy > 80 && indicator) {
+      // User pulled enough — do in-app refresh
+      indicator.style.height = '52px';
+      _inAppRefresh().then(() => {
+        if (indicator) { indicator.style.height = '0'; setTimeout(() => { indicator?.remove(); indicator = null; }, 300); }
+      });
+    } else {
+      // Not enough pull — just hide indicator
+      if (indicator) { indicator.style.height = '0'; setTimeout(() => { indicator?.remove(); indicator = null; }, 300); }
+    }
+  }, { passive: true });
+
+  async function _inAppRefresh() {
+    try {
+      // Sync latest content + logs from Sheets
+      await syncContentFromSheets();
+      // Re-render current page
+      if (APP.currentPage === 'page-dashboard') {
+        refreshDashboard();
+      } else if (APP.currentPage === 'page-admin') {
+        renderAdminPanel();
+      } else if (APP.currentPage === 'page-history-global') {
+        renderGlobalHistory();
+      }
+    } catch (e) {
+      showToast('Refresh failed. Check connection.', 'error');
+    }
+  }
+})();
+
 // ── MODAL ─────────────────────────────────────────────────────────
 function openModal(id)  { document.getElementById(id)?.classList.add('open'); }
 function closeModal(id) { document.getElementById(id)?.classList.remove('open'); }
@@ -238,23 +316,30 @@ document.addEventListener('DOMContentLoaded', () => {
   const session = Store.getSession();
   if (session) {
     APP.currentUser = session;
-    // Always sync latest admin content on every app open
+
+    // Restore to correct page INSTANTLY before any rendering
+    // This prevents the login page flash on pull-down / reload
+    const targetPage = session.role === 'ADMIN'
+      ? 'page-admin'
+      : Store.get('ff_quote_' + session.id) === todayStr()
+        ? 'page-dashboard'
+        : 'page-quote';
+
+    // Show target page immediately (no animation, no flash)
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    const targetEl = document.getElementById(targetPage);
+    if (targetEl) { targetEl.classList.add('active'); APP.currentPage = targetPage; }
+
+    // Then render content
     syncContentFromSheets();
+    initDashboard();
 
     if (session.role === 'ADMIN') {
-      initDashboard();
-      showPage('page-admin', false);
       renderAdminPanel();
+    } else if (targetPage === 'page-quote') {
+      renderQuote();
     } else {
-      initDashboard();
-      const lastQuote = Store.get('ff_quote_' + session.id);
-      if (lastQuote === todayStr()) {
-        showPage('page-dashboard', false);
-        setActiveNav('home');
-      } else {
-        renderQuote();
-        showPage('page-quote', false);
-      }
+      setActiveNav('home');
     }
   } else {
     showPage('page-login', false);
