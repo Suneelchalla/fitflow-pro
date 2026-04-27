@@ -6,6 +6,32 @@ function initDashboard() {
   if (adminNav) adminNav.style.display = user.role === 'ADMIN' ? 'flex' : 'none';
   renderDashboardTiles();
   renderDashboardStats();
+  refreshDashboardBadges();
+}
+
+function refreshDashboardBadges() {
+  const user = APP.currentUser;
+  if (!user) return;
+
+  // Custom workouts badge
+  const cwBadge = document.getElementById('cw-count-badge');
+  if (cwBadge && typeof CW !== 'undefined') {
+    const count = CW.getAll(user.id).length;
+    cwBadge.innerHTML = count > 0
+      ? `<span class="badge badge-blue">${count} workout${count>1?'s':''}</span>`
+      : `<span style="font-size:11px;color:rgba(255,255,255,0.4)">None yet — create one!</span>`;
+  }
+
+  // Weekly report streak badge
+  const wrBadge = document.getElementById('wr-streak-badge');
+  if (wrBadge) {
+    const streak = calcStreak(user.id);
+    const monday = getMonday();
+    const weekCount = Store.getUserLogs(user.id).filter(l => l.date >= monday).length;
+    wrBadge.innerHTML = weekCount > 0
+      ? `<span class="badge badge-yellow">🔥 ${streak} day streak</span>`
+      : `<span style="font-size:11px;color:rgba(255,255,255,0.4)">Start this week!</span>`;
+  }
 }
 
 function renderDashboardStats() {
@@ -244,6 +270,7 @@ function tileTouchEnd(e, card) {
 function refreshDashboard() {
   renderDashboardStats();
   renderDashboardTiles();
+  refreshDashboardBadges();
 }
 
 // ── OPEN MODULE ───────────────────────────────────────────────────
