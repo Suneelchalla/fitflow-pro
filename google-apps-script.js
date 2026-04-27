@@ -17,6 +17,7 @@ const SHEETS = {
   RUN_LOGS:   'RunningLog',
   QUOTES:     'Quotes',
   CONTENT:    'Content',
+  FEEDBACK:   'UserFeedback',
 };
 
 // Column indexes for Users sheet (0-based)
@@ -83,6 +84,9 @@ function doGet(e) {
       case 'getContent':
         result = { success: true, content: getContent(p.key) };
         break;
+      case 'getFeedback':
+        result = getFeedback();
+        break;
       default:
         result = { success: false, error: 'Unknown action: ' + action };
     }
@@ -120,6 +124,9 @@ function doPost(e) {
         break;
       case 'saveContent':
         result = saveContent(body);
+        break;
+      case 'submitFeedback':
+        result = submitFeedback(body);
         break;
       case 'deleteUser':
         result = deleteUser(body);
@@ -401,6 +408,13 @@ function setupSheets() {
   if (contentSh.getLastRow() === 0) {
     contentSh.appendRow(['Key','Value','UpdatedAt']);
     styleHeader(contentSh, 3);
+  }
+
+  // Feedback sheet
+  const fbSh = getSheet(SHEETS.FEEDBACK);
+  if (fbSh.getLastRow() === 0) {
+    fbSh.appendRow(['FeedbackID','UserID','Name','Email','Category','Rating','Message','Date','Timestamp']);
+    styleHeader(fbSh, 9);
   }
 
   SpreadsheetApp.getUi().alert(
