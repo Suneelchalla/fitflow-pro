@@ -41,18 +41,34 @@ function renderDashboardStats() {
   if (ringPctEl) ringPctEl.textContent = pct + '%';
 }
 
+// ── MODULE ORDER STORAGE ─────────────────────────────────────────
+const ALL_MODULES = [
+  { id: 'cardio',     name: 'Home Cardio',      emoji: '🏠', color: 'grad-cardio',  sub: '6 exercises · 6 days' },
+  { id: 'gym',        name: 'Gym Workouts',      emoji: '🏋️', color: 'grad-gym',     sub: '6 exercises · 6 days' },
+  { id: 'yoga',       name: 'Yoga',              emoji: '🧘', color: 'grad-yoga',    sub: '6 poses · 6 days' },
+  { id: 'running',    name: 'Running & Walking', emoji: '🏃', color: 'grad-running', sub: 'GPS tracker + plans' },
+  { id: 'stretching', name: 'Stretching',        emoji: '🤸', color: 'grad-stretch', sub: '6 stretches · 6 days' },
+];
+
+function getModuleOrder(userId) {
+  const saved = Store.get('ff_module_order_' + userId);
+  if (saved && Array.isArray(saved) && saved.length === ALL_MODULES.length) {
+    // Return modules in saved order
+    return saved.map(id => ALL_MODULES.find(m => m.id === id)).filter(Boolean);
+  }
+  return [...ALL_MODULES];
+}
+
+function saveModuleOrder(userId, modules) {
+  Store.set('ff_module_order_' + userId, modules.map(m => m.id));
+}
+
 function renderDashboardTiles() {
-  const modules = [
-    { id: 'cardio',     name: 'Home Cardio',        emoji: '🏠', color: 'grad-cardio',  sub: '6 exercises · 6 days' },
-    { id: 'gym',        name: 'Gym Workouts',        emoji: '🏋️', color: 'grad-gym',     sub: '6 exercises · 6 days' },
-    { id: 'yoga',       name: 'Yoga',                emoji: '🧘', color: 'grad-yoga',    sub: '6 poses · 6 days' },
-    { id: 'running',    name: 'Running & Walking',   emoji: '🏃', color: 'grad-running', sub: 'GPS tracker + plans' },
-    { id: 'stretching', name: 'Stretching',          emoji: '🤸', color: 'grad-stretch', sub: '6 stretches · 6 days' },
-  ];
   const user     = APP.currentUser;
   const today    = todayStr();
   const todayDay = dayName();
   const monday   = getMonday();
+  const modules  = getModuleOrder(user.id);
 
   const grid = document.getElementById('module-grid');
   if (!grid) return;
@@ -63,7 +79,13 @@ function renderDashboardTiles() {
     const weekDone  = getWeekDays().filter(d => logs.some(l => l.day === d && l.date >= monday)).length;
 
     return `
-      <div class="module-card ${m.color} animate-in" onclick="openModule('${m.id}')">
+      <div class="module-card ${m.color} animate-in"
+        data-module="${m.id}"
+        draggable="true"
+        onclick="openModule('${m.id}')"
+        ontouchstart="tileTouchStart(event,this)"
+        ontouchmove="tileTouchMove(event,this)"
+        ontouchend="tileTouchEnd(event,this)">
         <div>
           <div class="module-emoji">${m.emoji}</div>
           <div class="module-name">${m.name}</div>
@@ -74,8 +96,149 @@ function renderDashboardTiles() {
           <span style="font-size:12px;color:rgba(255,255,255,0.55)">${weekDone}/6 wk</span>
         </div>
         <div class="module-bg">${m.emoji}</div>
+        <!-- Drag handle hint -->
+        <div class="drag-hint">⠿</div>
       </div>`;
   }).join('');
+
+  // Attach desktop drag events after render
+  initTileDragDrop();
+}
+
+// ── DESKTOP DRAG & DROP ───────────────────────────────────────────
+let _dragSrc = null;
+
+function initTileDragDrop() {
+  const grid  = document.getElementById('module-grid');
+  if (!grid) return;
+
+  grid.querySelectorAll('.module-card').forEach(card => {
+    card.addEventListener('dragstart', e => {
+      _dragSrc = card;
+      card.style.opacity = '0.5';
+      card.style.transform = 'scale(0.95)';
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    card.addEventListener('dragend', e => {
+      card.style.opacity = '';
+      card.style.transform = '';
+      grid.querySelectorAll('.module-card').forEach(c => c.classList.remove('drag-over'));
+    });
+    card.addEventListener('dragover', e => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      if (card !== _dragSrc) {
+        grid.querySelectorAll('.module-card').forEach(c => c.classList.remove('drag-over'));
+        card.classList.add('drag-over');
+      }
+    });
+    card.addEventListener('drop', e => {
+      e.preventDefault();
+      if (_dragSrc && _dragSrc !== card) {
+        _swapTiles(_dragSrc, card);
+      }
+    });
+  });
+}
+
+function _swapTiles(src, target) {
+  const grid  = document.getElementById('module-grid');
+  const cards = [...grid.querySelectorAll('.module-card')];
+  const srcIdx = cards.indexOf(src);
+  const tgtIdx = cards.indexOf(target);
+
+  // Insert src before or after target depending on position
+  if (srcIdx < tgtIdx) {
+    grid.insertBefore(src, target.nextSibling);
+  } else {
+    grid.insertBefore(src, target);
+  }
+
+  target.classList.remove('drag-over');
+  _persistOrder();
+}
+
+function _persistOrder() {
+  const grid    = document.getElementById('module-grid');
+  if (!grid) return;
+  const ordered = [...grid.querySelectorAll('.module-card')].map(c => c.dataset.module);
+  saveModuleOrder(APP.currentUser.id, ordered.map(id => ALL_MODULES.find(m => m.id === id)));
+  showToast('Order saved! ✅', 'success');
+}
+
+// ── MOBILE TOUCH DRAG & DROP ──────────────────────────────────────
+let _touch = { active: false, card: null, clone: null, startX: 0, startY: 0, lastOver: null };
+
+function tileTouchStart(e, card) {
+  // Only activate on long press (300ms) to not conflict with tap-to-open
+  _touch.timer = setTimeout(() => {
+    _touch.active = true;
+    _touch.card   = card;
+    _touch.startX = e.touches[0].clientX;
+    _touch.startY = e.touches[0].clientY;
+
+    // Create floating clone
+    const rect  = card.getBoundingClientRect();
+    const clone = card.cloneNode(true);
+    clone.style.cssText = `
+      position:fixed; z-index:9999; pointer-events:none; opacity:0.85;
+      width:${rect.width}px; height:${rect.height}px;
+      left:${rect.left}px; top:${rect.top}px;
+      transform:scale(1.05); transition:none;
+      border:2px solid var(--accent); border-radius:var(--radius-lg);
+      box-shadow:0 16px 48px rgba(0,0,0,0.6);
+    `;
+    document.body.appendChild(clone);
+    _touch.clone   = clone;
+    card.style.opacity = '0.3';
+    navigator.vibrate && navigator.vibrate(50); // haptic feedback
+  }, 300);
+}
+
+function tileTouchMove(e, card) {
+  clearTimeout(_touch.timer);
+  if (!_touch.active || !_touch.clone) return;
+  e.preventDefault();
+
+  const touch = e.touches[0];
+  const dx    = touch.clientX - _touch.startX;
+  const dy    = touch.clientY - _touch.startY;
+  const rect  = _touch.card.getBoundingClientRect();
+
+  // Move clone with finger
+  _touch.clone.style.left = (rect.left + dx) + 'px';
+  _touch.clone.style.top  = (rect.top  + dy) + 'px';
+
+  // Find card under finger
+  _touch.clone.style.display = 'none';
+  const el = document.elementFromPoint(touch.clientX, touch.clientY);
+  _touch.clone.style.display = '';
+
+  const over = el?.closest('.module-card');
+  if (over && over !== _touch.card) {
+    if (over !== _touch.lastOver) {
+      document.querySelectorAll('.module-card').forEach(c => c.classList.remove('drag-over'));
+      over.classList.add('drag-over');
+      _touch.lastOver = over;
+    }
+  }
+}
+
+function tileTouchEnd(e, card) {
+  clearTimeout(_touch.timer);
+  if (!_touch.active) return;
+
+  // Clean up clone
+  if (_touch.clone) { _touch.clone.remove(); _touch.clone = null; }
+  card.style.opacity = '';
+  document.querySelectorAll('.module-card').forEach(c => c.classList.remove('drag-over'));
+
+  // Drop on target
+  if (_touch.lastOver && _touch.lastOver !== card) {
+    _swapTiles(card, _touch.lastOver);
+  }
+
+  _touch = { active: false, card: null, clone: null, startX: 0, startY: 0, lastOver: null };
 }
 
 function refreshDashboard() {
