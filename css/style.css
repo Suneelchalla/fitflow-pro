@@ -507,3 +507,126 @@ textarea.form-input { resize: vertical; min-height: 90px; line-height: 1.5; }
 }
 .ring-pct { font-family: var(--font-display); font-size: 28px; color: var(--white); line-height: 1; }
 .ring-sub { font-size: 10px; color: var(--text3); margin-top: 2px; }
+
+/* ── ADMIN INLINE EDIT ─────────────────────────────────────────── */
+.admin-edit-mode .editable {
+  border-bottom: 1.5px dashed var(--g3);
+  cursor: text;
+  min-width: 40px;
+  display: inline-block;
+  transition: background 0.15s;
+  border-radius: 4px;
+  padding: 1px 4px;
+}
+.admin-edit-mode .editable:hover,
+.admin-edit-mode .editable:focus {
+  background: rgba(46,125,70,0.15);
+  outline: none;
+}
+.admin-edit-mode .editable-block {
+  border: 1.5px dashed var(--g3);
+  border-radius: 8px;
+  padding: 6px 10px;
+  cursor: text;
+  min-height: 32px;
+  transition: background 0.15s;
+}
+.admin-edit-mode .editable-block:hover,
+.admin-edit-mode .editable-block:focus {
+  background: rgba(46,125,70,0.12);
+  outline: none;
+}
+.admin-edit-mode .edit-hint {
+  display: inline-block;
+}
+.edit-hint { display: none; }
+
+.admin-edit-bar {
+  position: sticky;
+  top: 0;
+  z-index: 80;
+  background: linear-gradient(135deg, #1a3328, #0a3d1f);
+  border-bottom: 1px solid var(--g3);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.admin-edit-bar .edit-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--g5);
+  flex: 1;
+}
+.edit-badge {
+  background: var(--accent);
+  color: var(--bg);
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 50px;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+}
+.add-exercise-btn {
+  width: 100%;
+  padding: 14px;
+  border: 2px dashed var(--g3);
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--g5);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: var(--transition);
+}
+.add-exercise-btn:hover { background: rgba(46,125,70,0.1); }
+.delete-ex-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(229,57,53,0.2);
+  border: 1px solid rgba(229,57,53,0.4);
+  color: #ef9a9a;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: var(--transition);
+  z-index: 5;
+}
+.delete-ex-btn:hover { background: rgba(229,57,53,0.35); }
+
+/* ── CALENDAR ENHANCED ─────────────────────────────────────────── */
+.cal-day.cal-missed {
+  background: rgba(229, 57, 53, 0.35);
+  color: #ef9a9a;
+  border: 1px solid rgba(229,57,53,0.4);
+}
+.cal-day.cal-future {
+  background: var(--bg3);
+  color: var(--text3);
+  opacity: 0.45;
+}
+.cal-day.completed {
+  background: var(--g3);
+  color: white;
+  font-size: 15px;
+  line-height: 1;
+}
+.cal-day.today {
+  border: 2px solid var(--accent);
+  color: var(--accent);
+  font-weight: 700;
+}
+.cal-day.completed.today {
+  border: 2px solid var(--accent);
+  background: var(--g3);
+  color: white;
+}
