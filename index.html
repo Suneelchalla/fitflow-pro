@@ -105,7 +105,16 @@
         </div>
         <div style="display:flex;gap:8px;align-items:center">
           <div class="streak-pill">🔥 <span id="dash-streak">0</span> days</div>
-          <button onclick="logout()" style="width:36px;height:36px;border-radius:50%;background:var(--surface);border:1px solid var(--border);font-size:16px;cursor:pointer">👤</button>
+          <button onclick="toggleProfileMenu()" id="profile-btn" style="width:36px;height:36px;border-radius:50%;background:var(--surface);border:1px solid var(--border);font-size:16px;cursor:pointer;position:relative">👤</button>
+        <!-- Profile dropdown -->
+        <div id="profile-menu" style="display:none;position:absolute;top:60px;right:16px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:6px;z-index:200;min-width:160px;box-shadow:var(--shadow)">
+          <div style="padding:10px 12px 8px;border-bottom:1px solid var(--border);margin-bottom:4px">
+            <div id="profile-menu-name" style="font-weight:700;font-size:14px"></div>
+            <div id="profile-menu-email" style="font-size:11px;color:var(--text3)"></div>
+          </div>
+          <button onclick="openFeedbackModal()" style="width:100%;text-align:left;padding:10px 12px;background:none;border:none;color:var(--text2);font-size:14px;cursor:pointer;border-radius:8px;font-family:var(--font-body)">💬 Send Feedback</button>
+          <button onclick="logout()" style="width:100%;text-align:left;padding:10px 12px;background:none;border:none;color:#ef9a9a;font-size:14px;cursor:pointer;border-radius:8px;font-family:var(--font-body)">🚪 Sign Out</button>
+        </div>
         </div>
       </div>
 
@@ -329,43 +338,72 @@
 <!-- PAGE: ADMIN                                                      -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <div id="page-admin" class="page">
-  <div class="scroll-content pb-nav">
+  <div class="scroll-content" style="padding-bottom:24px">
 
-    <div class="top-bar">
-      <button class="back-btn" onclick="navTo('home')">‹</button>
-      <div class="top-bar-title">⚙️ Admin Panel</div>
-      <div style="width:38px"></div>
+    <!-- Admin Header -->
+    <div style="background:linear-gradient(135deg,var(--g1),var(--bg2));padding:24px 16px 20px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+        <div>
+          <div class="display" style="font-size:32px;color:var(--g5)">ADMIN PANEL</div>
+          <div style="font-size:13px;color:var(--text3);margin-top:2px" id="admin-user-name"></div>
+        </div>
+        <button onclick="logout()" style="background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 14px;color:var(--text2);font-size:13px;cursor:pointer">Sign Out</button>
+      </div>
+
+      <!-- Stats row -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+        <div style="background:rgba(255,255,255,0.06);border-radius:12px;padding:12px 8px;text-align:center">
+          <div style="font-family:var(--font-display);font-size:28px;color:var(--g5)" id="admin-stat-users">—</div>
+          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Users</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.06);border-radius:12px;padding:12px 8px;text-align:center">
+          <div style="font-family:var(--font-display);font-size:28px;color:var(--g5)" id="admin-stat-today">0</div>
+          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Today</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.06);border-radius:12px;padding:12px 8px;text-align:center">
+          <div style="font-family:var(--font-display);font-size:28px;color:var(--g5)" id="admin-stat-workouts">0</div>
+          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Workouts</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.06);border-radius:12px;padding:12px 8px;text-align:center">
+          <div style="font-family:var(--font-display);font-size:28px;color:var(--g5)" id="admin-stat-runs">0</div>
+          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Runs</div>
+        </div>
+      </div>
     </div>
 
     <div class="container" style="padding-top:16px">
 
-      <!-- Admin stats -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-        <div class="stat-card"><div class="stat-val" id="admin-stat-users">0</div><div class="stat-label">Total Users</div></div>
-        <div class="stat-card"><div class="stat-val" id="admin-stat-today">0</div><div class="stat-label">Active Today</div></div>
-        <div class="stat-card"><div class="stat-val" id="admin-stat-workouts">0</div><div class="stat-label">All Workouts</div></div>
-        <div class="stat-card"><div class="stat-val" id="admin-stat-runs">0</div><div class="stat-label">Total Runs</div></div>
-      </div>
-
       <!-- Admin tabs -->
       <div class="tab-strip" style="margin-bottom:16px">
         <button class="tab-btn admin-tab-btn active" onclick="switchAdminTab('users',this)">👥 Users</button>
-        <button class="tab-btn admin-tab-btn" onclick="switchAdminTab('history',this)">📋 All History</button>
+        <button class="tab-btn admin-tab-btn" onclick="switchAdminTab('history',this)">📋 History</button>
+        <button class="tab-btn admin-tab-btn" onclick="switchAdminTab('feedback',this)">💬 Feedback</button>
+        <button class="tab-btn admin-tab-btn" onclick="switchAdminTab('quotes',this)">🗣 Quotes</button>
         <button class="tab-btn admin-tab-btn" onclick="switchAdminTab('content',this)">✏️ Content</button>
       </div>
 
-      <!-- Users tab -->
-      <div id="admin-tab-users" class="admin-tab-content active">
+      <!-- USERS tab -->
+      <div id="admin-tab-users" class="admin-tab-content">
         <button class="btn btn-primary btn-full" onclick="openAddUser()" style="margin-bottom:16px">+ Add New User</button>
         <div id="admin-users-list"></div>
       </div>
 
-      <!-- History tab -->
+      <!-- HISTORY tab -->
       <div id="admin-tab-history" class="admin-tab-content" style="display:none">
         <div id="all-history-list"></div>
       </div>
 
-      <!-- Content tab -->
+      <!-- QUOTES tab -->
+      <div id="admin-tab-quotes" class="admin-tab-content" style="display:none">
+        <div id="quotes-manager"></div>
+      </div>
+
+      <!-- FEEDBACK tab -->
+      <div id="admin-tab-feedback" class="admin-tab-content" style="display:none">
+        <div id="feedback-list"></div>
+      </div>
+
+      <!-- CONTENT tab -->
       <div id="admin-tab-content" class="admin-tab-content" style="display:none">
         <div id="content-links-list"></div>
       </div>
@@ -494,6 +532,70 @@
   </div>
 </div>
 
+
+<!-- Feedback Modal -->
+<div id="modal-feedback" class="modal-overlay">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">💬 Send Feedback</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:16px">Help us improve FitFlow Pro! Your feedback goes to the admin.</div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="form-group">
+        <label class="form-label">Category</label>
+        <select id="feedback-category" class="form-input">
+          <option value="General">General</option>
+          <option value="Bug Report">Bug Report</option>
+          <option value="Feature Request">Feature Request</option>
+          <option value="Workout Content">Workout Content</option>
+          <option value="App Performance">App Performance</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Rating</label>
+        <div style="display:flex;gap:10px;padding:6px 0" id="star-rating">
+          <span onclick="setRating(1)" class="star" style="font-size:28px;cursor:pointer;opacity:0.4">⭐</span>
+          <span onclick="setRating(2)" class="star" style="font-size:28px;cursor:pointer;opacity:0.4">⭐</span>
+          <span onclick="setRating(3)" class="star" style="font-size:28px;cursor:pointer;opacity:0.4">⭐</span>
+          <span onclick="setRating(4)" class="star" style="font-size:28px;cursor:pointer;opacity:0.4">⭐</span>
+          <span onclick="setRating(5)" class="star" style="font-size:28px;cursor:pointer;opacity:0.4">⭐</span>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Your Message</label>
+        <textarea id="feedback-message" class="form-input" rows="4" placeholder="Tell us what you think, what's working great, or what could be better…"></textarea>
+      </div>
+      <div id="feedback-error" style="color:#ef9a9a;font-size:13px;min-height:16px"></div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-outline btn-full" onclick="closeModal('modal-feedback')">Cancel</button>
+        <button id="feedback-submit-btn" class="btn btn-primary btn-full" onclick="submitFeedback()">Send Feedback</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Quote Modal -->
+<div id="modal-add-quote" class="modal-overlay">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">💬 Add Motivational Quote</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:14px">This quote will appear on users' daily motivation screen.</div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="form-group">
+        <label class="form-label">Quote Text</label>
+        <textarea id="new-quote-text" class="form-input" placeholder="Enter the motivational quote…" rows="3"></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Author (optional)</label>
+        <input id="new-quote-author" type="text" class="form-input" placeholder="e.g. Arnold Schwarzenegger">
+      </div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-outline btn-full" onclick="closeModal('modal-add-quote')">Cancel</button>
+        <button class="btn btn-primary btn-full" onclick="saveNewQuote()">Add Quote</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <!-- SCRIPTS                                                          -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
@@ -504,35 +606,100 @@
 <script src="js/running.js"></script>
 <script src="js/admin.js"></script>
 <script>
-// ── INLINE HELPERS ──────────────────────────────────────────────
+
+// ── PROFILE DROPDOWN ──────────────────────────────────────────
+function toggleProfileMenu() {
+  const menu = document.getElementById('profile-menu');
+  const isOpen = menu.style.display === 'block';
+  if (!isOpen) {
+    const u = APP.currentUser;
+    document.getElementById('profile-menu-name').textContent  = u?.name  || '';
+    document.getElementById('profile-menu-email').textContent = u?.email || '';
+  }
+  menu.style.display = isOpen ? 'none' : 'block';
+}
+document.addEventListener('click', e => {
+  const btn  = document.getElementById('profile-btn');
+  const menu = document.getElementById('profile-menu');
+  if (menu && btn && !btn.contains(e.target) && !menu.contains(e.target)) {
+    menu.style.display = 'none';
+  }
+});
+
+// ── FEEDBACK ──────────────────────────────────────────────────
+let _currentRating = 0;
+function setRating(n) {
+  _currentRating = n;
+  document.querySelectorAll('.star').forEach((s,i) => s.style.opacity = i < n ? '1' : '0.35');
+}
+function openFeedbackModal() {
+  document.getElementById('profile-menu').style.display = 'none';
+  document.getElementById('feedback-message').value = '';
+  document.getElementById('feedback-category').value = 'General';
+  document.getElementById('feedback-error').textContent = '';
+  _currentRating = 0;
+  document.querySelectorAll('.star').forEach(s => s.style.opacity = '0.35');
+  openModal('modal-feedback');
+}
+async function submitFeedback() {
+  const message  = document.getElementById('feedback-message').value.trim();
+  const category = document.getElementById('feedback-category').value;
+  const errEl    = document.getElementById('feedback-error');
+  const btn      = document.getElementById('feedback-submit-btn');
+  errEl.textContent = '';
+  if (!message) { errEl.textContent = 'Please write a message before submitting.'; return; }
+  btn.disabled = true; btn.textContent = 'Sending…';
+  const user = APP.currentUser;
+  const res = await Sheets.post('submitFeedback', {
+    userId:   user?.id   || '',
+    name:     user?.name || 'Anonymous',
+    email:    user?.email|| '',
+    category, rating: _currentRating, message,
+    date: todayStr(),
+    timestamp: new Date().toISOString()
+  });
+  btn.disabled = false; btn.textContent = 'Send Feedback';
+  if (res === null) {
+    errEl.textContent = 'Sheets not configured — but thanks for your feedback!';
+    setTimeout(() => closeModal('modal-feedback'), 2000);
+  } else if (res?.success) {
+    closeModal('modal-feedback');
+    showToast('Thanks for your feedback! 🙏', 'success');
+  } else {
+    errEl.textContent = res?.error || 'Failed to send. Try again.';
+  }
+}
+
+// ── ADMIN TABS (with feedback) ────────────────────────────────
+function switchAdminTab(tab, btn) {
+  document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.admin-tab-content').forEach(c => c.style.display='none');
+  const el = document.getElementById('admin-tab-'+tab);
+  if (el) el.style.display = 'block';
+  if (tab==='users')    loadAdminUsers();
+  if (tab==='history')  renderAllHistory();
+  if (tab==='feedback') renderFeedbackList();
+  if (tab==='quotes')   renderQuotesManager();
+  if (tab==='content')  renderContentLinks();
+}
+
 function fillDemo(email, pass) {
   document.getElementById('login-email').value = email;
   document.getElementById('login-password').value = pass;
 }
-function logout() {
-  Store.clearSession();
-  APP.currentUser = null;
-  showPage('page-login');
-}
-
-// admin tab visibility toggle
-document.querySelectorAll('.admin-tab-content').forEach(c => {
-  if (!c.classList.contains('active')) c.style.display = 'none';
+// Set admin name in header after login
+document.addEventListener('DOMContentLoaded', () => {
+  const orig = window.renderAdminPanel;
+  window.renderAdminPanel = function() {
+    const el = document.getElementById('admin-user-name');
+    if (el && APP.currentUser) el.textContent = '👑 ' + APP.currentUser.name;
+    orig && orig();
+  };
+  // Patch APP_DATA.quotes to use custom ones if saved
+  const custom = Store.getContent('custom_quotes');
+  if (custom && custom.length) APP_DATA.quotes = custom;
 });
-function switchAdminTab(tab, btn) {
-  document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  document.querySelectorAll('.admin-tab-content').forEach(c => c.style.display = 'none');
-  const el = document.getElementById('admin-tab-' + tab);
-  if (el) el.style.display = 'block';
-  if (tab === 'history') renderAllHistory();
-  if (tab === 'content') renderContentLinks();
-}
-
-// Register service worker
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.register('sw.js').catch(() => {});
-}
 </script>
 </body>
 </html>
