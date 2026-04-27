@@ -117,8 +117,10 @@ function renderModulePage(moduleId) {
 
   // Reset inner tabs to Workout
   document.querySelectorAll('.module-inner-tab').forEach(t => t.classList.remove('active'));
-  document.getElementById('tab-workout')?.classList.add('active');
-  document.querySelectorAll('.module-tab-content').forEach(c => c.classList.remove('active'));
+  // Activate first tab button (Workout)
+  document.querySelector('.module-inner-tab')?.classList.add('active');
+  // Show only workout tab content
+  document.querySelectorAll('.module-tab-content').forEach(el => el.classList.remove('active'));
   document.getElementById('module-workout-tab')?.classList.add('active');
 
   // Always set currentDay before rendering
@@ -310,9 +312,10 @@ function renderHydrationTab(moduleId) {
   const container = document.getElementById('hydration-tab-content');
   if (!container) return;
 
-  const override = Store.getContent('hydration_' + moduleId);
-  const base     = APP_DATA.hydration?.default || {};
-  const data     = override || base;
+  const override  = Store.getContent('hydration_' + moduleId);
+  // Use per-module hydration plan — fall back to default if not found
+  const perModule = APP_DATA.hydration?.[moduleId] || APP_DATA.hydration?.default || {};
+  const data      = override || perModule;
 
   // Safe fallbacks for every field
   const title    = data.title    || 'Daily Hydration Plan';
@@ -391,7 +394,7 @@ function renderDietTab(moduleId) {
   if (!container) return;
 
   const override = Store.getContent('diet_' + moduleId);
-  // Key mapping — stretching uses its own, falls to cardio if missing
+  // Use exact module key — all modules now have their own diet plan
   const modKey   = APP_DATA.diet?.modules?.[moduleId] ? moduleId : 'cardio';
   const data     = override || APP_DATA.diet?.modules?.[modKey] || { title: 'Diet Plan', meals: [] };
 
