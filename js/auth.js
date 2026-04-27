@@ -55,18 +55,40 @@ async function attemptLogin(email, password) {
   if (cfg.webAppUrl) {
     try {
       const res = await Sheets.get('login', { email, password });
-      if (res) return res;
-    } catch {}
+      if (res && res.success !== undefined) {
+        // Got a valid response from Sheets — use it (success or error)
+        return res;
+      }
+    } catch(e) {
+      console.warn('Sheets login failed:', e);
+    }
+    // If Sheets call failed (network error), fall through to local
   }
 
-  // Local fallback (admin only)
+  // Local fallback — works for admin even without Sheets
   const localUsers = JSON.parse(localStorage.getItem('ff_local_users') || '[]');
-  const u = localUsers.find(u => u.email === email);
-  if (!u) return { success: false, error: 'Sheets not configured. Contact Admin.' };
-  if (u.status === 'INACTIVE') return { success: false, error: 'Account deactivated.' };
-  const match = u.password === password || (u.isFirstLogin && u.tempPassword === password);
-  if (!match) return { success: false, error: 'Invalid email or password.' };
-  return { success: true, user: { id:u.id, name:u.name, email:u.email, role:u.role, status:u.status, isFirstLogin:u.isFirstLogin } };
+  const u = localUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+  if (!u) {
+    return { success: false, error: cfg.webAppUrl
+      ? 'Cannot reach server. Check your internet connection.'
+      : 'Sheets not configured. Contact Admin.' };
+  }
+  if ((u.status||'').toUpperCase() === 'INACTIVE') {
+    return { success: false, error: 'Account deactivated.' };
+  }
+  const enteredPass  = (password || '').trim();
+  const matchStored  = u.password    && u.password    === enteredPass;
+  const matchTemp    = u.tempPassword && u.tempPassword === enteredPass;
+  if (!matchStored && !matchTemp) {
+    return { success: false, error: 'Invalid email or password.' };
+  }
+  const isFirst = u.isFirstLogin === true || u.isFirstLogin === 'TRUE';
+  return { success: true, user: {
+    id: u.id, name: u.name, email: u.email,
+    role: (u.role||'USER').toUpperCase(),
+    status: u.status||'ACTIVE',
+    isFirstLogin: isFirst
+  }};
 }
 
 // ── COMPLETE LOGIN ────────────────────────────────────────────────
