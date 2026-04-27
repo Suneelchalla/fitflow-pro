@@ -182,11 +182,11 @@ function renderContentHome() {
   const container = document.getElementById('content-links-list');
   const connected = !!Store.getSheetsConfig().webAppUrl;
   const modules   = [
-    { id: 'cardio',     name: 'Home Cardio',    emoji: '🏠' },
-    { id: 'gym',        name: 'Gym Workouts',   emoji: '🏋️' },
-    { id: 'yoga',       name: 'Yoga',           emoji: '🧘' },
-    { id: 'stretching', name: 'Stretching',     emoji: '🤸' },
-    { id: 'running',    name: 'Running',        emoji: '🏃' },
+    { id: 'cardio',     name: 'Home Cardio',    emoji: '🏠',  hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
+    { id: 'gym',        name: 'Gym Workouts',   emoji: '🏋️',  hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
+    { id: 'yoga',       name: 'Yoga',           emoji: '🧘',  hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
+    { id: 'stretching', name: 'Stretching',     emoji: '🤸',  hasSections: ['exercises','hydration','diet'] },
+    { id: 'running',    name: 'Running',        emoji: '🏃',  hasSections: ['warmup','cooldown','hydration','diet'] },
   ];
 
   container.innerHTML = `
@@ -247,13 +247,22 @@ function renderModuleEditor() {
 
   document.getElementById('editor-module-title').textContent = info.emoji + ' ' + info.name;
 
-  const sections = [
+  // Sections vary per module
+  const allSections = [
     { id: 'exercises', label: '💪 Exercises' },
     { id: 'warmup',    label: '🔥 Warm-Up' },
     { id: 'cooldown',  label: '🧘 Cool-Down' },
     { id: 'hydration', label: '💧 Hydration' },
     { id: 'diet',      label: '🥗 Diet' },
-  ].filter(s => AdminEdit.module === 'stretching' ? !['warmup','cooldown'].includes(s.id) : true);
+  ];
+  // stretching = no warmup/cooldown (it IS the stretching activity)
+  // running = no main exercises (GPS-based, no fixed exercise list)
+  const excludeMap = {
+    stretching: ['warmup','cooldown'],
+    running:    ['exercises'],
+  };
+  const excluded = excludeMap[AdminEdit.module] || [];
+  const sections = allSections.filter(s => !excluded.includes(s.id));
 
   document.getElementById('editor-section-tabs').innerHTML = sections.map(s => `
     <button class="tab-btn ${AdminEdit.section === s.id ? 'active' : ''}"
@@ -574,7 +583,8 @@ function addWarmCoolExercise() {
 // HYDRATION EDITOR
 // ════════════════════════════════════════════════════════════════
 function renderHydrationEditor(moduleId, body) {
-  const data     = Store.getContent('hydration_' + moduleId) || APP_DATA.hydration?.default || {};
+  const perModule = APP_DATA.hydration?.[moduleId] || APP_DATA.hydration?.default || {};
+  const data      = Store.getContent('hydration_' + moduleId) || perModule;
   const schedule = Array.isArray(data.schedule) ? data.schedule : [];
   const tips     = Array.isArray(data.tips)     ? data.tips     : [];
 
@@ -669,6 +679,7 @@ function addHydrationTip() {
 // DIET EDITOR
 // ════════════════════════════════════════════════════════════════
 function renderDietEditor(moduleId, body) {
+  // All 5 modules now have their own diet plan
   const modKey = APP_DATA.diet?.modules?.[moduleId] ? moduleId : 'cardio';
   const data   = Store.getContent('diet_' + moduleId) || APP_DATA.diet?.modules?.[modKey] || { title: 'Diet Plan', meals: [] };
   const meals  = Array.isArray(data.meals) ? data.meals : [];
