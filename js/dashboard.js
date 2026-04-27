@@ -517,17 +517,26 @@ function buildCalendar(logs, moduleFilter) {
       cellClass += ' cal-missed';
       innerHtml  = `<span style="font-size:9px;opacity:0.7">${d}</span>`;
     } else if (hasActivity) {
-      // Past day with activity — show emoji (first one if multiple)
       cellClass += ' completed';
-      // If multiple modules done same day, show count or first emoji
-      innerHtml = emojis.length > 1
-        ? `<span style="font-size:10px;line-height:1">${emojis[0]}</span>`
-        : emojis[0];
+      if (emojis.length === 1) {
+        // Single activity — show emoji nicely
+        innerHtml = `<span style="font-size:14px;line-height:1">${emojis[0]}</span>`;
+      } else if (emojis.length === 2) {
+        // Two activities — show both small
+        innerHtml = `<span style="font-size:10px;line-height:1">${emojis[0]}${emojis[1]}</span>`;
+      } else {
+        // 3+ activities — show first emoji + count badge
+        innerHtml = `<span style="font-size:10px;line-height:1">${emojis[0]}<sup style="font-size:8px;font-weight:700">+${emojis.length - 1}</sup></span>`;
+      }
     } else {
       innerHtml = d;
     }
 
-    cells += `<div class="${cellClass}" title="${dateStr}">${innerHtml}</div>`;
+    // Add tooltip showing all activities done that day
+    const tooltip = emojis.length > 0
+      ? `${dateStr} — ${emojis.join(' ')}`
+      : dateStr;
+    cells += `<div class="${cellClass}" title="${tooltip}">${innerHtml}</div>`;
   }
 
   // Legend
@@ -556,16 +565,37 @@ function renderGlobalHistory() {
       <div class="stat-card"><div class="stat-val">${runLogs.reduce((a, r) => a + (r.distance || 0), 0).toFixed(1)}</div><div class="stat-label">Total km Run</div></div>
     </div>`;
 
-  document.getElementById('history-log').innerHTML = logs.length
-    ? logs.slice(0, 30).map(l => `
-        <div class="user-row" style="margin-bottom:6px">
-          <div class="user-avatar" style="font-size:18px">${getModuleEmoji(l.module)}</div>
-          <div class="user-info">
-            <div class="user-name">${getModuleName(l.module)} — ${l.day}</div>
-            <div class="user-email">${l.date}</div>
-          </div>
-          <span class="badge badge-green">✓ Done</span>
-        </div>`).join('')
+  // Group logs by date to show multiple activities per day clearly
+  const groupedByDate = {};
+  logs.forEach(l => {
+    if (!groupedByDate[l.date]) groupedByDate[l.date] = [];
+    groupedByDate[l.date].push(l);
+  });
+  const sortedDates = Object.keys(groupedByDate).sort().reverse().slice(0, 20);
+
+  document.getElementById('history-log').innerHTML = sortedDates.length
+    ? sortedDates.map(date => {
+        const dayLogs  = groupedByDate[date];
+        const dayLabel = dayLogs[0]?.day || '';
+        const activities = dayLogs.map(l =>
+          `<span class="badge badge-green" style="margin-right:4px;margin-bottom:4px">
+            ${getModuleEmoji(l.module)} ${getModuleName(l.module)}
+          </span>`
+        ).join('');
+        return `
+          <div class="card card-sm" style="margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <div>
+                <div style="font-weight:700;font-size:14px">${date}</div>
+                <div style="font-size:12px;color:var(--text3)">${dayLabel}</div>
+              </div>
+              <div style="font-family:var(--font-display);font-size:22px;color:var(--g5)">${dayLogs.length}
+                <span style="font-size:12px;color:var(--text3)">activit${dayLogs.length > 1 ? 'ies' : 'y'}</span>
+              </div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap">${activities}</div>
+          </div>`;
+      }).join('')
     : '<div class="empty-state"><div class="empty-icon">📋</div><p>No activity yet. Start working out!</p></div>';
 }
 
