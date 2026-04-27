@@ -1,436 +1,884 @@
 // ════════════════════════════════════════════════════════════════
-// ADMIN PANEL — Full management, no user-style view
+// ADMIN PANEL
 // ════════════════════════════════════════════════════════════════
 
+const AdminEdit = {
+  isDirty:  false,
+  module:   null,
+  section:  null,
+};
+
+// ── RENDER ADMIN PANEL ────────────────────────────────────────────
 function renderAdminPanel() {
   if (APP.currentUser?.role !== 'ADMIN') { showToast('Access denied', 'error'); return; }
+  const nameEl = document.getElementById('admin-user-name');
+  if (nameEl) nameEl.textContent = '👑 ' + (APP.currentUser.name || 'Admin');
   renderAdminStats();
   // Default to users tab
-  const firstTab = document.querySelector('.admin-tab-btn');
-  if (firstTab) switchAdminTab('users', firstTab);
+  const firstBtn = document.querySelector('.admin-tab-btn');
+  if (firstBtn) switchAdminTab('users', firstBtn);
 }
 
-// ── STATS ─────────────────────────────────────────────────────────
 function renderAdminStats() {
   const allLogs    = Store.getLogs();
   const allRunLogs = Store.getRunLogs();
   const today      = todayStr();
-  const todayActive = [...new Set(allLogs.filter(l=>l.date===today).map(l=>l.userId))].length;
-
-  document.getElementById('admin-stat-workouts').textContent = allLogs.length;
-  document.getElementById('admin-stat-runs').textContent     = allRunLogs.length;
-  document.getElementById('admin-stat-today').textContent    = todayActive;
+  const todayActive = [...new Set(allLogs.filter(l => l.date === today).map(l => l.userId))].length;
+  const el = id => document.getElementById(id);
+  if (el('admin-stat-workouts')) el('admin-stat-workouts').textContent = allLogs.length;
+  if (el('admin-stat-runs'))     el('admin-stat-runs').textContent     = allRunLogs.length;
+  if (el('admin-stat-today'))    el('admin-stat-today').textContent    = todayActive;
 }
 
-// ── LOAD USERS FROM SHEETS ────────────────────────────────────────
+// ── ADMIN TABS ────────────────────────────────────────────────────
+function switchAdminTab(tab, btn) {
+  document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  document.querySelectorAll('.admin-tab-content').forEach(c => c.style.display = 'none');
+  const el = document.getElementById('admin-tab-' + tab);
+  if (el) el.style.display = 'block';
+  if (tab === 'users')    loadAdminUsers();
+  if (tab === 'history')  renderAllHistory();
+  if (tab === 'feedback') renderFeedbackList();
+  if (tab === 'content')  renderContentHome();
+}
+
+// ════════════════════════════════════════════════════════════════
+// USERS
+// ════════════════════════════════════════════════════════════════
 async function loadAdminUsers() {
   const container = document.getElementById('admin-users-list');
-  container.innerHTML = `
-    <div style="text-align:center;padding:32px;color:var(--text3)">
-      <div class="loader" style="margin:0 auto 12px"></div>
-      Loading users from Google Sheets…
-    </div>`;
-  document.getElementById('admin-stat-users').textContent = '…';
+  const statEl    = document.getElementById('admin-stat-users');
+  container.innerHTML = `<div style="text-align:center;padding:32px;color:var(--text3)">
+    <div class="loader" style="margin:0 auto 12px"></div>Loading users…</div>`;
+  if (statEl) statEl.textContent = '…';
 
   const cfg = Store.getSheetsConfig();
   if (!cfg.webAppUrl) {
-    container.innerHTML = `
-      <div class="card" style="background:rgba(240,192,64,0.08);border-color:rgba(240,192,64,0.25);text-align:center;padding:24px">
-        <div style="font-size:32px;margin-bottom:10px">⚠️</div>
-        <div style="font-weight:700;margin-bottom:6px">Google Sheets Not Configured</div>
-        <div style="font-size:13px;color:var(--text2);margin-bottom:16px">Configure your Sheets URL to manage users.</div>
-        <button class="btn btn-primary" onclick="openSheetsConfig()">⚙️ Configure Now</button>
-      </div>`;
-    document.getElementById('admin-stat-users').textContent = '—';
+    container.innerHTML = `<div class="card" style="background:rgba(240,192,64,0.08);border-color:rgba(240,192,64,0.25);text-align:center;padding:24px">
+      <div style="font-size:32px;margin-bottom:10px">⚠️</div>
+      <div style="font-weight:700;margin-bottom:6px">Google Sheets Not Configured</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:16px">Configure Sheets URL to manage users.</div>
+      <button class="btn btn-primary" onclick="openSheetsConfig()">⚙️ Configure Now</button></div>`;
+    if (statEl) statEl.textContent = '—';
     return;
   }
 
   const res = await Sheets.get('getAllUsers');
   if (!res?.success) {
-    container.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div><p>Failed to load users.<br>${res?.error||'Check your Sheets URL.'}</p></div>`;
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div>
+      <p>Failed to load users.<br>${res?.error || 'Check your Sheets URL.'}</p></div>`;
     return;
   }
 
   const users = res.users || [];
-  document.getElementById('admin-stat-users').textContent = users.filter(u=>u.role!=='ADMIN').length;
+  if (statEl) statEl.textContent = users.filter(u => u.role !== 'ADMIN').length;
   renderUsersList(users);
 }
 
 function renderUsersList(users) {
   const logs      = Store.getLogs();
   const container = document.getElementById('admin-users-list');
-
   if (!users.length) {
-    container.innerHTML = `<div class="empty-state"><div class="empty-icon">👥</div><p>No users yet.<br>Add your first user below.</p></div>`;
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">👥</div><p>No users yet.</p></div>`;
     return;
   }
-
   container.innerHTML = users.map(u => {
-    // Normalise values — sheet may return mixed case
-    const role       = (u.role   || 'USER').toString().toUpperCase().trim();
-    const status     = (u.status || 'ACTIVE').toString().toUpperCase().trim();
-    const isAdmin    = role === 'ADMIN';
-    const isActive   = status === 'ACTIVE';
-    const isFirst    = u.isFirstLogin === true || u.isFirstLogin === 'TRUE' || u.isFirstLogin === 'true';
-    const badgeCls   = isActive ? 'badge-green' : 'badge-red';
-    const userLogs   = logs.filter(l => l.userId === u.id);
-    const lastLog    = userLogs.sort((a,b) => (b.date||'').localeCompare(a.date||''))[0];
-    // Escape id for safe inline onclick
-    const safeId     = (u.id || '').toString().replace(/'/g, "\'");
-    const newStatus  = isActive ? 'INACTIVE' : 'ACTIVE';
-    const btnLabel   = isActive ? '🚫 Disable' : '✅ Enable';
-    const btnColor   = isActive ? 'color:#ef9a9a' : 'color:var(--g5)';
-
+    const role     = (u.role   || 'USER').toUpperCase().trim();
+    const status   = (u.status || 'ACTIVE').toUpperCase().trim();
+    const isAdmin  = role   === 'ADMIN';
+    const isActive = status === 'ACTIVE';
+    const isFirst  = u.isFirstLogin === true || String(u.isFirstLogin).toUpperCase() === 'TRUE';
+    const userLogs = logs.filter(l => l.userId === u.id);
+    const lastLog  = userLogs.sort((a, b) => (b.date || '').localeCompare(a.date || ''))[0];
+    const safeId   = (u.id || '').toString().replace(/'/g, "\\'");
     return `
       <div class="user-row" style="margin-bottom:8px" id="user-row-${safeId}">
-        <div class="user-avatar">${(u.name||'?').charAt(0).toUpperCase()}</div>
+        <div class="user-avatar">${(u.name || '?').charAt(0).toUpperCase()}</div>
         <div class="user-info">
           <div class="user-name">${u.name || '—'}${isAdmin ? ' 👑' : ''}</div>
           <div class="user-email">${u.email || '—'}</div>
-          <div style="font-size:11px;color:var(--text3);margin-top:3px">
-            ${isFirst
-              ? '<span style="color:var(--accent)">🔑 Awaiting first login</span>'
-              : `Last active: ${lastLog?.date || u.lastLogin || 'Never'}`}
-          </div>
-          <div style="font-size:11px;color:var(--text3)">
-            Created: ${u.createdDate || '—'} · ${userLogs.length} workouts
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">
+            ${isFirst ? '<span style="color:var(--accent)">🔑 Awaiting first login</span>'
+                      : `Last: ${lastLog?.date || u.lastLogin || 'Never'}`}
+            · ${userLogs.length} workouts · Created: ${u.createdDate || '—'}
           </div>
         </div>
         <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex-shrink:0">
-          <span class="badge ${badgeCls}" id="status-badge-${safeId}">${status}</span>
-          ${!isAdmin ? `
-            <button class="btn btn-ghost btn-sm" id="toggle-btn-${safeId}" style="${btnColor}"
-              onclick="toggleStatus('${safeId}','${newStatus}','${safeId}')">
-              ${btnLabel}
-            </button>` : '<span style="font-size:11px;color:var(--text3)">Admin</span>'}
+          <span class="badge ${isActive ? 'badge-green' : 'badge-red'}" id="status-badge-${safeId}">${status}</span>
+          ${!isAdmin
+            ? `<button class="btn btn-ghost btn-sm" id="toggle-btn-${safeId}"
+                style="${isActive ? 'color:#ef9a9a' : 'color:var(--g5)'}"
+                onclick="toggleStatus('${safeId}','${isActive ? 'INACTIVE' : 'ACTIVE'}','${safeId}')">
+                ${isActive ? '🚫 Disable' : '✅ Enable'}
+              </button>`
+            : '<span style="font-size:11px;color:var(--text3)">Admin</span>'}
         </div>
       </div>`;
   }).join('');
 }
 
-// ── TOGGLE STATUS ─────────────────────────────────────────────────
 async function toggleStatus(userId, newStatus, safeId) {
-  const btn   = document.getElementById('toggle-btn-'  + safeId);
-  const badge = document.getElementById('status-badge-'+ safeId);
-
-  // Immediate UI feedback
+  const btn   = document.getElementById('toggle-btn-'   + safeId);
+  const badge = document.getElementById('status-badge-' + safeId);
   if (btn)   { btn.disabled = true; btn.textContent = '…'; }
   if (badge) { badge.textContent = '…'; }
 
   const res = await Sheets.post('updateUserStatus', { userId, status: newStatus });
-
   if (res?.success) {
-    const isNowActive = newStatus === 'ACTIVE';
-    // Update badge
-    if (badge) {
-      badge.textContent = newStatus;
-      badge.className   = 'badge ' + (isNowActive ? 'badge-green' : 'badge-red');
-    }
-    // Update button for next toggle
+    const active = newStatus === 'ACTIVE';
+    if (badge) { badge.textContent = newStatus; badge.className = 'badge ' + (active ? 'badge-green' : 'badge-red'); }
     if (btn) {
       btn.disabled    = false;
-      btn.textContent = isNowActive ? '🚫 Disable' : '✅ Enable';
-      btn.style.color = isNowActive ? '#ef9a9a' : 'var(--g5)';
-      // Swap the onclick to reverse direction
-      const reverseStatus = isNowActive ? 'INACTIVE' : 'ACTIVE';
-      btn.setAttribute('onclick', `toggleStatus('${userId}','${reverseStatus}','${safeId}')`);
+      btn.textContent = active ? '🚫 Disable' : '✅ Enable';
+      btn.style.color = active ? '#ef9a9a' : 'var(--g5)';
+      btn.setAttribute('onclick', `toggleStatus('${userId}','${active ? 'INACTIVE' : 'ACTIVE'}','${safeId}')`);
     }
-    showToast(`User ${isNowActive ? 'enabled ✅' : 'disabled 🚫'}.`, 'success');
+    showToast(`User ${active ? 'enabled ✅' : 'disabled 🚫'}.`, 'success');
   } else {
-    // Revert UI
-    if (btn)   { btn.disabled = false; btn.textContent = newStatus==='ACTIVE'?'✅ Enable':'🚫 Disable'; }
-    if (badge) { badge.textContent = newStatus==='ACTIVE'?'INACTIVE':'ACTIVE'; }
+    if (btn)   { btn.disabled = false; btn.textContent = newStatus === 'ACTIVE' ? '✅ Enable' : '🚫 Disable'; }
+    if (badge) { badge.textContent = newStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'; }
     showToast(res?.error || 'Failed to update status.', 'error');
   }
 }
 
-// ── ADD USER MODAL ────────────────────────────────────────────────
 function openAddUser() {
-  ['new-user-name','new-user-email','new-user-pass'].forEach(id => document.getElementById(id).value='');
-  document.getElementById('new-user-role').value = 'USER';
-  document.getElementById('new-user-error').textContent = '';
+  ['new-user-name','new-user-email','new-user-pass'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('new-user-role').value           = 'USER';
+  document.getElementById('new-user-error').textContent    = '';
   openModal('modal-add-user');
 }
 
 async function saveNewUser() {
-  const name     = document.getElementById('new-user-name').value.trim();
-  const email    = document.getElementById('new-user-email').value.trim().toLowerCase();
-  const tempPass = document.getElementById('new-user-pass').value.trim();
-  const role     = document.getElementById('new-user-role').value;
-  const errEl    = document.getElementById('new-user-error');
-  const btn      = document.getElementById('save-user-btn');
+  const name    = document.getElementById('new-user-name').value.trim();
+  const email   = document.getElementById('new-user-email').value.trim().toLowerCase();
+  const tmpPass = document.getElementById('new-user-pass').value.trim();
+  const role    = document.getElementById('new-user-role').value;
+  const errEl   = document.getElementById('new-user-error');
+  const btn     = document.getElementById('save-user-btn');
 
   errEl.textContent = '';
-  if (!name||!email||!tempPass) { errEl.textContent='All fields are required.'; return; }
-  if (tempPass.length<4)        { errEl.textContent='Temp password must be at least 4 characters.'; return; }
+  if (!name || !email || !tmpPass) { errEl.textContent = 'All fields are required.'; return; }
+  if (tmpPass.length < 4)          { errEl.textContent = 'Temp password must be at least 4 characters.'; return; }
+  if (!Store.getSheetsConfig().webAppUrl) { errEl.textContent = 'Configure Google Sheets first (Content → Configure Sheets).'; return; }
 
-  const cfg = Store.getSheetsConfig();
-  if (!cfg.webAppUrl) { errEl.textContent='Configure Google Sheets first (Content tab → Configure Sheets).'; return; }
+  btn.disabled    = true;
+  btn.textContent = 'Creating…';
+  const res = await Sheets.post('createUser', { name, email, tempPassword: tmpPass, role, createdBy: APP.currentUser?.name || 'Admin' });
+  btn.disabled    = false;
+  btn.textContent = 'Create User';
 
-  btn.disabled=true; btn.textContent='Creating…';
-
-  const res = await Sheets.post('createUser', {
-    name, email, tempPassword: tempPass, role,
-    createdBy: APP.currentUser?.name||'Admin'
-  });
-
-  btn.disabled=false; btn.textContent='Create User';
-
-  if (!res?.success) { errEl.textContent = res?.error||'Failed to create user.'; return; }
-
+  if (!res?.success) { errEl.textContent = res?.error || 'Failed to create user.'; return; }
   closeModal('modal-add-user');
-  showToast(`✅ "${name}" created! Share temp password: ${tempPass}`, 'success');
+  showToast(`✅ "${name}" created! Temp password: ${tmpPass}`, 'success');
   loadAdminUsers();
   renderAdminStats();
 }
 
-// ── ALL HISTORY ───────────────────────────────────────────────────
-function renderAllHistory() {
-  const allLogs = Store.getLogs().sort((a,b)=>(b.timestamp||'').localeCompare(a.timestamp||''));
-  const allRuns = Store.getRunLogs().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
-  const container = document.getElementById('all-history-list');
-
-  const combined = [
-    ...allLogs.map(l => ({ ...l, _type:'workout' })),
-    ...allRuns.map(r => ({ ...r, _type:'run', module:'running', day:'Run', timestamp: r.timestamp||r.date }))
-  ].sort((a,b)=>(b.timestamp||'').localeCompare(a.timestamp||'')).slice(0,60);
-
-  container.innerHTML = combined.length ? combined.map(l => `
-    <div class="user-row" style="margin-bottom:6px">
-      <div class="user-avatar" style="font-size:18px">${getModuleEmoji(l.module)}</div>
-      <div class="user-info">
-        <div class="user-name">${l.userId||'—'} — ${getModuleName(l.module)}</div>
-        <div class="user-email">${l._type==='run' ? `${(l.distance||0).toFixed(2)}km · ${fmtTime(l.duration||0)}` : l.day} · ${l.date||'—'}</div>
-      </div>
-      <span class="badge ${l._type==='run'?'badge-blue':'badge-green'}">${l._type==='run'?'🏃 Run':'✓ Done'}</span>
-    </div>`).join('')
-    : '<div class="empty-state"><div class="empty-icon">📋</div><p>No activity yet.</p></div>';
-}
-
-// ── QUOTES MANAGEMENT ─────────────────────────────────────────────
-function renderQuotesManager() {
-  const container = document.getElementById('quotes-manager');
-  const quotes = Store.getContent('custom_quotes') || APP_DATA.quotes;
-
-  container.innerHTML = `
-    <div style="margin-bottom:12px">
-      <div style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.5">
-        These quotes appear for <strong>users</strong> on their daily motivational screen.<br>
-        Admin login skips the quote page entirely.
-      </div>
-      <button class="btn btn-primary btn-sm" onclick="openAddQuoteModal()" style="margin-bottom:16px">+ Add New Quote</button>
-    </div>
-    ${quotes.map((q, i) => `
-      <div class="card card-sm" style="margin-bottom:8px">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
-          <div style="flex:1">
-            <div style="font-size:14px;font-weight:600;margin-bottom:3px;line-height:1.4">"${q.text}"</div>
-            <div style="font-size:12px;color:var(--text3)">— ${q.author}</div>
-          </div>
-          <button class="btn btn-ghost btn-sm" style="flex-shrink:0;color:var(--danger)"
-            onclick="deleteQuote(${i})">✕</button>
-        </div>
-      </div>`).join('')}`;
-}
-
-function openAddQuoteModal() {
-  document.getElementById('new-quote-text').value = '';
-  document.getElementById('new-quote-author').value = '';
-  openModal('modal-add-quote');
-}
-
-function saveNewQuote() {
-  const text   = document.getElementById('new-quote-text').value.trim();
-  const author = document.getElementById('new-quote-author').value.trim() || 'Unknown';
-  if (!text) { showToast('Quote text is required.', 'error'); return; }
-
-  const quotes = Store.getContent('custom_quotes') || [...APP_DATA.quotes];
-  quotes.push({ text, author });
-  Store.setContent('custom_quotes', quotes);
-  // Sync to Sheets
-  Sheets.post('saveContent', { key:'custom_quotes', value: quotes });
-
-  closeModal('modal-add-quote');
-  showToast('Quote added! Users will see it on next login.', 'success');
-  renderQuotesManager();
-}
-
-function deleteQuote(index) {
-  const quotes = Store.getContent('custom_quotes') || [...APP_DATA.quotes];
-  quotes.splice(index, 1);
-  Store.setContent('custom_quotes', quotes);
-  Sheets.post('saveContent', { key:'custom_quotes', value: quotes });
-  renderQuotesManager();
-  showToast('Quote removed.', 'info');
-}
-
-// ── CONTENT EDITOR ────────────────────────────────────────────────
-function renderContentLinks() {
+// ════════════════════════════════════════════════════════════════
+// CONTENT HOME
+// ════════════════════════════════════════════════════════════════
+function renderContentHome() {
   const container = document.getElementById('content-links-list');
-  const modules = ['cardio','gym','yoga','stretching','running'];
+  const connected = !!Store.getSheetsConfig().webAppUrl;
+  const modules   = [
+    { id: 'cardio',     name: 'Home Cardio',    emoji: '🏠' },
+    { id: 'gym',        name: 'Gym Workouts',   emoji: '🏋️' },
+    { id: 'yoga',       name: 'Yoga',           emoji: '🧘' },
+    { id: 'stretching', name: 'Stretching',     emoji: '🤸' },
+    { id: 'running',    name: 'Running',        emoji: '🏃' },
+  ];
 
   container.innerHTML = `
     <div class="card" style="margin-bottom:16px;background:linear-gradient(135deg,var(--g1),var(--g2))">
       <div style="font-weight:700;margin-bottom:4px">🔗 Google Sheets Backend</div>
       <div style="font-size:13px;color:var(--text2);margin-bottom:10px">
-        Required for user login, creation and data sync.
-        ${Store.getSheetsConfig().webAppUrl
-          ? '<span style="color:var(--g5)"> ✅ Connected</span>'
-          : '<span style="color:var(--accent)"> ⚠️ Not configured</span>'}
+        ${connected
+          ? '<span style="color:var(--g5)">✅ Connected — all edits sync to Sheets & all users</span>'
+          : '<span style="color:var(--accent)">⚠️ Not configured — edits saved locally only</span>'}
       </div>
       <button class="btn btn-primary btn-sm" onclick="openSheetsConfig()">⚙️ Configure Sheets URL</button>
     </div>
 
-    <div class="section-title">Edit Module Content</div>
+    <div class="card card-sm" style="margin-bottom:8px;cursor:pointer" onclick="openAdminQuotes()">
+      <div style="display:flex;align-items:center;gap:12px">
+        <span style="font-size:28px">💬</span>
+        <div><div style="font-weight:700">Motivational Quotes</div>
+          <div style="font-size:12px;color:var(--text3)">Edit quotes shown on user daily screen</div></div>
+        <span style="margin-left:auto;color:var(--text3)">›</span>
+      </div>
+    </div>
+
+    <div class="section-title" style="margin-top:16px">Module Content Editor</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.5">
+      Tap a module to edit exercises, warmup, cooldown, hydration and diet.
+      All fields are editable inline — tap any field to edit.
+    </div>
     ${modules.map(m => `
-      <div class="card card-sm" style="margin-bottom:8px">
-        <div style="font-weight:700;margin-bottom:10px">${getModuleEmoji(m)} ${getModuleName(m)}</div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-outline btn-sm" onclick="openContentEditor('${m}','hydration')">💧 Edit Hydration</button>
-          <button class="btn btn-outline btn-sm" onclick="openContentEditor('${m}','diet')">🥗 Edit Diet</button>
+      <div class="card card-sm" style="margin-bottom:8px;cursor:pointer" onclick="openModuleEditor('${m.id}')">
+        <div style="display:flex;align-items:center;gap:12px">
+          <span style="font-size:28px">${m.emoji}</span>
+          <div><div style="font-weight:700">${m.name}</div>
+            <div style="font-size:12px;color:var(--text3)">Exercises · Warmup · Cooldown · Hydration · Diet</div></div>
+          <span style="margin-left:auto;color:var(--text3)">›</span>
         </div>
       </div>`).join('')}`;
 }
 
-function openContentEditor(moduleId, type) {
-  APP.editingContent = { moduleId, type };
-  document.getElementById('content-editor-title').textContent =
-    `Edit ${type==='hydration'?'Hydration':'Diet'} — ${getModuleName(moduleId)}`;
-  const override = Store.getContent(`${type}_${moduleId}`);
-  const defaults = type==='hydration' ? APP_DATA.hydration.default : (APP_DATA.diet.modules[moduleId]||APP_DATA.diet.modules.cardio);
-  document.getElementById('content-editor-text').value = JSON.stringify(override||defaults, null, 2);
-  openModal('modal-content-editor');
+// ════════════════════════════════════════════════════════════════
+// MODULE EDITOR
+// ════════════════════════════════════════════════════════════════
+function openModuleEditor(moduleId) {
+  AdminEdit.module  = moduleId;
+  AdminEdit.section = 'exercises';
+  AdminEdit.isDirty = false;
+  showPage('page-admin-editor');
+  renderModuleEditor();
 }
 
-async function saveContentEdit() {
-  const { moduleId, type } = APP.editingContent||{};
-  try {
-    const parsed = JSON.parse(document.getElementById('content-editor-text').value);
-    Store.setContent(`${type}_${moduleId}`, parsed);
-    await Sheets.post('saveContent', { key:`${type}_${moduleId}`, value:parsed });
-    closeModal('modal-content-editor');
-    showToast('Content updated for all users!', 'success');
-  } catch { showToast('Invalid JSON — check and try again.', 'error'); }
+function renderModuleEditor() {
+  const info = {
+    cardio:    { name: 'Home Cardio',  emoji: '🏠' },
+    gym:       { name: 'Gym Workouts', emoji: '🏋️' },
+    yoga:      { name: 'Yoga',         emoji: '🧘' },
+    stretching:{ name: 'Stretching',   emoji: '🤸' },
+    running:   { name: 'Running',      emoji: '🏃' },
+  }[AdminEdit.module] || { name: AdminEdit.module, emoji: '💪' };
+
+  document.getElementById('editor-module-title').textContent = info.emoji + ' ' + info.name;
+
+  const sections = [
+    { id: 'exercises', label: '💪 Exercises' },
+    { id: 'warmup',    label: '🔥 Warm-Up' },
+    { id: 'cooldown',  label: '🧘 Cool-Down' },
+    { id: 'hydration', label: '💧 Hydration' },
+    { id: 'diet',      label: '🥗 Diet' },
+  ].filter(s => AdminEdit.module === 'stretching' ? !['warmup','cooldown'].includes(s.id) : true);
+
+  document.getElementById('editor-section-tabs').innerHTML = sections.map(s => `
+    <button class="tab-btn ${AdminEdit.section === s.id ? 'active' : ''}"
+      onclick="switchEditorSection('${s.id}', this)">${s.label}</button>`).join('');
+
+  // Reset save button to default handler
+  _resetSaveBtn();
+  renderEditorSection();
 }
 
-// ── SHEETS CONFIG ─────────────────────────────────────────────────
-function openSheetsConfig() {
-  document.getElementById('sheets-url').value = Store.getSheetsConfig().webAppUrl||'';
-  openModal('modal-sheets-config');
+function _resetSaveBtn() {
+  const btn = document.getElementById('editor-save-btn');
+  if (!btn) return;
+  btn.textContent = '💾 Save Changes';
+  btn.style.background = 'linear-gradient(135deg,var(--g3),var(--g4))';
+  btn.disabled = false;
+  btn.onclick = saveEditorChanges;
 }
 
-async function saveSheetsConfig() {
-  const url = document.getElementById('sheets-url').value.trim();
-  if (!url) { showToast('Please enter the Web App URL.','error'); return; }
-  Store.setSheetsConfig({ webAppUrl: url });
-  closeModal('modal-sheets-config');
-  showToast('Sheets URL saved! ✅','success');
-  renderContentLinks(); // refresh connection status
-}
-
-async function testSheetsConnection() {
-  const url = document.getElementById('sheets-url').value.trim();
-  if (!url) { showToast('Enter the URL first.','error'); return; }
-  const prev = Store.getSheetsConfig();
-  Store.setSheetsConfig({ webAppUrl: url });
-  showToast('Testing…','info');
-  const res = await Sheets.get('ping');
-  Store.setSheetsConfig(prev);
-  if (res?.success) showToast('✅ Connected to Google Sheets!','success');
-  else showToast('❌ Connection failed. Check the URL.','error');
-}
-
-// ── ADMIN TABS ────────────────────────────────────────────────────
-function switchAdminTab(tab, btn) {
-  document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
+function switchEditorSection(section, btn) {
+  if (AdminEdit.isDirty && !confirm('You have unsaved changes. Discard them?')) return;
+  AdminEdit.section = section;
+  AdminEdit.isDirty = false;
+  document.querySelectorAll('#editor-section-tabs .tab-btn').forEach(b => b.classList.remove('active'));
   btn.classList.add('active');
-  document.querySelectorAll('.admin-tab-content').forEach(c => c.style.display='none');
-  const el = document.getElementById('admin-tab-'+tab);
-  if (el) el.style.display = 'block';
-
-  if (tab==='users')   loadAdminUsers();
-  if (tab==='history') renderAllHistory();
-  if (tab==='content') renderContentLinks();
-  if (tab==='quotes')  renderQuotesManager();
+  _resetSaveBtn();
+  renderEditorSection();
 }
 
-// ── MODULE HELPERS ────────────────────────────────────────────────
-function getModuleEmoji(mod) {
-  return { cardio:'🏠', gym:'🏋️', yoga:'🧘', stretching:'🤸', running:'🏃' }[mod]||'💪';
-}
-function getModuleName(mod) {
-  return { cardio:'Home Cardio', gym:'Gym Workouts', yoga:'Yoga', stretching:'Stretching', running:'Running' }[mod]||mod;
+function renderEditorSection() {
+  const body = document.getElementById('editor-body');
+  if (!body) return;
+  body.classList.add('admin-edit-mode');
+  const { section, module: moduleId } = AdminEdit;
+  if      (section === 'exercises')  renderExerciseEditor(moduleId, body);
+  else if (section === 'warmup')     renderWarmCoolEditor(moduleId, 'warmup', body);
+  else if (section === 'cooldown')   renderWarmCoolEditor(moduleId, 'cooldown', body);
+  else if (section === 'hydration')  renderHydrationEditor(moduleId, body);
+  else if (section === 'diet')       renderDietEditor(moduleId, body);
 }
 
-// ── FEEDBACK MANAGEMENT ───────────────────────────────────────────
-async function renderFeedbackList() {
-  const container = document.getElementById('feedback-list');
-  container.innerHTML = '<div style="text-align:center;padding:24px;color:var(--text3)"><div class="loader" style="margin:0 auto 12px"></div>Loading feedback…</div>';
+// ── DIRTY FLAG ────────────────────────────────────────────────────
+function markDirty() {
+  AdminEdit.isDirty = true;
+  const btn = document.getElementById('editor-save-btn');
+  if (btn) {
+    btn.style.background = 'linear-gradient(135deg,var(--accent),#e8a020)';
+    btn.textContent      = '💾 Save Changes *';
+  }
+}
 
-  const res = await Sheets.get('getFeedback');
-  if (!res?.success || !res.feedback?.length) {
-    container.innerHTML = '<div class="empty-state"><div class="empty-icon">💬</div><p>No feedback submitted yet.</p></div>';
-    return;
+// ── SAVE ──────────────────────────────────────────────────────────
+async function saveEditorChanges() {
+  const btn = document.getElementById('editor-save-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    await _collectAndSave();
+    if (btn) {
+      btn.textContent      = '✅ Saved!';
+      btn.style.background = 'linear-gradient(135deg,var(--g3),var(--g4))';
+    }
+    AdminEdit.isDirty = false;
+    showToast('Saved! All users will see changes on next login. ✅', 'success');
+    setTimeout(() => { if (btn) btn.textContent = '💾 Save Changes'; }, 3000);
+  } catch (e) {
+    showToast('Save failed: ' + e.message, 'error');
+    console.error(e);
+  }
+  if (btn) btn.disabled = false;
+}
+
+async function _collectAndSave() {
+  const { module: moduleId, section } = AdminEdit;
+
+  if (section === 'exercises') {
+    const days   = getWeekDays();
+    const result = { days: {} };
+    days.forEach(day => {
+      const dayEl = document.querySelector(`[data-day="${day}"]`);
+      if (!dayEl) {
+        // Day not in DOM — keep existing
+        const existing = Store.getContent('exercises_' + moduleId);
+        result.days[day] = existing?.days?.[day] || APP_DATA.modules[moduleId]?.days?.[day] || [];
+        return;
+      }
+      result.days[day] = Array.from(dayEl.querySelectorAll('.ex-row')).map(row => ({
+        name:  _text(row, 'name'),
+        sets:  parseInt(_text(row, 'sets')) || 3,
+        reps:  _text(row, 'reps'),
+        desc:  _text(row, 'desc'),
+        image: _text(row, 'image'),
+        demo:  _text(row, 'demo'),
+      }));
+    });
+    Store.setContent('exercises_' + moduleId, result);
+    if (APP_DATA.modules[moduleId]) APP_DATA.modules[moduleId].days = result.days;
+    await Sheets.post('saveContent', { key: 'exercises_' + moduleId, value: result });
   }
 
+  else if (section === 'warmup' || section === 'cooldown') {
+    const data = Array.from(document.querySelectorAll('.wc-ex-row')).map(row => ({
+      name:  _text(row, 'name'),
+      sets:  parseInt(_text(row, 'sets')) || 1,
+      reps:  _text(row, 'reps'),
+      desc:  _text(row, 'desc'),
+      image: _text(row, 'image'),
+      demo:  _text(row, 'demo'),
+      tag:   section,
+    }));
+    Store.setContent(section + '_' + moduleId, data);
+    if (APP_DATA[section + 's']) APP_DATA[section + 's'][moduleId] = data;
+    await Sheets.post('saveContent', { key: section + '_' + moduleId, value: data });
+  }
+
+  else if (section === 'hydration') {
+    const data = {
+      title:   _innerText('hydr-title'),
+      targets: {
+        training: parseFloat(_innerText('hydr-target-train')) || 3.5,
+        rest:     parseFloat(_innerText('hydr-target-rest'))  || 2.5,
+      },
+      schedule: Array.from(document.querySelectorAll('.hydr-slot')).map(el => ({
+        time:   _text(el, 'time'),
+        label:  _text(el, 'label'),
+        amount: parseInt(_text(el, 'amount')) || 0,
+      })),
+      tips: Array.from(document.querySelectorAll('.hydr-tip')).map(el =>
+        (_text(el, 'tip') || '').replace(/^💧\s*/, '').trim()
+      ).filter(Boolean),
+    };
+    Store.setContent('hydration_' + moduleId, data);
+    await Sheets.post('saveContent', { key: 'hydration_' + moduleId, value: data });
+  }
+
+  else if (section === 'diet') {
+    const data = {
+      title: _innerText('diet-title'),
+      meals: Array.from(document.querySelectorAll('.diet-meal')).map(el => ({
+        time:  _text(el, 'time'),
+        name:  _text(el, 'name'),
+        items: _text(el, 'items'),
+        cal:   parseInt(_text(el, 'cal'))   || 0,
+        notes: _text(el, 'notes'),
+      })),
+    };
+    Store.setContent('diet_' + moduleId, data);
+    await Sheets.post('saveContent', { key: 'diet_' + moduleId, value: data });
+  }
+}
+
+function _text(el, field)   { return (el.querySelector(`[data-field="${field}"]`)?.innerText || '').trim(); }
+function _innerText(id)     { return (document.getElementById(id)?.innerText || '').trim(); }
+
+// ── ACTIVATE INLINE EDITING ───────────────────────────────────────
+function activateEditing(container) {
+  container.querySelectorAll('[contenteditable="true"]').forEach(el => {
+    el.addEventListener('input', markDirty);
+    el.addEventListener('keydown', e => {
+      if (e.key === 'Enter' && !el.classList.contains('editable-block')) {
+        e.preventDefault(); el.blur();
+      }
+    });
+  });
+}
+
+// ════════════════════════════════════════════════════════════════
+// EXERCISE EDITOR
+// ════════════════════════════════════════════════════════════════
+function renderExerciseEditor(moduleId, body) {
+  const days = getWeekDays();
+  body.innerHTML = `
+    <div style="font-size:13px;color:var(--text2);padding:0 16px 12px;line-height:1.5">
+      ✏️ <strong>Tap any field</strong> to edit. Applies to all users after saving.
+    </div>
+    ${days.map(day => {
+      // Merge: admin overrides first, then built-in default
+      const saved    = Store.getContent('exercises_' + moduleId);
+      const exercises = saved?.days?.[day] || APP_DATA.modules[moduleId]?.days?.[day] || [];
+      return `
+        <div style="margin-bottom:8px">
+          <div style="padding:10px 16px;background:rgba(46,125,70,0.15);font-weight:700;font-size:14px;
+            display:flex;justify-content:space-between;align-items:center">
+            <span>📅 ${day}</span>
+            <span style="font-size:12px;color:var(--text3)">${exercises.length} exercises</span>
+          </div>
+          <div data-day="${day}" style="padding:0 16px">
+            ${exercises.map((ex, i) => _exerciseCard(ex, i, day)).join('')}
+            <button class="add-exercise-btn" onclick="addExercise('${day}')">+ Add Exercise</button>
+          </div>
+        </div>`;
+    }).join('')}`;
+  activateEditing(body);
+}
+
+function _exerciseCard(ex, idx, day) {
+  return `
+    <div class="exercise-card ex-row" data-idx="${idx}" style="margin:10px 0;position:relative">
+      <button class="delete-ex-btn" onclick="this.closest('.ex-row').remove();markDirty()" title="Delete">✕</button>
+      <div class="exercise-thumb">
+        <div style="font-size:48px;color:var(--text3);display:flex;align-items:center;justify-content:center;height:100%">💪</div>
+      </div>
+      <div class="exercise-body">
+        <div style="margin-bottom:8px">
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Exercise Name</div>
+          <div class="exercise-name editable" data-field="name" contenteditable="true">${ex.name || ''}</div>
+        </div>
+        <div style="display:flex;gap:12px;margin-bottom:10px">
+          <div style="flex:1">
+            <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Sets</div>
+            <div class="editable" data-field="sets" contenteditable="true" style="font-weight:600">${ex.sets || 3}</div>
+          </div>
+          <div style="flex:2">
+            <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Reps / Duration</div>
+            <div class="editable" data-field="reps" contenteditable="true" style="font-weight:600">${ex.reps || ''}</div>
+          </div>
+        </div>
+        <div style="margin-bottom:10px">
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Description</div>
+          <div class="editable-block editable" data-field="desc" contenteditable="true"
+            style="font-size:13px;color:var(--text2);line-height:1.6">${ex.desc || ''}</div>
+        </div>
+        <div style="margin-bottom:10px">
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Demo Link (YouTube URL)</div>
+          <div class="editable" data-field="demo" contenteditable="true"
+            style="font-size:12px;color:var(--g5);word-break:break-all">${ex.demo || ''}</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Image URL (optional)</div>
+          <div class="editable" data-field="image" contenteditable="true"
+            style="font-size:12px;color:var(--text3);word-break:break-all">${ex.image || ''}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function addExercise(day) {
+  const container = document.querySelector(`[data-day="${day}"]`);
+  if (!container) return;
+  const addBtn = container.querySelector('.add-exercise-btn');
+  const div    = document.createElement('div');
+  div.innerHTML = _exerciseCard({ name: 'New Exercise', sets: 3, reps: '10 reps', desc: 'Enter description.', demo: '', image: '' }, 999, day);
+  const card = div.firstElementChild;
+  activateEditing(card);
+  container.insertBefore(card, addBtn);
+  markDirty();
+  card.querySelector('[data-field="name"]')?.focus();
+}
+
+// ════════════════════════════════════════════════════════════════
+// WARMUP / COOLDOWN EDITOR
+// ════════════════════════════════════════════════════════════════
+function renderWarmCoolEditor(moduleId, section, body) {
+  const fallback = section === 'warmup'
+    ? (APP_DATA.warmups?.[moduleId]   || APP_DATA.warmups?.cardio   || [])
+    : (APP_DATA.cooldowns?.[moduleId] || APP_DATA.cooldowns?.cardio || []);
+  const data  = Store.getContent(section + '_' + moduleId) || fallback;
+  const label = section === 'warmup' ? '🔥 Warm-Up' : '🧘 Cool-Down';
+
+  body.innerHTML = `
+    <div style="font-size:13px;color:var(--text2);padding:0 16px 12px;line-height:1.5">
+      ✏️ These exercises appear at the ${section === 'warmup' ? 'start' : 'end'} of every workout day.
+    </div>
+    <div style="padding:0 16px">
+      <div style="font-weight:700;font-size:14px;margin:4px 0 10px">${label} Exercises</div>
+      <div id="wc-list">
+        ${data.map((ex, i) => _warmCoolCard(ex, i)).join('')}
+      </div>
+      <button class="add-exercise-btn" onclick="addWarmCoolExercise()">+ Add Exercise</button>
+    </div>`;
+  activateEditing(body);
+}
+
+function _warmCoolCard(ex, idx) {
+  return `
+    <div class="exercise-card wc-ex-row" data-idx="${idx}" style="margin:10px 0;position:relative">
+      <button class="delete-ex-btn" onclick="this.closest('.wc-ex-row').remove();markDirty()">✕</button>
+      <div class="exercise-body" style="padding:14px">
+        <div style="margin-bottom:8px">
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Exercise Name</div>
+          <div class="exercise-name editable" data-field="name" contenteditable="true">${ex.name || ''}</div>
+        </div>
+        <div style="display:flex;gap:12px;margin-bottom:8px">
+          <div style="flex:1">
+            <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Sets</div>
+            <div class="editable" data-field="sets" contenteditable="true" style="font-weight:600">${ex.sets || 1}</div>
+          </div>
+          <div style="flex:2">
+            <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Duration / Reps</div>
+            <div class="editable" data-field="reps" contenteditable="true" style="font-weight:600">${ex.reps || ''}</div>
+          </div>
+        </div>
+        <div style="margin-bottom:8px">
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Description</div>
+          <div class="editable-block editable" data-field="desc" contenteditable="true"
+            style="font-size:13px;color:var(--text2);line-height:1.6">${ex.desc || ''}</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Demo Link</div>
+          <div class="editable" data-field="demo" contenteditable="true"
+            style="font-size:12px;color:var(--g5);word-break:break-all">${ex.demo || ''}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function addWarmCoolExercise() {
+  const list = document.getElementById('wc-list');
+  if (!list) return;
+  const div = document.createElement('div');
+  div.innerHTML = _warmCoolCard({ name: 'New Exercise', sets: 1, reps: '30 sec', desc: 'Enter description.', demo: '' }, 999);
+  const card = div.firstElementChild;
+  activateEditing(card);
+  list.appendChild(card);
+  markDirty();
+}
+
+// ════════════════════════════════════════════════════════════════
+// HYDRATION EDITOR
+// ════════════════════════════════════════════════════════════════
+function renderHydrationEditor(moduleId, body) {
+  const data     = Store.getContent('hydration_' + moduleId) || APP_DATA.hydration?.default || {};
+  const schedule = Array.isArray(data.schedule) ? data.schedule : [];
+  const tips     = Array.isArray(data.tips)     ? data.tips     : [];
+
+  body.innerHTML = `
+    <div style="font-size:13px;color:var(--text2);padding:0 16px 12px;line-height:1.5">
+      ✏️ <strong>Tap any field</strong> to edit hydration content.
+    </div>
+    <div style="padding:0 16px">
+      <div class="card" style="margin-bottom:16px">
+        <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px">Plan Title</div>
+        <div class="editable" id="hydr-title" contenteditable="true" style="font-size:17px;font-weight:700">${data.title || 'Daily Hydration Plan'}</div>
+        <div style="display:flex;gap:16px;margin-top:12px">
+          <div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Training Day (L)</div>
+            <div class="editable" id="hydr-target-train" contenteditable="true" style="font-weight:700;font-size:20px;color:var(--g5)">${data.targets?.training || 3.5}</div>
+          </div>
+          <div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:4px">Rest Day (L)</div>
+            <div class="editable" id="hydr-target-rest" contenteditable="true" style="font-weight:700;font-size:20px;color:var(--g5)">${data.targets?.rest || 2.5}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="font-weight:700;margin-bottom:8px">Schedule</div>
+      <div id="hydr-schedule">
+        ${schedule.map((s, i) => `
+          <div class="card card-sm hydr-slot" data-idx="${i}" style="margin-bottom:8px;display:flex;gap:12px;align-items:center">
+            <button class="delete-ex-btn" style="position:static;width:24px;height:24px;font-size:12px;flex-shrink:0"
+              onclick="this.closest('.hydr-slot').remove();markDirty()">✕</button>
+            <div style="flex:1">
+              <div class="editable" data-field="time" contenteditable="true" style="font-weight:600;font-size:13px">${s.time || ''}</div>
+              <div class="editable" data-field="label" contenteditable="true" style="font-size:12px;color:var(--text3);margin-top:2px">${s.label || ''}</div>
+            </div>
+            <div style="flex-shrink:0;text-align:right">
+              <div class="editable" data-field="amount" contenteditable="true" style="font-weight:700;color:var(--g5)">${s.amount || 0}</div>
+              <div style="font-size:11px;color:var(--text3)">ml</div>
+            </div>
+          </div>`).join('')}
+      </div>
+      <button class="add-exercise-btn" onclick="addHydrationSlot()" style="margin-bottom:16px">+ Add Time Slot</button>
+
+      <div style="font-weight:700;margin-bottom:8px">Tips</div>
+      <div id="hydr-tips">
+        ${tips.map((t, i) => `
+          <div class="card card-sm hydr-tip" data-idx="${i}" style="margin-bottom:8px;display:flex;gap:10px;align-items:flex-start">
+            <button class="delete-ex-btn" style="position:static;width:24px;height:24px;font-size:12px;flex-shrink:0;margin-top:2px"
+              onclick="this.closest('.hydr-tip').remove();markDirty()">✕</button>
+            <div class="editable-block editable" data-field="tip" contenteditable="true"
+              style="flex:1;font-size:13px;color:var(--text2);line-height:1.5">💧 ${t}</div>
+          </div>`).join('')}
+      </div>
+      <button class="add-exercise-btn" onclick="addHydrationTip()">+ Add Tip</button>
+    </div>`;
+  activateEditing(body);
+}
+
+function addHydrationSlot() {
+  const list = document.getElementById('hydr-schedule');
+  const div  = document.createElement('div');
+  div.innerHTML = `<div class="card card-sm hydr-slot" style="margin-bottom:8px;display:flex;gap:12px;align-items:center">
+    <button class="delete-ex-btn" style="position:static;width:24px;height:24px;font-size:12px;flex-shrink:0"
+      onclick="this.closest('.hydr-slot').remove();markDirty()">✕</button>
+    <div style="flex:1">
+      <div class="editable" data-field="time" contenteditable="true" style="font-weight:600;font-size:13px">New Time</div>
+      <div class="editable" data-field="label" contenteditable="true" style="font-size:12px;color:var(--text3);margin-top:2px">Description</div>
+    </div>
+    <div style="flex-shrink:0;text-align:right">
+      <div class="editable" data-field="amount" contenteditable="true" style="font-weight:700;color:var(--g5)">300</div>
+      <div style="font-size:11px;color:var(--text3)">ml</div>
+    </div>
+  </div>`;
+  activateEditing(div);
+  list?.appendChild(div.firstElementChild);
+  markDirty();
+}
+
+function addHydrationTip() {
+  const list = document.getElementById('hydr-tips');
+  const div  = document.createElement('div');
+  div.innerHTML = `<div class="card card-sm hydr-tip" style="margin-bottom:8px;display:flex;gap:10px;align-items:flex-start">
+    <button class="delete-ex-btn" style="position:static;width:24px;height:24px;font-size:12px;flex-shrink:0;margin-top:2px"
+      onclick="this.closest('.hydr-tip').remove();markDirty()">✕</button>
+    <div class="editable-block editable" data-field="tip" contenteditable="true"
+      style="flex:1;font-size:13px;color:var(--text2);line-height:1.5">💧 New tip here</div>
+  </div>`;
+  activateEditing(div);
+  list?.appendChild(div.firstElementChild);
+  markDirty();
+}
+
+// ════════════════════════════════════════════════════════════════
+// DIET EDITOR
+// ════════════════════════════════════════════════════════════════
+function renderDietEditor(moduleId, body) {
+  const modKey = APP_DATA.diet?.modules?.[moduleId] ? moduleId : 'cardio';
+  const data   = Store.getContent('diet_' + moduleId) || APP_DATA.diet?.modules?.[modKey] || { title: 'Diet Plan', meals: [] };
+  const meals  = Array.isArray(data.meals) ? data.meals : [];
+
+  body.innerHTML = `
+    <div style="font-size:13px;color:var(--text2);padding:0 16px 12px;line-height:1.5">
+      ✏️ <strong>Tap any field</strong> to edit diet plan.
+    </div>
+    <div style="padding:0 16px">
+      <div class="card" style="margin-bottom:16px">
+        <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Plan Title</div>
+        <div class="editable" id="diet-title" contenteditable="true" style="font-size:17px;font-weight:700">${data.title || ''}</div>
+      </div>
+      <div style="font-weight:700;margin-bottom:8px">Meals</div>
+      <div id="diet-meals">
+        ${meals.map((m, i) => _dietMealCard(m, i)).join('')}
+      </div>
+      <button class="add-exercise-btn" onclick="addDietMeal()">+ Add Meal</button>
+    </div>`;
+  activateEditing(body);
+}
+
+function _dietMealCard(m, idx) {
+  return `
+    <div class="card card-sm diet-meal" data-idx="${idx}" style="margin-bottom:10px;position:relative">
+      <button class="delete-ex-btn" onclick="this.closest('.diet-meal').remove();markDirty()">✕</button>
+      <div style="padding-right:32px">
+        <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;margin-bottom:3px">Time / Label</div>
+        <div class="editable" data-field="time" contenteditable="true" style="font-weight:700;font-size:14px;margin-bottom:8px">${m.time || ''}</div>
+        <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;margin-bottom:3px">Meal Name</div>
+        <div class="editable" data-field="name" contenteditable="true" style="font-weight:600;margin-bottom:8px">${m.name || ''}</div>
+        <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;margin-bottom:3px">Food Items</div>
+        <div class="editable-block editable" data-field="items" contenteditable="true"
+          style="font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:8px">${m.items || ''}</div>
+        <div style="display:flex;gap:12px">
+          <div style="flex:1">
+            <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;margin-bottom:3px">Calories</div>
+            <div class="editable" data-field="cal" contenteditable="true" style="font-weight:700;color:var(--g5)">${m.cal || 0}</div>
+          </div>
+          <div style="flex:2">
+            <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;margin-bottom:3px">Notes</div>
+            <div class="editable" data-field="notes" contenteditable="true" style="font-size:12px;color:var(--text3)">${m.notes || ''}</div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function addDietMeal() {
+  const list = document.getElementById('diet-meals');
+  const div  = document.createElement('div');
+  div.innerHTML = _dietMealCard({ time: 'New Time', name: 'Meal Name', items: 'Food items', cal: 0, notes: '' }, 999);
+  activateEditing(div);
+  list?.appendChild(div.firstElementChild);
+  markDirty();
+}
+
+// ════════════════════════════════════════════════════════════════
+// QUOTES EDITOR
+// ════════════════════════════════════════════════════════════════
+function openAdminQuotes() {
+  AdminEdit.module  = 'quotes';
+  AdminEdit.section = 'quotes';
+  AdminEdit.isDirty = false;
+  showPage('page-admin-editor');
+
+  document.getElementById('editor-module-title').textContent = '💬 Motivational Quotes';
+  document.getElementById('editor-section-tabs').innerHTML   = '';
+
+  const data = Store.getContent('custom_quotes') || APP_DATA.quotes || [];
+  const body = document.getElementById('editor-body');
+  body.classList.add('admin-edit-mode');
+
+  body.innerHTML = `
+    <div style="font-size:13px;color:var(--text2);padding:0 16px 12px;line-height:1.5">
+      ✏️ These quotes show on the <strong>user daily motivation screen</strong>. Admin skips this screen.
+    </div>
+    <div style="padding:0 16px">
+      <div id="quotes-list">
+        ${data.map((q, i) => _quoteCard(q, i)).join('')}
+      </div>
+      <button class="add-exercise-btn" onclick="addQuoteRow()">+ Add Quote</button>
+    </div>`;
+  activateEditing(body);
+
+  // Override save button for quotes
+  const btn = document.getElementById('editor-save-btn');
+  if (btn) {
+    btn.textContent      = '💾 Save Quotes';
+    btn.style.background = 'linear-gradient(135deg,var(--g3),var(--g4))';
+    btn.disabled         = false;
+    btn.onclick = async () => {
+      btn.disabled = true; btn.textContent = 'Saving…';
+      const quotes = Array.from(document.querySelectorAll('.quote-row')).map(el => ({
+        text:   (_text(el, 'text')   || '').replace(/^"|"$/g, '').trim(),
+        author: (_text(el, 'author') || '').replace(/^—\s*/, '').trim(),
+      })).filter(q => q.text);
+      Store.setContent('custom_quotes', quotes);
+      APP_DATA.quotes = quotes;
+      await Sheets.post('saveContent', { key: 'custom_quotes', value: quotes });
+      btn.disabled    = false;
+      btn.textContent = '✅ Saved!';
+      AdminEdit.isDirty = false;
+      showToast('Quotes updated for all users! ✅', 'success');
+      setTimeout(() => { btn.textContent = '💾 Save Quotes'; }, 3000);
+    };
+  }
+}
+
+function _quoteCard(q, idx) {
+  return `
+    <div class="card card-sm quote-row" data-idx="${idx}" style="margin-bottom:10px;position:relative">
+      <button class="delete-ex-btn" onclick="this.closest('.quote-row').remove();markDirty()">✕</button>
+      <div style="padding-right:36px">
+        <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Quote Text</div>
+        <div class="editable-block editable" data-field="text" contenteditable="true"
+          style="font-size:14px;font-style:italic;line-height:1.5">"${q.text || ''}"</div>
+        <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin:8px 0 4px">Author</div>
+        <div class="editable" data-field="author" contenteditable="true"
+          style="font-size:13px;color:var(--text3)">— ${q.author || 'Unknown'}</div>
+      </div>
+    </div>`;
+}
+
+function addQuoteRow() {
+  const list = document.getElementById('quotes-list');
+  const div  = document.createElement('div');
+  div.innerHTML = _quoteCard({ text: 'Enter quote here', author: 'Author Name' }, 999);
+  activateEditing(div);
+  list?.appendChild(div.firstElementChild);
+  markDirty();
+}
+
+// ════════════════════════════════════════════════════════════════
+// HISTORY
+// ════════════════════════════════════════════════════════════════
+function renderAllHistory() {
+  const allLogs = Store.getLogs().sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+  const allRuns = Store.getRunLogs().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const combined = [
+    ...allLogs.map(l => ({ ...l, _type: 'workout' })),
+    ...allRuns.map(r => ({ ...r, _type: 'run', module: 'running', day: 'Run', timestamp: r.timestamp || r.date })),
+  ].sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || '')).slice(0, 60);
+
+  document.getElementById('all-history-list').innerHTML = combined.length
+    ? combined.map(l => `
+        <div class="user-row" style="margin-bottom:6px">
+          <div class="user-avatar" style="font-size:18px">${getModuleEmoji(l.module)}</div>
+          <div class="user-info">
+            <div class="user-name">${l.userId || '—'} — ${getModuleName(l.module)}</div>
+            <div class="user-email">${l._type === 'run' ? `${(l.distance || 0).toFixed(2)}km · ${fmtTime(l.duration || 0)}` : l.day} · ${l.date || '—'}</div>
+          </div>
+          <span class="badge ${l._type === 'run' ? 'badge-blue' : 'badge-green'}">${l._type === 'run' ? '🏃 Run' : '✓ Done'}</span>
+        </div>`).join('')
+    : '<div class="empty-state"><div class="empty-icon">📋</div><p>No activity yet.</p></div>';
+}
+
+// ════════════════════════════════════════════════════════════════
+// FEEDBACK
+// ════════════════════════════════════════════════════════════════
+async function renderFeedbackList() {
+  const container = document.getElementById('feedback-list');
+  container.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text3)">
+    <div class="loader" style="margin:0 auto 12px"></div>Loading…</div>`;
+  const res = await Sheets.get('getFeedback');
+  if (!res?.success || !res.feedback?.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">💬</div><p>No feedback yet.</p></div>';
+    return;
+  }
   container.innerHTML = res.feedback.map(f => `
     <div class="card card-sm" style="margin-bottom:10px">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
         <div>
           <div style="font-weight:700;font-size:14px">${f.name || 'Anonymous'}</div>
-          <div style="font-size:12px;color:var(--text3)">${f.email||''} · ${f.date||''}</div>
+          <div style="font-size:12px;color:var(--text3)">${f.email || ''} · ${f.date || ''}</div>
         </div>
-        <div style="display:flex;gap:4px">
-          ${'⭐'.repeat(parseInt(f.rating)||0)}
-        </div>
+        <div>${'⭐'.repeat(Math.min(parseInt(f.rating) || 0, 5))}</div>
       </div>
-      <div style="font-size:13px;color:var(--text2);line-height:1.5">${f.message||''}</div>
-      ${f.category ? `<div style="margin-top:6px"><span class="badge badge-blue">${f.category}</span></div>` : ''}
+      <div style="font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:6px">${f.message || ''}</div>
+      ${f.category ? `<span class="badge badge-blue">${f.category}</span>` : ''}
     </div>`).join('');
 }
 
-// ── CONTENT EDITOR — include warmup/cooldown ──────────────────────
-function renderContentLinks() {
-  const container = document.getElementById('content-links-list');
-  const modules = ['cardio','gym','yoga','stretching','running'];
-
-  container.innerHTML = `
-    <div class="card" style="margin-bottom:16px;background:linear-gradient(135deg,var(--g1),var(--g2))">
-      <div style="font-weight:700;margin-bottom:4px">🔗 Google Sheets Backend</div>
-      <div style="font-size:13px;color:var(--text2);margin-bottom:10px">
-        Required for user login, creation and data sync.
-        ${Store.getSheetsConfig().webAppUrl
-          ? '<span style="color:var(--g5)"> ✅ Connected</span>'
-          : '<span style="color:var(--accent)"> ⚠️ Not configured</span>'}
-      </div>
-      <button class="btn btn-primary btn-sm" onclick="openSheetsConfig()">⚙️ Configure Sheets URL</button>
-    </div>
-
-    <div class="section-title">Edit Module Content</div>
-    ${modules.map(m => `
-      <div class="card card-sm" style="margin-bottom:8px">
-        <div style="font-weight:700;margin-bottom:10px">${getModuleEmoji(m)} ${getModuleName(m)}</div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          <button class="btn btn-outline btn-sm" onclick="openContentEditor('${m}','warmup')">🔥 Warm-Up</button>
-          <button class="btn btn-outline btn-sm" onclick="openContentEditor('${m}','cooldown')">🧘 Cool-Down</button>
-          <button class="btn btn-outline btn-sm" onclick="openContentEditor('${m}','hydration')">💧 Hydration</button>
-          <button class="btn btn-outline btn-sm" onclick="openContentEditor('${m}','diet')">🥗 Diet</button>
-        </div>
-      </div>`).join('')}`;
+// ════════════════════════════════════════════════════════════════
+// SHEETS CONFIG
+// ════════════════════════════════════════════════════════════════
+function openSheetsConfig() {
+  document.getElementById('sheets-url').value = Store.getSheetsConfig().webAppUrl || '';
+  openModal('modal-sheets-config');
+}
+async function saveSheetsConfig() {
+  const url = document.getElementById('sheets-url').value.trim();
+  if (!url) { showToast('Please enter the Web App URL.', 'error'); return; }
+  Store.setSheetsConfig({ webAppUrl: url });
+  closeModal('modal-sheets-config');
+  showToast('Sheets URL saved! ✅', 'success');
+  renderContentHome(); // refresh connection status
+}
+async function testSheetsConnection() {
+  const url = document.getElementById('sheets-url').value.trim();
+  if (!url) { showToast('Enter URL first.', 'error'); return; }
+  const prev = Store.getSheetsConfig();
+  Store.setSheetsConfig({ webAppUrl: url });
+  showToast('Testing…', 'info');
+  const res = await Sheets.get('ping');
+  Store.setSheetsConfig(prev);
+  if (res?.success) showToast('✅ Connected to Google Sheets!', 'success');
+  else showToast('❌ Connection failed. Check the URL.', 'error');
 }
 
-function openContentEditor(moduleId, type) {
-  APP.editingContent = { moduleId, type };
-  const labels = { warmup:'Warm-Up', cooldown:'Cool-Down', hydration:'Hydration', diet:'Diet' };
-  document.getElementById('content-editor-title').textContent = `Edit ${labels[type]||type} — ${getModuleName(moduleId)}`;
-
-  let defaults;
-  if (type === 'warmup')    defaults = APP_DATA.warmups[moduleId]    || APP_DATA.warmups.cardio    || [];
-  else if (type === 'cooldown') defaults = APP_DATA.cooldowns[moduleId] || APP_DATA.cooldowns.cardio || [];
-  else if (type === 'hydration') defaults = APP_DATA.hydration.default;
-  else defaults = APP_DATA.diet.modules[moduleId] || APP_DATA.diet.modules.cardio;
-
-  const override = Store.getContent(`${type}_${moduleId}`);
-  document.getElementById('content-editor-text').value = JSON.stringify(override || defaults, null, 2);
-  openModal('modal-content-editor');
-}
+// ── MODULE HELPERS (shared with dashboard) ────────────────────────
+function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🤸', running: '🏃' }[mod] || '💪'; }
+function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running' }[mod] || mod; }
