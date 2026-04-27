@@ -269,8 +269,19 @@ function dayName()     { return ['Sunday','Monday','Tuesday','Wednesday','Thursd
 function getWeekDays() { return ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']; }
 function getGreeting() {
   const h = new Date().getHours();
-  return h < 12 ? 'Good Morning' : h < 17 ? 'Good Afternoon' : 'Good Evening';
+  if (h >= 5  && h < 12) return 'Good Morning';
+  if (h >= 12 && h < 17) return 'Good Afternoon';
+  if (h >= 17 && h < 21) return 'Good Evening';
+  return 'Good Night';  // 9 PM – 5 AM
 }
+
+// Refresh greeting every minute so it updates at noon/5pm
+setInterval(() => {
+  const greetEl = document.getElementById('dash-greeting');
+  if (greetEl && APP.currentUser) {
+    greetEl.textContent = getGreeting() + ', ' + APP.currentUser.name.split(' ')[0] + '!';
+  }
+}, 60000);
 function getMonday() {
   const d = new Date(), day = d.getDay();
   d.setDate(d.getDate() - day + (day === 0 ? -6 : 1));
@@ -340,6 +351,11 @@ document.addEventListener('DOMContentLoaded', () => {
       renderQuote();
     } else {
       setActiveNav('home');
+    }
+
+    // Init push for non-admin on session restore (page reload)
+    if (session.role !== 'ADMIN' && typeof initPushNotifications === 'function') {
+      initPushNotifications();
     }
   } else {
     showPage('page-login', false);
