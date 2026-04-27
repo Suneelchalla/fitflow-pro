@@ -156,19 +156,46 @@ function selectDay(day, btn) {
 
 function renderExercises(moduleId, day) {
   const mod = APP_DATA.modules[moduleId];
-  const exercises = mod?.days[day];
-  if (!exercises) return;
+  const mainExercises = mod?.days[day];
+  if (!mainExercises) return;
+
+  const warmupKey   = moduleId in APP_DATA.warmups   ? moduleId : 'cardio';
+  const cooldownKey = moduleId in APP_DATA.cooldowns ? moduleId : 'cardio';
+  const warmups     = Store.getContent('warmup_'   + moduleId) || APP_DATA.warmups[warmupKey]    || [];
+  const cooldowns   = Store.getContent('cooldown_' + moduleId) || APP_DATA.cooldowns[cooldownKey] || [];
+  const allExercises = [
+    ...warmups.map(e      => ({...e, _section:'warmup'})),
+    ...mainExercises.map(e => ({...e, _section:'main'})),
+    ...cooldowns.map(e    => ({...e, _section:'cooldown'})),
+  ];
+  APP._lastAllExercises = allExercises;
 
   const user = APP.currentUser;
   const sessionKey = `sess_${user.id}_${moduleId}_${day}_${todayStr()}`;
   let sessionData = Store.get(sessionKey, {});
 
+  function secHeader(label, bg, emoji) {
+    return `<div style="display:flex;align-items:center;gap:8px;margin:18px 0 10px;padding:9px 14px;border-radius:10px;background:${bg}">
+      <span style="font-size:16px">${emoji}</span>
+      <span style="font-size:11px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.08em">${label}</span>
+    </div>`;
+  }
+
+  let prevSection = '';
   const container = document.getElementById('exercises-list');
-  container.innerHTML = exercises.map((ex, i) => {
+  container.innerHTML = allExercises.map((ex, i) => {
+    let hdr = '';
+    if (ex._section !== prevSection) {
+      prevSection = ex._section;
+      if (ex._section === 'warmup')   hdr = secHeader('Warm-Up', 'rgba(30,136,229,0.35)', '🔥');
+      if (ex._section === 'main')     hdr = secHeader('Main Workout', 'rgba(46,125,70,0.4)', '💪');
+      if (ex._section === 'cooldown') hdr = secHeader('Cool-Down & Stretches', 'rgba(103,58,183,0.35)', '🧘');
+    }
+
     const checked = sessionData[i] || [];
     const allDone = checked.length >= ex.sets;
-    const imgHtml = ex.image
-      ? `<img src="${ex.image}" alt="${ex.name}" onerror="this.parentElement.innerHTML='<div style=font-size:48px;color:var(--text3);display:flex;align-items:center;justify-content:center;height:100%>💪</div>'">`
+    const thumb = ex.image
+      ? `<img src="${ex.image}" alt="${ex.name}" onerror="this.style.display='none'">`
       : `<div style="font-size:48px;color:var(--text3);display:flex;align-items:center;justify-content:center;height:100%">💪</div>`;
 
     const setsHtml = Array.from({length: ex.sets}, (_, s) => {
@@ -179,9 +206,9 @@ function renderExercises(moduleId, day) {
       </div>`;
     }).join('');
 
-    return `
-      <div class="exercise-card ${allDone ? 'completed' : ''} animate-in animate-in-${Math.min(i+1,5)}" id="exc-card-${i}">
-        <div class="exercise-thumb">${imgHtml}</div>
+    return `${hdr}
+      <div class="exercise-card ${allDone ? 'completed' : ''} animate-in animate-in-${Math.min(i%5+1,5)}" id="exc-card-${i}">
+        <div class="exercise-thumb">${thumb}</div>
         <div class="exercise-body">
           <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
             <div class="exercise-name">${i+1}. ${ex.name}</div>
@@ -198,6 +225,7 @@ function renderExercises(moduleId, day) {
       </div>`;
   }).join('');
 }
+
 
 function toggleSet(moduleId, day, exIdx, setIdx) {
   const user = APP.currentUser;
