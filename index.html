@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#071510">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="FitFlow Pro">
+<meta name="description" content="Android-first all-in-one fitness app — workouts, running, yoga, diet & more.">
+<title>FitFlow Pro</title>
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div class="bg-mesh"></div>
+<div id="toast"></div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PAGE: LOGIN                                                      -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="page-login" class="page active" style="min-height:100vh;justify-content:center;align-items:center;padding:24px">
+  <div style="width:100%;max-width:400px">
+
+    <!-- Logo -->
+    <div style="text-align:center;margin-bottom:40px">
+      <div style="font-size:64px;margin-bottom:12px">🏋️</div>
+      <div class="display" style="font-size:52px;color:var(--g5);letter-spacing:0.04em">FITFLOW</div>
+      <div class="display" style="font-size:28px;color:var(--text3);margin-top:-8px;letter-spacing:0.1em">PRO</div>
+      <div style="font-size:13px;color:var(--text3);margin-top:8px">Your all-in-one fitness companion</div>
+    </div>
+
+    <!-- Form -->
+    <form id="login-form" style="display:flex;flex-direction:column;gap:16px">
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <input id="login-email" type="email" class="form-input" placeholder="you@example.com" autocomplete="email">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <div style="position:relative">
+          <input id="login-password" type="password" class="form-input" placeholder="Enter password" autocomplete="current-password" style="padding-right:48px">
+          <button type="button" id="toggle-pass" style="position:absolute;right:14px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--text3);font-size:18px;cursor:pointer">👁</button>
+        </div>
+      </div>
+      <div id="login-error" style="color:#ef9a9a;font-size:13px;min-height:18px"></div>
+      <button id="login-btn" type="submit" class="btn btn-primary btn-full btn-lg">Sign In</button>
+    </form>
+
+    <!-- Demo credentials -->
+    <div class="card" style="margin-top:24px;background:rgba(46,125,70,0.1);border-color:rgba(46,125,70,0.2)">
+      <div style="font-size:12px;font-weight:700;color:var(--g5);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em">Demo Credentials</div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:13px;font-weight:600">👑 Admin</div>
+            <div style="font-size:12px;color:var(--text3)">admin@fitflow.com / admin123</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="fillDemo('admin@fitflow.com','admin123')">Fill</button>
+        </div>
+        <div style="height:1px;background:var(--border)"></div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:13px;font-weight:600">🙋 User</div>
+            <div style="font-size:12px;color:var(--text3)">user@fitflow.com / user123</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="fillDemo('user@fitflow.com','user123')">Fill</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PAGE: MOTIVATIONAL QUOTE                                         -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="page-quote" class="page" style="min-height:100vh;justify-content:center;align-items:center;padding:32px;background:radial-gradient(ellipse 80% 60% at 50% 40%,rgba(46,125,70,0.2) 0%,transparent 70%)">
+  <div style="width:100%;max-width:400px;text-align:center">
+    <div id="quote-greeting" style="font-size:16px;color:var(--text2);margin-bottom:32px;font-weight:500"></div>
+    <div style="font-size:56px;margin-bottom:24px">💪</div>
+    <blockquote id="quote-text" class="display" style="font-size:30px;color:var(--text);line-height:1.25;margin-bottom:16px;letter-spacing:0.02em"></blockquote>
+    <div id="quote-author" style="font-size:14px;color:var(--text3);font-style:italic;margin-bottom:48px"></div>
+    <button id="ready-btn" class="btn btn-accent btn-full btn-lg" style="font-size:18px">
+      💥 Are You Ready for the Day?
+    </button>
+    <button onclick="logout()" style="background:none;border:none;color:var(--text3);font-size:13px;margin-top:20px;cursor:pointer;text-decoration:underline">Sign out</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PAGE: DASHBOARD                                                  -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="page-dashboard" class="page">
+  <div class="scroll-content pb-nav">
+    <div class="container" style="padding-top:20px">
+
+      <!-- Header -->
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:20px">
+        <div>
+          <div class="display" style="font-size:36px;color:var(--g5);line-height:1">FITFLOW <span style="color:var(--text3)">PRO</span></div>
+          <div id="dash-today-day" style="font-size:13px;color:var(--text3);margin-top:3px"></div>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <div class="streak-pill">🔥 <span id="dash-streak">0</span> days</div>
+          <button onclick="logout()" style="width:36px;height:36px;border-radius:50%;background:var(--surface);border:1px solid var(--border);font-size:16px;cursor:pointer">👤</button>
+        </div>
+      </div>
+
+      <!-- Greeting + ring -->
+      <div class="card" style="background:linear-gradient(135deg,var(--g1),var(--bg2));margin-bottom:20px;display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <div id="dash-greeting" style="font-size:17px;font-weight:700;margin-bottom:4px"></div>
+          <div style="font-size:13px;color:var(--text2)">Keep pushing! You're doing great.</div>
+        </div>
+        <div style="position:relative;width:64px;height:64px;flex-shrink:0">
+          <svg width="64" height="64" viewBox="0 0 64 64">
+            <circle cx="32" cy="32" r="30" fill="none" stroke="var(--bg3)" stroke-width="6"/>
+            <circle id="dash-ring" cx="32" cy="32" r="30" fill="none" stroke="var(--g4)" stroke-width="6"
+              stroke-linecap="round" style="transform:rotate(-90deg);transform-origin:32px 32px;transition:stroke-dashoffset 0.8s"/>
+          </svg>
+          <div id="dash-ring-pct" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--g5)">0%</div>
+        </div>
+      </div>
+
+      <!-- Quick stats -->
+      <div class="stat-row" style="margin-bottom:20px">
+        <div class="stat-card"><div class="stat-val" id="dash-total">0</div><div class="stat-label">Total Workouts</div></div>
+        <div class="stat-card"><div class="stat-val" id="dash-week">0</div><div class="stat-label">This Week</div></div>
+      </div>
+
+      <!-- Module grid -->
+      <div class="section-title">Today's Modules</div>
+      <div id="module-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px"></div>
+
+    </div>
+  </div>
+
+  <!-- Bottom nav -->
+  <nav class="bottom-nav" style="position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px">
+    <button class="nav-item active" data-nav="home" onclick="navTo('home')"><span class="nav-icon">🏠</span>Home</button>
+    <button class="nav-item" data-nav="history" onclick="navTo('history')"><span class="nav-icon">📅</span>History</button>
+    <button class="nav-item" data-nav="running" onclick="navTo('running')"><span class="nav-icon">🏃</span>Run</button>
+    <button id="nav-admin" class="nav-item" data-nav="admin" onclick="navTo('admin')" style="display:none"><span class="nav-icon">⚙️</span>Admin</button>
+  </nav>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PAGE: MODULE                                                     -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="page-module" class="page">
+  <div class="scroll-content pb-nav">
+
+    <!-- Top bar -->
+    <div class="top-bar" style="padding:16px 16px 0">
+      <button class="back-btn" onclick="showPage('page-dashboard');refreshDashboard()">‹</button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span id="module-emoji-header" style="font-size:24px"></span>
+        <span id="module-title" class="top-bar-title"></span>
+      </div>
+      <div style="width:38px"></div>
+    </div>
+
+    <div class="container" style="padding-top:16px">
+
+      <!-- Day strip -->
+      <div id="day-tab-strip" class="tab-strip" style="margin-bottom:16px"></div>
+
+      <!-- Module inner tabs -->
+      <div class="tab-strip" style="margin-bottom:16px">
+        <button class="tab-btn module-inner-tab active" onclick="switchModuleTab('workout',this)">💪 Workout</button>
+        <button class="tab-btn module-inner-tab" onclick="switchModuleTab('hydration',this)">💧 Hydration</button>
+        <button class="tab-btn module-inner-tab" onclick="switchModuleTab('diet',this)">🥗 Diet</button>
+        <button class="tab-btn module-inner-tab" onclick="switchModuleTab('history',this)">📅 History</button>
+      </div>
+
+      <!-- Workout tab -->
+      <div id="module-workout-tab" class="module-tab-content active">
+        <div id="exercises-list" style="display:flex;flex-direction:column;gap:14px;margin-bottom:16px"></div>
+        <button id="complete-day-btn" class="btn btn-primary btn-full" onclick="completeDay()" style="margin-bottom:20px">Mark Day Complete</button>
+      </div>
+
+      <!-- Hydration tab -->
+      <div id="module-hydration-tab" class="module-tab-content">
+        <div id="hydration-tab-content"></div>
+      </div>
+
+      <!-- Diet tab -->
+      <div id="module-diet-tab" class="module-tab-content">
+        <div id="diet-tab-content"></div>
+      </div>
+
+      <!-- History tab -->
+      <div id="module-history-tab" class="module-tab-content">
+        <div id="history-tab-content"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PAGE: RUNNING                                                    -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="page-running" class="page">
+  <div class="scroll-content pb-nav">
+
+    <div class="top-bar">
+      <button class="back-btn" onclick="showPage('page-dashboard');refreshDashboard()">‹</button>
+      <div class="top-bar-title">🏃 Running & Walking</div>
+      <div style="width:38px"></div>
+    </div>
+
+    <!-- Run tabs -->
+    <div style="padding:12px 16px 0">
+      <div class="tab-strip">
+        <button class="tab-btn run-tab-btn active" data-tab="log" onclick="renderRunningTabs('log')">📍 Log Run</button>
+        <button class="tab-btn run-tab-btn" data-tab="plans" onclick="renderRunningTabs('plans')">📋 Plans</button>
+        <button class="tab-btn run-tab-btn" data-tab="history" onclick="renderRunningTabs('history')">📊 History</button>
+        <button class="tab-btn run-tab-btn" data-tab="hydration" onclick="renderRunningTabs('hydration')">💧 Hydration</button>
+        <button class="tab-btn run-tab-btn" data-tab="diet" onclick="renderRunningTabs('diet')">🥗 Diet</button>
+      </div>
+    </div>
+
+    <!-- LOG RUN TAB -->
+    <div id="run-tab-log" class="run-tab-content active" style="padding:16px">
+
+      <!-- IDLE STATE -->
+      <div id="run-idle">
+        <div class="card" style="text-align:center;padding:36px 24px;background:linear-gradient(135deg,var(--bg2),var(--surface));margin-bottom:16px">
+          <div style="font-size:64px;margin-bottom:16px">🏃</div>
+          <div class="display" style="font-size:42px;color:var(--g5);margin-bottom:8px">START A RUN</div>
+          <div style="font-size:14px;color:var(--text2);margin-bottom:24px;line-height:1.5">GPS-tracked distance, real-time pace, and auto-saved to your history.</div>
+          <button class="btn btn-primary btn-full btn-lg" onclick="startRun()">▶ Start Run</button>
+        </div>
+
+        <div class="card card-sm" style="background:rgba(240,192,64,0.06);border-color:rgba(240,192,64,0.2)">
+          <div style="font-size:13px;color:var(--accent)">📍 Allow location access when prompted for GPS tracking. Works without GPS in time-only mode.</div>
+        </div>
+      </div>
+
+      <!-- ACTIVE RUN STATE -->
+      <div id="run-active" class="hidden">
+        <div class="card" style="background:linear-gradient(135deg,var(--g1),var(--bg2));padding:32px 20px;text-align:center;margin-bottom:16px">
+          <div style="font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Elapsed Time</div>
+          <div class="run-timer" id="run-timer">00:00</div>
+          <div style="height:1px;background:var(--border);margin:20px 0"></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
+            <div class="run-stat"><div class="val" id="run-dist">0.00</div><div class="lbl">KM</div></div>
+            <div class="run-stat"><div class="val" id="run-pace">--:--</div><div class="lbl">MIN/KM</div></div>
+            <div class="run-stat"><div class="val" id="run-cal">0</div><div class="lbl">KCAL</div></div>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px;margin-bottom:16px">
+          <button id="pause-run-btn" class="btn btn-outline btn-full" onclick="togglePauseRun()">⏸ Pause</button>
+          <button class="btn btn-danger btn-full" onclick="stopRun()">⏹ Stop</button>
+        </div>
+      </div>
+
+      <!-- RUN SUMMARY STATE -->
+      <div id="run-summary" class="hidden">
+        <div class="card" style="background:linear-gradient(135deg,var(--g1),var(--g2));text-align:center;padding:28px 20px;margin-bottom:16px">
+          <div style="font-size:48px;margin-bottom:12px">🏅</div>
+          <div class="display" style="font-size:34px;color:var(--g5);margin-bottom:16px">RUN COMPLETE!</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+            <div class="stat-card"><div class="stat-val" id="sum-dist">0.00 km</div><div class="stat-label">Distance</div></div>
+            <div class="stat-card"><div class="stat-val" id="sum-time">00:00</div><div class="stat-label">Time</div></div>
+            <div class="stat-card"><div class="stat-val" id="sum-pace">--:--</div><div class="stat-label">Pace /km</div></div>
+            <div class="stat-card"><div class="stat-val" id="sum-cal">0</div><div class="stat-label">Calories</div></div>
+          </div>
+        </div>
+        <div style="display:flex;gap:12px">
+          <button class="btn btn-outline btn-full" onclick="discardRun()">Discard</button>
+          <button class="btn btn-accent btn-full" onclick="saveRun()">💾 Save Run</button>
+        </div>
+      </div>
+
+    </div><!-- /log tab -->
+
+    <!-- PLANS TAB -->
+    <div id="run-tab-plans" class="run-tab-content" style="padding:16px">
+      <div id="training-plans-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px"></div>
+      <div id="plan-detail" style="display:none"></div>
+    </div>
+
+    <!-- HISTORY TAB -->
+    <div id="run-tab-history" class="run-tab-content" style="padding:16px">
+      <div id="run-stats-row" style="margin-bottom:16px"></div>
+      <div class="section-title">Run Log</div>
+      <div id="run-history-list"></div>
+    </div>
+
+    <!-- HYDRATION TAB -->
+    <div id="run-tab-hydration" class="run-tab-content">
+      <div id="run-hydration-content"></div>
+    </div>
+
+    <!-- DIET TAB -->
+    <div id="run-tab-diet" class="run-tab-content">
+      <div id="run-diet-content"></div>
+    </div>
+
+  </div><!-- /scroll-content -->
+</div><!-- /page-running -->
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PAGE: GLOBAL HISTORY                                             -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="page-history-global" class="page">
+  <div class="scroll-content pb-nav">
+    <div class="top-bar">
+      <button class="back-btn" onclick="navTo('home')">‹</button>
+      <div class="top-bar-title">📅 Activity History</div>
+      <div style="width:38px"></div>
+    </div>
+    <div class="container" style="padding-top:16px">
+      <div id="history-stats" style="margin-bottom:20px"></div>
+      <div class="section-title">This Month</div>
+      <div class="card" style="margin-bottom:16px" id="history-cal"></div>
+      <div class="section-title">Activity Log</div>
+      <div id="history-log"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PAGE: ADMIN                                                      -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="page-admin" class="page">
+  <div class="scroll-content pb-nav">
+
+    <div class="top-bar">
+      <button class="back-btn" onclick="navTo('home')">‹</button>
+      <div class="top-bar-title">⚙️ Admin Panel</div>
+      <div style="width:38px"></div>
+    </div>
+
+    <div class="container" style="padding-top:16px">
+
+      <!-- Admin stats -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="stat-card"><div class="stat-val" id="admin-stat-users">0</div><div class="stat-label">Total Users</div></div>
+        <div class="stat-card"><div class="stat-val" id="admin-stat-today">0</div><div class="stat-label">Active Today</div></div>
+        <div class="stat-card"><div class="stat-val" id="admin-stat-workouts">0</div><div class="stat-label">All Workouts</div></div>
+        <div class="stat-card"><div class="stat-val" id="admin-stat-runs">0</div><div class="stat-label">Total Runs</div></div>
+      </div>
+
+      <!-- Admin tabs -->
+      <div class="tab-strip" style="margin-bottom:16px">
+        <button class="tab-btn admin-tab-btn active" onclick="switchAdminTab('users',this)">👥 Users</button>
+        <button class="tab-btn admin-tab-btn" onclick="switchAdminTab('history',this)">📋 All History</button>
+        <button class="tab-btn admin-tab-btn" onclick="switchAdminTab('content',this)">✏️ Content</button>
+      </div>
+
+      <!-- Users tab -->
+      <div id="admin-tab-users" class="admin-tab-content active">
+        <button class="btn btn-primary btn-full" onclick="openAddUser()" style="margin-bottom:16px">+ Add New User</button>
+        <div id="admin-users-list"></div>
+      </div>
+
+      <!-- History tab -->
+      <div id="admin-tab-history" class="admin-tab-content" style="display:none">
+        <div id="all-history-list"></div>
+      </div>
+
+      <!-- Content tab -->
+      <div id="admin-tab-content" class="admin-tab-content" style="display:none">
+        <div id="content-links-list"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- MODALS                                                           -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+
+<!-- Add User Modal -->
+<div id="modal-add-user" class="modal-overlay">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Add New User</div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="form-group">
+        <label class="form-label">Full Name</label>
+        <input id="new-user-name" type="text" class="form-input" placeholder="e.g. Ravi Kumar">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email Address</label>
+        <input id="new-user-email" type="email" class="form-input" placeholder="user@email.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input id="new-user-pass" type="text" class="form-input" placeholder="Initial password">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Role</label>
+        <select id="new-user-role" class="form-input">
+          <option value="USER">User</option>
+          <option value="ADMIN">Admin</option>
+        </select>
+      </div>
+      <div id="new-user-error" style="color:#ef9a9a;font-size:13px;min-height:16px"></div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-outline btn-full" onclick="closeModal('modal-add-user')">Cancel</button>
+        <button class="btn btn-primary btn-full" onclick="saveNewUser()">Create User</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Content Editor Modal -->
+<div id="modal-content-editor" class="modal-overlay">
+  <div class="modal-sheet" style="max-height:80vh">
+    <div class="modal-handle"></div>
+    <div id="content-editor-title" class="modal-title">Edit Content</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:10px">Edit JSON content below. Saves for all users.</div>
+    <textarea id="content-editor-text" class="form-input" style="min-height:200px;font-family:var(--font-mono);font-size:12px;line-height:1.5"></textarea>
+    <div style="display:flex;gap:10px;margin-top:14px">
+      <button class="btn btn-outline btn-full" onclick="closeModal('modal-content-editor')">Cancel</button>
+      <button class="btn btn-primary btn-full" onclick="saveContentEdit()">Save Changes</button>
+    </div>
+  </div>
+</div>
+
+<!-- Sheets Config Modal -->
+<div id="modal-sheets-config" class="modal-overlay">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🔗 Google Sheets Config</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:14px;line-height:1.6">
+      Deploy a Google Apps Script Web App from your Sheet, then paste the URL below.
+    </div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="form-group">
+        <label class="form-label">Apps Script Web App URL</label>
+        <input id="sheets-url" type="url" class="form-input" placeholder="https://script.google.com/macros/s/...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Spreadsheet ID (optional)</label>
+        <input id="sheets-id" type="text" class="form-input" placeholder="From spreadsheet URL">
+      </div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-outline btn-sm" onclick="testSheetsConnection()">Test Connection</button>
+        <button class="btn btn-primary btn-full" onclick="saveSheetsConfig()">Save Config</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- SCRIPTS                                                          -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<script src="js/data.js"></script>
+<script src="js/app.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/dashboard.js"></script>
+<script src="js/running.js"></script>
+<script src="js/admin.js"></script>
+<script>
+// ── INLINE HELPERS ──────────────────────────────────────────────
+function fillDemo(email, pass) {
+  document.getElementById('login-email').value = email;
+  document.getElementById('login-password').value = pass;
+}
+function logout() {
+  Store.clearSession();
+  APP.currentUser = null;
+  showPage('page-login');
+}
+
+// admin tab visibility toggle
+document.querySelectorAll('.admin-tab-content').forEach(c => {
+  if (!c.classList.contains('active')) c.style.display = 'none';
+});
+function switchAdminTab(tab, btn) {
+  document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('.admin-tab-content').forEach(c => c.style.display = 'none');
+  const el = document.getElementById('admin-tab-' + tab);
+  if (el) el.style.display = 'block';
+  if (tab === 'history') renderAllHistory();
+  if (tab === 'content') renderContentLinks();
+}
+
+// Register service worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
