@@ -34,12 +34,13 @@ function renderAdminStats() {
 function switchAdminTab(tab, btn) {
   document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  document.querySelectorAll('.admin-tab-content').forEach(c => c.style.display = 'none');
-  const el = document.getElementById('admin-tab-' + tab);
-  if (el) el.style.display = 'block';
+  document.querySelectorAll('.admin-tab-content').forEach(el => el.style.display = 'none');
+  const tabEl = document.getElementById('admin-tab-' + tab);
+  if (tabEl) tabEl.style.display = 'block';
   if (tab === 'users')    loadAdminUsers();
   if (tab === 'history')  renderAllHistory();
   if (tab === 'feedback') renderFeedbackList();
+  if (tab === 'quotes')   renderAdminQuotesTab();
   if (tab === 'content')  renderContentHome();
 }
 
@@ -882,3 +883,26 @@ async function testSheetsConnection() {
 // ── MODULE HELPERS (shared with dashboard) ────────────────────────
 function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🤸', running: '🏃' }[mod] || '💪'; }
 function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running' }[mod] || mod; }
+
+// ── QUOTES TAB (inline in Admin Panel, not editor page) ───────────
+function renderAdminQuotesTab() {
+  const container = document.getElementById('quotes-manager');
+  if (!container) return;
+  const quotes = Store.getContent('custom_quotes') || APP_DATA.quotes || [];
+
+  container.innerHTML = `
+    <div style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.5">
+      These quotes appear on the <strong>user daily motivation screen</strong>.<br>
+      Admin login skips this screen entirely.
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="openAdminQuotes()" style="margin-bottom:16px;width:100%">
+      ✏️ Open Full Quote Editor
+    </button>
+    <div class="section-title">Current Quotes (${quotes.length})</div>
+    ${quotes.slice(0, 8).map((q, i) => `
+      <div class="card card-sm" style="margin-bottom:8px">
+        <div style="font-size:13px;font-style:italic;color:var(--text);margin-bottom:4px">"${q.text || ''}"</div>
+        <div style="font-size:12px;color:var(--text3)">— ${q.author || 'Unknown'}</div>
+      </div>`).join('')}
+    ${quotes.length > 8 ? `<div style="font-size:13px;color:var(--text3);text-align:center;padding:8px">+${quotes.length - 8} more quotes</div>` : ''}`;
+}
