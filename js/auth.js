@@ -107,6 +107,9 @@ function completeLogin(user) {
     return;
   }
 
+  // Init push notifications for regular users (non-blocking)
+  if (typeof initPushNotifications === 'function') initPushNotifications();
+
   const lastQuote = Store.get('ff_quote_' + user.id);
   const today     = todayStr();
 
