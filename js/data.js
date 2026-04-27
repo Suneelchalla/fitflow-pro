@@ -315,30 +315,144 @@ window.APP_DATA = {
   },
 
   hydration: {
+    // One plan per module — scientifically tailored to activity type
     default: {
       title: "Daily Hydration Plan",
-      targets: { training: 3.5, rest: 2.5 },
+      targets: { training: 3.0, rest: 2.5 },
       schedule: [
         { time:"7:00 AM",        amount:500, label:"Wake-up glass" },
         { time:"9:00 AM",        amount:400, label:"Mid-morning" },
         { time:"12:00 PM",       amount:500, label:"Before lunch" },
         { time:"3:00 PM",        amount:400, label:"Afternoon" },
         { time:"Pre-Workout",    amount:400, label:"30 min before" },
-        { time:"During Workout", amount:600, label:"Sip every 15 min" },
+        { time:"During Workout", amount:500, label:"Sip every 15 min" },
         { time:"Post-Workout",   amount:500, label:"Within 30 min" },
-        { time:"7:00 PM",        amount:300, label:"Evening" },
+        { time:"8:00 PM",        amount:300, label:"Evening" },
       ],
       tips: [
+        "Urine colour should be pale yellow — dark means you need more water.",
         "Add a pinch of Himalayan pink salt on heavy training days to replace electrolytes.",
-        "Urine colour should be pale yellow. Dark yellow means you need more water.",
-        "Coffee and tea count but also act as mild diuretics — compensate with extra water.",
-        "Eat water-rich foods: cucumber, watermelon, oranges, and coconut water are excellent.",
-        "Drink 200-300ml extra per 30 minutes in hot/humid weather.",
+        "Drink 200–300ml extra per 30 min in hot or humid weather.",
       ]
-    }
+    },
+
+    cardio: {
+      title: "Home Cardio Hydration Plan",
+      targets: { training: 3.5, rest: 2.5 },
+      schedule: [
+        { time:"Wake-Up (7 AM)",     amount:500, label:"Start metabolism, flush overnight waste" },
+        { time:"Pre-Workout (30 min)", amount:400, label:"Hydrate before intense cardio" },
+        { time:"During Cardio",      amount:600, label:"150ml every 15 min — cardio causes heavy sweat" },
+        { time:"Post-Workout (30 min)", amount:500, label:"Replace sweat losses immediately" },
+        { time:"Mid-Morning",        amount:400, label:"Sustained hydration between sessions" },
+        { time:"Before Lunch",       amount:300, label:"Aids digestion and nutrient absorption" },
+        { time:"Afternoon (3 PM)",   amount:400, label:"Prevents afternoon energy dip" },
+        { time:"Evening (7 PM)",     amount:300, label:"Light — avoid excess before sleep" },
+      ],
+      tips: [
+        "Cardio causes 0.5–1.5L sweat/hour — drink before you feel thirsty.",
+        "Add coconut water or electrolyte tabs after sessions longer than 45 minutes.",
+        "Cold water (15°C) absorbs 30% faster than room temperature during exercise.",
+        "Weigh yourself before and after — drink 1.5L per kg lost during session.",
+        "Avoid sugary sports drinks for sessions under 60 min — plain water is sufficient.",
+      ]
+    },
+
+    gym: {
+      title: "Gym Workout Hydration Plan",
+      targets: { training: 4.0, rest: 2.5 },
+      schedule: [
+        { time:"Wake-Up (7 AM)",      amount:500, label:"Rehydrate after 7–8 hrs without water" },
+        { time:"Pre-Workout (60 min)", amount:500, label:"Top up glycogen and joints for lifting" },
+        { time:"Pre-Workout (15 min)", amount:250, label:"Final top-up before first set" },
+        { time:"During Lifting",      amount:750, label:"200ml between every 2–3 sets" },
+        { time:"Post-Workout (30 min)", amount:600, label:"Critical — begin recovery immediately" },
+        { time:"With Protein Meal",   amount:400, label:"Aids protein synthesis and digestion" },
+        { time:"Afternoon",           amount:500, label:"Joints and muscle repair require hydration" },
+        { time:"Evening",             amount:400, label:"Casein protein digestion needs extra water" },
+      ],
+      tips: [
+        "Heavy lifting causes micro-tears — muscles repair faster when fully hydrated.",
+        "Dehydration of just 2% body weight reduces strength by up to 10%.",
+        "Creatine users need an extra 500ml daily — creatine draws water into muscles.",
+        "Sip water between sets, not during reps — avoid bloating mid-lift.",
+        "Post-workout: aim for 150% of fluid lost (e.g. lost 500ml → drink 750ml).",
+        "Joint health: cartilage is 80% water — consistent hydration prevents knee/shoulder pain.",
+      ]
+    },
+
+    yoga: {
+      title: "Yoga Practice Hydration Plan",
+      targets: { training: 2.5, rest: 2.0 },
+      schedule: [
+        { time:"Wake-Up (6:30 AM)",   amount:500, label:"Warm water with lemon — cleanses and alkalises" },
+        { time:"30 Min Before Yoga",  amount:200, label:"Small sip only — avoid heavy stomach during poses" },
+        { time:"During Practice",     amount:200, label:"Tiny sips only if very thirsty — don't interrupt flow" },
+        { time:"Post-Practice",       amount:400, label:"Rehydrate mindfully after deep stretches" },
+        { time:"Mid-Morning",         amount:400, label:"Room temperature water preferred in yoga lifestyle" },
+        { time:"Before Lunch",        amount:300, label:"30 min before meals for optimal digestion" },
+        { time:"Afternoon",           amount:350, label:"Herbal teas count — tulsi, ginger, chamomile" },
+        { time:"Evening",             amount:250, label:"Light — calming the body before rest" },
+      ],
+      tips: [
+        "Yoga tradition prefers room-temperature or warm water — cold water can disrupt digestive fire (agni).",
+        "Avoid drinking large amounts 30 min before or during practice — it compresses the core.",
+        "Coconut water is the ideal post-yoga drink — natural electrolytes and calming properties.",
+        "Hot yoga (Bikram) requires 1L extra — you lose significantly more through sweat.",
+        "Herbal teas (tulsi, ginger, peppermint) count toward daily intake and support digestion.",
+        "Eating water-rich foods (cucumber, watermelon, oranges) aligns with yogic diet principles.",
+      ]
+    },
+
+    stretching: {
+      title: "Stretching & Recovery Hydration Plan",
+      targets: { training: 2.5, rest: 2.0 },
+      schedule: [
+        { time:"Wake-Up",             amount:500, label:"Warm water — hydrates overnight-stiff muscles" },
+        { time:"Before Stretching",   amount:300, label:"Warm muscles stretch better when hydrated" },
+        { time:"During Stretching",   amount:200, label:"Small sips — stretching is low intensity" },
+        { time:"Post-Stretching",     amount:300, label:"Flush released toxins from fascia" },
+        { time:"Mid-Morning",         amount:400, label:"Collagen synthesis requires hydration" },
+        { time:"Lunch Time",          amount:400, label:"Support joint lubrication throughout day" },
+        { time:"Afternoon",           amount:300, label:"Consistent low-level hydration is key" },
+        { time:"Evening",             amount:200, label:"Light — this is a recovery/rest day" },
+      ],
+      tips: [
+        "Fascia (connective tissue) is 70% water — dehydration makes it stiff and less elastic.",
+        "Warm water before stretching loosens muscle fibres faster than cold water.",
+        "Collagen (joint and muscle repair) synthesis requires adequate vitamin C and hydration.",
+        "Bone broth counts toward intake and provides collagen directly.",
+        "Avoid alcohol on stretching/rest days — it dehydrates and slows muscle repair by 24hrs.",
+        "Magnesium-rich water (or supplement) on rest days reduces muscle soreness significantly.",
+      ]
+    },
+
+    running: {
+      title: "Running & Walking Hydration Plan",
+      targets: { training: 4.5, rest: 2.5 },
+      schedule: [
+        { time:"Wake-Up (6 AM)",       amount:500, label:"Start the day hydrated before early runs" },
+        { time:"2 Hours Before Run",   amount:500, label:"Pre-load hydration — kidneys process excess" },
+        { time:"15 Min Before Run",    amount:200, label:"Final top-up without bloating" },
+        { time:"During Run (<45 min)", amount:400, label:"150–200ml every 20 min — small frequent sips" },
+        { time:"During Run (>45 min)", amount:700, label:"Sports drink or water + salt every 20–30 min" },
+        { time:"Post-Run (30 min)",    amount:600, label:"Most critical window — begin recovery immediately" },
+        { time:"Post-Run (2 hrs)",     amount:500, label:"Continue sipping — 1.5L per kg lost" },
+        { time:"Evening",              amount:400, label:"Support overnight muscle and joint recovery" },
+      ],
+      tips: [
+        "Running loses 500ml–1.5L per hour depending on heat, humidity and pace.",
+        "The thirst signal lags 20 min behind actual need — drink on a schedule, not when thirsty.",
+        "For runs over 60 min, add electrolytes (sodium, potassium) — water alone causes hyponatremia.",
+        "Hot weather running: pre-cool with 500ml ice-cold water 10 min before — reduces core temp.",
+        "Weigh before and after every long run. Drink 1.5L for every 1kg lost.",
+        "Marathon training: increase daily intake by 1L on days with runs over 16km.",
+        "Signs of dehydration while running: dark urine, headache, cramping, nausea, confusion — stop immediately.",
+      ]
+    },
   },
 
-  diet: {
+    diet: {
     modules: {
       cardio:     { title:"Cardio Day Diet Plan",   meals:[
         { time:"Pre-Workout",  name:"Energy Boost",     items:"Banana + black coffee or green tea", cal:150, notes:"30-45 min before session" },
@@ -370,6 +484,14 @@ window.APP_DATA = {
         { time:"Lunch",    name:"Omega-Rich Meal",   items:"Grilled fish or tofu + quinoa + roasted vegetables", cal:540, notes:"Recovery nutrition" },
         { time:"Snack",    name:"Collagen Boost",    items:"Bone broth or gelatin-rich foods", cal:120, notes:"Supports joint health" },
         { time:"Dinner",   name:"Recovery Dinner",   items:"Chicken/lentil soup + whole grain bread", cal:460, notes:"Easy to digest" },
+      ]},
+      running: { title:"Running Day Diet Plan", meals:[
+        { time:"Pre-Run (2-3 hrs)", name:"Main Pre-Run Meal", items:"Oats with banana + honey OR 2 slices toast + peanut butter + banana", cal:380, notes:"Easy to digest carbs — avoid fibre and fat close to run" },
+        { time:"Pre-Run (30 min)", name:"Quick Energy Top-Up", items:"1 banana OR 4–5 dates OR half energy bar", cal:120, notes:"Quick-release glucose — nothing heavy" },
+        { time:"During Run (>60 min)", name:"Intra-Run Fuel", items:"Energy gel OR banana chunk OR 3–4 dates every 45 min", cal:100, notes:"Per serving — only needed for runs over 60 min" },
+        { time:"Post-Run (30 min)", name:"Recovery Window", items:"Chocolate milk OR whey shake + banana OR Greek yogurt + mango", cal:320, notes:"CRITICAL: 3:1 carb:protein ratio — this window is gold" },
+        { time:"Post-Run Meal (1-2 hrs)", name:"Full Recovery Meal", items:"White rice + grilled chicken/fish + roasted vegetables", cal:620, notes:"White rice preferred post-run — faster glycogen replenishment than brown" },
+        { time:"Evening Snack", name:"Overnight Recovery", items:"Cottage cheese (paneer) OR casein protein + warm milk", cal:220, notes:"Slow-digesting protein repairs muscles during sleep" },
       ]},
     }
   }
