@@ -222,6 +222,14 @@ textarea.form-input { resize: vertical; min-height: 90px; line-height: 1.5; }
 .tab-content { display: none; }
 .tab-content.active { display: block; }
 
+/* Module inner tabs */
+.module-tab-content { display: none; }
+.module-tab-content.active { display: block; }
+
+/* Run tabs */
+.run-tab-content { display: none; }
+.run-tab-content.active { display: block; }
+
 /* ── BOTTOM NAV ────────────────────────────────────────────────── */
 .bottom-nav {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
@@ -629,4 +637,40 @@ textarea.form-input { resize: vertical; min-height: 90px; line-height: 1.5; }
   border: 2px solid var(--accent);
   background: var(--g3);
   color: white;
+}
+
+/* ── MODULE TILE DRAG & DROP ───────────────────────────────────── */
+.module-card[draggable="true"] { cursor: grab; }
+.module-card[draggable="true"]:active { cursor: grabbing; }
+
+.module-card.drag-over {
+  border: 2px solid var(--accent) !important;
+  transform: scale(0.97);
+  box-shadow: 0 0 0 3px rgba(240,192,64,0.3);
+}
+
+.drag-hint {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 16px;
+  color: rgba(255,255,255,0.3);
+  line-height: 1;
+  letter-spacing: -2px;
+  user-select: none;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+.module-card:hover .drag-hint,
+.module-card:active .drag-hint {
+  color: rgba(255,255,255,0.6);
+}
+
+/* Reorder hint text below tiles */
+.reorder-hint {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text3);
+  padding: 4px 0 8px;
+  letter-spacing: 0.03em;
 }
