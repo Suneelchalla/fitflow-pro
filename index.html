@@ -377,7 +377,9 @@
 
       <!-- QUOTES tab -->
       <div id="admin-tab-quotes" class="admin-tab-content" style="display:none">
-        <div id="quotes-manager"></div>
+        <div id="quotes-manager">
+          <!-- Populated by renderAdminQuotesTab() in admin.js -->
+        </div>
       </div>
 
       <!-- FEEDBACK tab -->
@@ -652,30 +654,18 @@ async function submitFeedback() {
   }
 }
 
-// ── ADMIN TABS (with feedback) ────────────────────────────────
-function switchAdminTab(tab, btn) {
-  document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  document.querySelectorAll('.admin-tab-content').forEach(c => c.style.display='none');
-  const el = document.getElementById('admin-tab-'+tab);
-  if (el) el.style.display = 'block';
-  if (tab==='users')    loadAdminUsers();
-  if (tab==='history')  renderAllHistory();
-  if (tab==='feedback') renderFeedbackList();
-  if (tab==='quotes')   renderQuotesManager();
-  if (tab==='content')  renderContentLinks();
-}
+// switchAdminTab is defined in admin.js — removed duplicate here
 
 function goBackFromEditor() {
   if (AdminEdit.isDirty) {
     if (!confirm('You have unsaved changes. Leave anyway?')) return;
   }
   AdminEdit.isDirty = false;
-  // Go back to admin content tab
   showPage('page-admin', false);
   renderAdminPanel();
-  // Switch to content tab
-  const contentBtn = document.querySelector('.admin-tab-btn:nth-child(4)');
+  // Find the Content tab button by its text and switch to it
+  const contentBtn = Array.from(document.querySelectorAll('.admin-tab-btn'))
+    .find(b => b.textContent.includes('Content'));
   if (contentBtn) switchAdminTab('content', contentBtn);
 }
 
