@@ -19,68 +19,35 @@ window.APP_DATA = {
   // ── WARMUP (shared structure, used by cardio, gym, yoga, running) ─
   warmups: {
     cardio: [
-      { name:"March in Place", sets:1, reps:"2 min", desc:"Lift knees to waist height, swing arms naturally. Elevates heart rate gently to prepare body.", image:"", demo:"https://www.youtube.com/results?search_query=march+in+place+warm+up", tag:"warmup" },
-      { name:"Arm Circles", sets:2, reps:"30 sec each dir", desc:"Extend arms wide, rotate forward then backward. Loosens shoulder joint and upper body.", image:"", demo:"https://www.youtube.com/results?search_query=arm+circles+warm+up", tag:"warmup" },
-      { name:"Hip Circles", sets:2, reps:"30 sec each dir", desc:"Hands on hips, draw big circles with your hips. Mobilises hip joint and lower back.", image:"", demo:"https://www.youtube.com/results?search_query=hip+circles+warm+up", tag:"warmup" },
-      { name:"Leg Swings", sets:2, reps:"10 each leg", desc:"Hold wall, swing leg forward and back then side to side. Dynamic stretch for hips and hamstrings.", image:"", demo:"https://www.youtube.com/results?search_query=leg+swings+warm+up", tag:"warmup" },
-      { name:"Neck Rolls", sets:1, reps:"5 each dir", desc:"Slowly roll head side to side. Never force. Releases neck tension before any workout.", image:"", demo:"https://www.youtube.com/results?search_query=neck+rolls+warm+up", tag:"warmup" },
+      { name:"Dynamic Warm-Up", sets:1, reps:"5 min", desc:"March in place 1 min → arm circles 1 min → hip circles 1 min → leg swings 1 min → neck rolls 1 min. Raise heart rate gradually before the workout.", image:"", demo:"https://www.youtube.com/results?search_query=cardio+warm+up+routine+5+minutes", tag:"warmup" },
     ],
     gym: [
-      { name:"5 Min Light Cardio", sets:1, reps:"5 min", desc:"Treadmill walk, bike, or row at very low intensity. Raises core temperature and blood flow to muscles.", image:"", demo:"https://www.youtube.com/results?search_query=gym+warm+up+cardio", tag:"warmup" },
-      { name:"Dynamic Chest Opener", sets:2, reps:"10 reps", desc:"Arms out to sides, swing across chest then open wide. Prepares pecs and anterior deltoids for pressing.", image:"", demo:"https://www.youtube.com/results?search_query=dynamic+chest+stretch+warm+up", tag:"warmup" },
-      { name:"World's Greatest Stretch", sets:2, reps:"5 each side", desc:"Lunge forward, rotate thoracic spine, reach to ceiling. Full-body mobility in one movement.", image:"", demo:"https://www.youtube.com/results?search_query=world's+greatest+stretch", tag:"warmup" },
-      { name:"Glute Bridges", sets:2, reps:"15 reps", desc:"Lie on back, feet flat, drive hips up. Activates glutes and hamstrings before lower body work.", image:"", demo:"https://www.youtube.com/results?search_query=glute+bridge+warm+up", tag:"warmup" },
-      { name:"Band Pull-Aparts", sets:2, reps:"15 reps", desc:"Light resistance band at chest height, pull apart to full extension. Activates rear delts and rotator cuff.", image:"", demo:"https://www.youtube.com/results?search_query=band+pull+apart+warm+up", tag:"warmup" },
+      { name:"Gym Warm-Up", sets:1, reps:"5 min", desc:"5 min light cardio (treadmill/bike) → dynamic chest opener 10 reps → world's greatest stretch 5 each side → glute bridges 15 reps. Prepares muscles and joints for heavy lifting.", image:"", demo:"https://www.youtube.com/results?search_query=gym+warm+up+before+workout", tag:"warmup" },
     ],
     yoga: [
-      { name:"Seated Breathing (Pranayama)", sets:1, reps:"2 min", desc:"Sit comfortably, close eyes. Inhale 4 counts, exhale 6 counts. Calms nervous system and prepares mind.", image:"", demo:"https://www.youtube.com/results?search_query=pranayama+breathing+yoga+warm+up", tag:"warmup" },
-      { name:"Seated Neck & Shoulder Release", sets:1, reps:"3 min", desc:"Gentle neck tilts and shoulder rolls. Releases tension from sitting and prepares upper body.", image:"", demo:"https://www.youtube.com/results?search_query=seated+neck+shoulder+yoga+warm+up", tag:"warmup" },
-      { name:"Cat-Cow", sets:2, reps:"8 rounds", desc:"On all fours, alternate spinal arch and curve with breath. Classic yoga warm-up for the entire spine.", image:"", demo:"https://www.youtube.com/results?search_query=cat+cow+yoga+warm+up", tag:"warmup" },
-      { name:"Child's Pose", sets:1, reps:"60 sec", desc:"Extended child's pose, arms forward. Grounds the body and gently opens hips and lower back.", image:"", demo:"https://www.youtube.com/results?search_query=child's+pose+warm+up+yoga", tag:"warmup" },
-      { name:"Downward Dog to Forward Fold", sets:2, reps:"5 flows", desc:"Alternate between downward dog and standing forward fold. Warms hamstrings, calves and back.", image:"", demo:"https://www.youtube.com/results?search_query=downward+dog+forward+fold+warm+up", tag:"warmup" },
+      { name:"Yoga Warm-Up", sets:1, reps:"5 min", desc:"Seated breathing 2 min → neck & shoulder rolls 1 min → cat-cow 8 rounds → child's pose 1 min. Calms the mind and prepares the spine for practice.", image:"", demo:"https://www.youtube.com/results?search_query=yoga+warm+up+routine", tag:"warmup" },
     ],
     running: [
-      { name:"Brisk Walk", sets:1, reps:"3 min", desc:"Walk at fast pace. Raises heart rate gently and lubricates joints before running.", image:"", demo:"https://www.youtube.com/results?search_query=running+warm+up+walk", tag:"warmup" },
-      { name:"High Knees (Slow)", sets:2, reps:"30 sec", desc:"Slow, deliberate high knees. Activates hip flexors and gets the running muscles firing.", image:"", demo:"https://www.youtube.com/results?search_query=high+knees+running+warm+up", tag:"warmup" },
-      { name:"Ankle Circles & Calf Raises", sets:2, reps:"10 each", desc:"Rotate ankles then rise onto toes. Prevents ankle sprains and prepares calf muscles.", image:"", demo:"https://www.youtube.com/results?search_query=ankle+circles+calf+raises+warm+up", tag:"warmup" },
-      { name:"Hip Flexor Lunge Stretch", sets:2, reps:"30 sec each", desc:"Low lunge, hips pushed forward. Critical pre-run stretch to prevent hip flexor strain.", image:"", demo:"https://www.youtube.com/results?search_query=hip+flexor+lunge+running+warm+up", tag:"warmup" },
-      { name:"Leg Swings", sets:2, reps:"10 each leg", desc:"Forward/back and side-to-side leg swings. Opens hip joint fully for full running stride.", image:"", demo:"https://www.youtube.com/results?search_query=leg+swings+running+warm+up", tag:"warmup" },
+      { name:"Pre-Run Warm-Up", sets:1, reps:"5 min", desc:"Brisk walk 2 min → slow high knees 30 sec → ankle circles 10 each → hip flexor lunge 30 sec each → leg swings 10 each. Essential before every run to prevent injury.", image:"", demo:"https://www.youtube.com/results?search_query=running+warm+up+routine", tag:"warmup" },
     ],
   },
 
-  // ── COOLDOWN (shared structure) ───────────────────────────────
-  cooldowns: {
+    cooldowns: {
     cardio: [
-      { name:"Slow Walk", sets:1, reps:"3 min", desc:"Walk at easy pace, progressively slowing. Brings heart rate down safely and prevents blood pooling.", image:"", demo:"https://www.youtube.com/results?search_query=post+cardio+cool+down+walk", tag:"cooldown" },
-      { name:"Standing Quad Stretch", sets:2, reps:"30 sec each", desc:"Pull foot to glute while standing. Stretches quads worked during cardio session.", image:"", demo:"https://www.youtube.com/results?search_query=standing+quad+stretch+cool+down", tag:"cooldown" },
-      { name:"Standing Hamstring Stretch", sets:2, reps:"30 sec each", desc:"Foot on step or floor, lean forward from hips. Releases tight hamstrings post-cardio.", image:"", demo:"https://www.youtube.com/results?search_query=standing+hamstring+stretch+cool+down", tag:"cooldown" },
-      { name:"Hip Flexor Stretch", sets:2, reps:"30 sec each", desc:"Low lunge, sink hips forward. Counters hip flexor tightening from high-knee movements.", image:"", demo:"https://www.youtube.com/results?search_query=hip+flexor+stretch+cool+down", tag:"cooldown" },
-      { name:"Chest & Shoulder Opener", sets:1, reps:"45 sec", desc:"Clasp hands behind back, open chest, breathe deeply. Counters forward posture from cardio.", image:"", demo:"https://www.youtube.com/results?search_query=chest+opener+cool+down+stretch", tag:"cooldown" },
+      { name:"Cool-Down & Stretch", sets:1, reps:"5 min", desc:"Slow walk 2 min → standing quad stretch 30 sec each → standing hamstring stretch 30 sec each → hip flexor stretch 30 sec each → chest opener 45 sec. Essential for recovery and flexibility.", image:"", demo:"https://www.youtube.com/results?search_query=cardio+cool+down+stretch+routine", tag:"cooldown" },
     ],
     gym: [
-      { name:"5 Min Easy Cardio", sets:1, reps:"5 min", desc:"Very slow walk or bike. Flushes lactic acid from muscles and returns heart rate to normal.", image:"", demo:"https://www.youtube.com/results?search_query=gym+cool+down+cardio", tag:"cooldown" },
-      { name:"Chest Doorway Stretch", sets:2, reps:"45 sec", desc:"Arms on doorframe, lean forward. Releases pec tightness from pressing movements.", image:"", demo:"https://www.youtube.com/results?search_query=doorway+chest+stretch+cool+down", tag:"cooldown" },
-      { name:"Lat Stretch", sets:2, reps:"30 sec each", desc:"Hold bar or door frame overhead with one arm, lean away. Stretches lats post-pull day.", image:"", demo:"https://www.youtube.com/results?search_query=lat+stretch+cool+down", tag:"cooldown" },
-      { name:"Seated Hamstring Stretch", sets:2, reps:"45 sec each", desc:"Leg extended on bench, lean forward. Critical post-leg day recovery stretch.", image:"", demo:"https://www.youtube.com/results?search_query=seated+hamstring+stretch+cool+down", tag:"cooldown" },
-      { name:"Child's Pose with Reach", sets:1, reps:"2 min", desc:"Extended child's pose walking hands side to side. Full back decompression after heavy lifting.", image:"", demo:"https://www.youtube.com/results?search_query=child's+pose+cool+down+gym", tag:"cooldown" },
+      { name:"Post-Workout Cool-Down", sets:1, reps:"5 min", desc:"5 min easy walk → doorway chest stretch 45 sec → lat stretch 30 sec each → seated hamstring stretch 45 sec each → child's pose 2 min. Flush lactic acid and restore muscle length.", image:"", demo:"https://www.youtube.com/results?search_query=gym+cool+down+stretching+routine", tag:"cooldown" },
     ],
     yoga: [
-      { name:"Supine Twist", sets:2, reps:"60 sec each", desc:"Lie on back, knee across body, arms wide. Releases spinal tension and integrates the practice.", image:"", demo:"https://www.youtube.com/results?search_query=supine+twist+yoga+cool+down", tag:"cooldown" },
-      { name:"Legs Up the Wall", sets:1, reps:"3 min", desc:"Passive inversion — legs vertical against wall. Reduces leg fatigue and calms nervous system.", image:"", demo:"https://www.youtube.com/results?search_query=legs+up+wall+yoga+cool+down", tag:"cooldown" },
-      { name:"Happy Baby", sets:1, reps:"90 sec", desc:"On back, hold outer feet, rock gently. Deep hip release and lower back restoration.", image:"", demo:"https://www.youtube.com/results?search_query=happy+baby+pose+yoga+cool+down", tag:"cooldown" },
-      { name:"Seated Forward Fold", sets:2, reps:"60 sec", desc:"Legs extended, fold forward from hips. Full posterior chain stretch and calming close to practice.", image:"", demo:"https://www.youtube.com/results?search_query=seated+forward+fold+yoga+cool+down", tag:"cooldown" },
-      { name:"Savasana", sets:1, reps:"5 min", desc:"Complete stillness, eyes closed. Body absorbs all the work done. Never skip Savasana.", image:"", demo:"https://www.youtube.com/results?search_query=savasana+yoga+cool+down", tag:"cooldown" },
+      { name:"Yoga Cool-Down", sets:1, reps:"5 min", desc:"Supine twist 60 sec each → legs up the wall 3 min → happy baby 90 sec → Savasana 5 min. Never skip Savasana — the body needs time to absorb the practice.", image:"", demo:"https://www.youtube.com/results?search_query=yoga+cool+down+savasana", tag:"cooldown" },
     ],
     running: [
-      { name:"Easy Walk", sets:1, reps:"5 min", desc:"Walk at comfortable pace immediately after run. Most important cool-down step — prevents dizziness.", image:"", demo:"https://www.youtube.com/results?search_query=post+run+walk+cool+down", tag:"cooldown" },
-      { name:"Standing Calf Stretch", sets:2, reps:"45 sec each", desc:"Heel on floor, lean forward. Calves work hardest when running — this is essential.", image:"", demo:"https://www.youtube.com/results?search_query=calf+stretch+post+run", tag:"cooldown" },
-      { name:"Quad Stretch", sets:2, reps:"30 sec each", desc:"Pull foot to glute. Releases quad tightness from the push-off phase of running.", image:"", demo:"https://www.youtube.com/results?search_query=quad+stretch+post+run+cool+down", tag:"cooldown" },
-      { name:"IT Band Stretch", sets:2, reps:"45 sec each", desc:"Cross leg behind, lean sideways. Prevents knee pain — the #1 running injury.", image:"", demo:"https://www.youtube.com/results?search_query=IT+band+stretch+post+run", tag:"cooldown" },
-      { name:"Seated Hamstring & Glute Stretch", sets:2, reps:"60 sec each", desc:"Figure-4 and forward fold. Full lower body recovery stretch sequence.", image:"", demo:"https://www.youtube.com/results?search_query=hamstring+glute+stretch+post+run", tag:"cooldown" },
+      { name:"Post-Run Cool-Down", sets:1, reps:"5 min", desc:"Easy walk 3 min → standing calf stretch 45 sec each → quad stretch 30 sec each → IT band stretch 45 sec each → seated hamstring & glute stretch 60 sec each. Critical for runner recovery.", image:"", demo:"https://www.youtube.com/results?search_query=post+run+cool+down+stretches", tag:"cooldown" },
     ],
   },
 
-  modules: {
+    modules: {
     cardio: {
       name: "Home Cardio",
       emoji: "🏠",
