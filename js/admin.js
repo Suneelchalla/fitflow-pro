@@ -40,7 +40,6 @@ function switchAdminTab(tab, btn) {
   if (tab === 'users')    loadAdminUsers();
   if (tab === 'history')  renderAllHistory();
   if (tab === 'feedback') renderFeedbackList();
-  if (tab === 'quotes')   renderAdminQuotesTab();
   if (tab === 'content')  renderContentHome();
 }
 
@@ -885,24 +884,3 @@ function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '�
 function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running' }[mod] || mod; }
 
 // ── QUOTES TAB (inline in Admin Panel, not editor page) ───────────
-function renderAdminQuotesTab() {
-  const container = document.getElementById('quotes-manager');
-  if (!container) return;
-  const quotes = Store.getContent('custom_quotes') || APP_DATA.quotes || [];
-
-  container.innerHTML = `
-    <div style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.5">
-      These quotes appear on the <strong>user daily motivation screen</strong>.<br>
-      Admin login skips this screen entirely.
-    </div>
-    <button class="btn btn-primary btn-sm" onclick="openAdminQuotes()" style="margin-bottom:16px;width:100%">
-      ✏️ Open Full Quote Editor
-    </button>
-    <div class="section-title">Current Quotes (${quotes.length})</div>
-    ${quotes.slice(0, 8).map((q, i) => `
-      <div class="card card-sm" style="margin-bottom:8px">
-        <div style="font-size:13px;font-style:italic;color:var(--text);margin-bottom:4px">"${q.text || ''}"</div>
-        <div style="font-size:12px;color:var(--text3)">— ${q.author || 'Unknown'}</div>
-      </div>`).join('')}
-    ${quotes.length > 8 ? `<div style="font-size:13px;color:var(--text3);text-align:center;padding:8px">+${quotes.length - 8} more quotes</div>` : ''}`;
-}
