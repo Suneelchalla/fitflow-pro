@@ -89,31 +89,33 @@ async function initPushNotifications() {
   if (!PUSH.isSupported()) return;
   if (PUSH.VAPID_PUBLIC_KEY === 'YOUR_VAPID_PUBLIC_KEY_HERE') return;
   if (Notification.permission === 'granted') {
-    await PUSH.subscribe(); // silently renew
+    await PUSH.subscribe(); // silently renew existing subscription
   } else if (Notification.permission === 'default') {
-    setTimeout(showPushPrompt, 5000); // ask after 5s
+    setTimeout(showPushPrompt, 5000); // ask after 5s on dashboard
   }
 }
 
 function showPushPrompt() {
-  // Only show if user is logged in on the dashboard
   if (!APP.currentUser) return;
   if (APP.currentUser.role === 'ADMIN') return;
   if (APP.currentPage !== 'page-dashboard') return;
   if (Store.get('ff_push_dismissed_today') === new Date().toDateString()) return;
   const banner = document.getElementById('push-banner');
-  if (banner) banner.style.display = 'block';
+  if (banner) {
+    banner.classList.remove('hidden');
+    banner.style.display = 'block'; // also clear the inline display:none
+  }
 }
 
 async function acceptPushNotifications() {
   const b = document.getElementById('push-banner');
-  if (b) b.style.display = 'none';
+  if (b) { b.classList.add('hidden'); b.style.display = 'none'; }
   const sub = await PUSH.subscribe();
   showToast(sub ? '🔔 Daily workout reminders enabled!' : 'Could not enable — check browser settings.', sub ? 'success' : 'error');
 }
 
 function dismissPushNotifications() {
   const b = document.getElementById('push-banner');
-  if (b) b.style.display = 'none';
+  if (b) { b.classList.add('hidden'); b.style.display = 'none'; }
   Store.set('ff_push_dismissed_today', new Date().toDateString());
 }
