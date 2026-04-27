@@ -20,14 +20,17 @@ function renderAdminPanel() {
 }
 
 function renderAdminStats() {
-  const allLogs    = Store.getLogs();
-  const allRunLogs = Store.getRunLogs();
-  const today      = todayStr();
+  const allLogs     = Store.getLogs();
+  const allRunLogs  = Store.getRunLogs();
+  const today       = todayStr();
   const todayActive = [...new Set(allLogs.filter(l => l.date === today).map(l => l.userId))].length;
+  const stdLogs     = allLogs.filter(l => !l.module.startsWith('custom_'));
+  const cwLogs      = allLogs.filter(l => l.module.startsWith('custom_'));
   const el = id => document.getElementById(id);
-  if (el('admin-stat-workouts')) el('admin-stat-workouts').textContent = allLogs.length;
+  if (el('admin-stat-workouts')) el('admin-stat-workouts').textContent = stdLogs.length;
   if (el('admin-stat-runs'))     el('admin-stat-runs').textContent     = allRunLogs.length;
   if (el('admin-stat-today'))    el('admin-stat-today').textContent    = todayActive;
+  if (el('admin-stat-custom'))   el('admin-stat-custom').textContent   = cwLogs.length;
 }
 
 // ── ADMIN TABS ────────────────────────────────────────────────────
@@ -39,6 +42,7 @@ function switchAdminTab(tab, btn) {
   if (tabEl) tabEl.style.display = 'block';
   if (tab === 'users')    loadAdminUsers();
   if (tab === 'history')  renderAllHistory();
+  if (tab === 'custom')   renderAdminCustomWorkouts();
   if (tab === 'feedback') renderFeedbackList();
   if (tab === 'content')  renderContentHome();
 }
@@ -819,22 +823,83 @@ function addQuoteRow() {
 function renderAllHistory() {
   const allLogs = Store.getLogs().sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
   const allRuns = Store.getRunLogs().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
   const combined = [
-    ...allLogs.map(l => ({ ...l, _type: 'workout' })),
+    ...allLogs.map(l => ({ ...l, _type: l.module.startsWith('custom_') ? 'custom' : 'workout' })),
     ...allRuns.map(r => ({ ...r, _type: 'run', module: 'running', day: 'Run', timestamp: r.timestamp || r.date })),
-  ].sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || '')).slice(0, 60);
+  ].sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || '')).slice(0, 80);
 
   document.getElementById('all-history-list').innerHTML = combined.length
-    ? combined.map(l => `
-        <div class="user-row" style="margin-bottom:6px">
-          <div class="user-avatar" style="font-size:18px">${getModuleEmoji(l.module)}</div>
-          <div class="user-info">
-            <div class="user-name">${l.userId || '—'} — ${getModuleName(l.module)}</div>
-            <div class="user-email">${l._type === 'run' ? `${(l.distance || 0).toFixed(2)}km · ${fmtTime(l.duration || 0)}` : l.day} · ${l.date || '—'}</div>
-          </div>
-          <span class="badge ${l._type === 'run' ? 'badge-blue' : 'badge-green'}">${l._type === 'run' ? '🏃 Run' : '✓ Done'}</span>
-        </div>`).join('')
+    ? combined.map(l => {
+        const isRun    = l._type === 'run';
+        const isCustom = l._type === 'custom';
+        const emoji    = isCustom ? '✏️' : getModuleEmoji(l.module);
+        const name     = isCustom
+          ? '✏️ Custom: ' + (l.module.replace('custom_','').substring(0,8) + '...')
+          : getModuleName(l.module);
+        const badge    = isRun ? 'badge-blue' : isCustom ? 'badge-yellow' : 'badge-green';
+        const label    = isRun ? '🏃 Run' : isCustom ? '✏️ Custom' : '✓ Done';
+        const sub      = isRun ? `${(l.distance||0).toFixed(2)}km · ${fmtTime(l.duration||0)}` : l.day;
+        return `
+          <div class="user-row" style="margin-bottom:6px">
+            <div class="user-avatar" style="font-size:18px">${emoji}</div>
+            <div class="user-info">
+              <div class="user-name">${l.userId || '—'} — ${name}</div>
+              <div class="user-email">${sub} · ${l.date || '—'}</div>
+            </div>
+            <span class="badge ${badge}">${label}</span>
+          </div>`;
+      }).join('')
     : '<div class="empty-state"><div class="empty-icon">📋</div><p>No activity yet.</p></div>';
+}
+
+// ── ADMIN: VIEW ALL CUSTOM WORKOUTS ──────────────────────────────
+function renderAdminCustomWorkouts() {
+  const container = document.getElementById('admin-custom-workouts-list');
+  if (!container) return;
+
+  // Gather all custom workouts from all users
+  const users = JSON.parse(localStorage.getItem('ff_local_users') || '[]');
+  const allLogs = Store.getLogs().filter(l => l.module.startsWith('custom_'));
+
+  // Collect all custom workouts from localStorage for each known user
+  let allWorkouts = [];
+  // Get all ff_custom_workouts_ keys
+  for (let i = 0; i < localStorage.length; i++) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith('ff_custom_workouts_')) {
+      const userId = key.replace('ff_custom_workouts_', '');
+      try {
+        const wos = JSON.parse(localStorage.getItem(key) || '[]');
+        wos.forEach(w => allWorkouts.push({ ...w, userId }));
+      } catch {}
+    }
+  }
+
+  if (!allWorkouts.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">✏️</div><p>No custom workouts created yet.</p></div>';
+    return;
+  }
+
+  container.innerHTML = allWorkouts.map(w => {
+    const completions = allLogs.filter(l => l.userId === w.userId && l.module === 'custom_' + w.id).length;
+    return `
+      <div class="card card-sm" style="margin-bottom:10px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+          <div>
+            <div style="font-weight:700;font-size:15px">${w.name}</div>
+            <div style="font-size:12px;color:var(--text3)">By: ${w.userId} · Created: ${w.createdDate||'—'}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-family:var(--font-display);font-size:24px;color:var(--g5)">${completions}</div>
+            <div style="font-size:11px;color:var(--text3)">sessions</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${(w.exercises||[]).map(e => `<span style="font-size:12px;background:var(--bg3);color:var(--text2);padding:2px 10px;border-radius:50px">${e.name}</span>`).join('')}
+        </div>
+      </div>`;
+  }).join('');
 }
 
 // ════════════════════════════════════════════════════════════════
