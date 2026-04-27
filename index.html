@@ -155,6 +155,22 @@
       <div id="module-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:8px"></div>
       <div class="reorder-hint">⠿ Hold &amp; drag to reorder activities</div>
 
+      <!-- Custom Workouts & Weekly Report row -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px;margin-bottom:20px">
+        <div class="card" style="cursor:pointer;background:linear-gradient(135deg,#1a2838,#0d2137);padding:18px 14px" onclick="openCustomWorkouts()">
+          <div style="font-size:28px;margin-bottom:8px">✏️</div>
+          <div style="font-weight:700;font-size:14px">My Workouts</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.55);margin-top:3px">Create custom routines</div>
+          <div id="cw-count-badge" style="margin-top:10px"></div>
+        </div>
+        <div class="card" style="cursor:pointer;background:linear-gradient(135deg,#2d1a1a,#3d1f0a);padding:18px 14px" onclick="openWeeklyReport()">
+          <div style="font-size:28px;margin-bottom:8px">📊</div>
+          <div style="font-weight:700;font-size:14px">Weekly Report</div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.55);margin-top:3px">Your week at a glance</div>
+          <div id="wr-streak-badge" style="margin-top:10px"></div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -362,22 +378,28 @@
       </div>
 
       <!-- Stats row -->
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px">
         <div style="background:rgba(255,255,255,0.06);border-radius:12px;padding:12px 8px;text-align:center">
           <div style="font-family:var(--font-display);font-size:28px;color:var(--g5)" id="admin-stat-users">—</div>
           <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Users</div>
         </div>
         <div style="background:rgba(255,255,255,0.06);border-radius:12px;padding:12px 8px;text-align:center">
           <div style="font-family:var(--font-display);font-size:28px;color:var(--g5)" id="admin-stat-today">0</div>
-          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Today</div>
+          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Today Active</div>
         </div>
         <div style="background:rgba(255,255,255,0.06);border-radius:12px;padding:12px 8px;text-align:center">
           <div style="font-family:var(--font-display);font-size:28px;color:var(--g5)" id="admin-stat-workouts">0</div>
           <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Workouts</div>
         </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <div style="background:rgba(255,255,255,0.06);border-radius:12px;padding:12px 8px;text-align:center">
           <div style="font-family:var(--font-display);font-size:28px;color:var(--g5)" id="admin-stat-runs">0</div>
           <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Runs</div>
+        </div>
+        <div style="background:rgba(255,255,255,0.06);border-radius:12px;padding:12px 8px;text-align:center">
+          <div style="font-family:var(--font-display);font-size:28px;color:var(--g5)" id="admin-stat-custom">0</div>
+          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Custom WOs</div>
         </div>
       </div>
     </div>
@@ -385,11 +407,12 @@
     <div class="container" style="padding-top:16px">
 
       <!-- Admin tabs -->
-      <div class="tab-strip" style="margin-bottom:16px">
+      <div class="tab-strip" style="margin-bottom:16px;overflow-x:auto">
         <button class="tab-btn admin-tab-btn active" onclick="switchAdminTab('users',this)">👥 Users</button>
         <button class="tab-btn admin-tab-btn" onclick="switchAdminTab('history',this)">📋 History</button>
+        <button class="tab-btn admin-tab-btn" onclick="switchAdminTab('custom',this)">✏️ Custom WOs</button>
         <button class="tab-btn admin-tab-btn" onclick="switchAdminTab('feedback',this)">💬 Feedback</button>
-        <button class="tab-btn admin-tab-btn" onclick="switchAdminTab('content',this)">✏️ Content</button>
+        <button class="tab-btn admin-tab-btn" onclick="switchAdminTab('content',this)">🗂 Content</button>
       </div>
 
       <!-- USERS tab -->
@@ -400,7 +423,16 @@
 
       <!-- HISTORY tab -->
       <div id="admin-tab-history" class="admin-tab-content" style="display:none">
+        <div style="font-size:13px;color:var(--text2);margin-bottom:12px">All activity across all users — workouts, runs and custom sessions.</div>
         <div id="all-history-list"></div>
+      </div>
+
+      <!-- CUSTOM WORKOUTS tab -->
+      <div id="admin-tab-custom" class="admin-tab-content" style="display:none">
+        <div style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.5">
+          All custom workout routines created by users. Shows exercise list and completion count per routine.
+        </div>
+        <div id="admin-custom-workouts-list"></div>
       </div>
 
 
@@ -607,7 +639,11 @@
 <!-- SCRIPTS                                                          -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <script src="js/push.js"></script>
+<script src="js/custom-workouts.js"></script>
+<script src="js/weekly-report.js"></script>
 <script src="js/push.js"></script>
+<script src="js/custom-workouts.js"></script>
+<script src="js/weekly-report.js"></script>
 <script src="js/data.js"></script>
 <script src="js/app.js"></script>
 <script src="js/auth.js"></script>
@@ -797,6 +833,126 @@ document.addEventListener('DOMContentLoaded', () => {
     <!-- Editor body -->
     <div id="editor-body" class="admin-edit-mode" style="padding-top:12px"></div>
 
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PAGE: CUSTOM WORKOUTS LIST                                       -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="page-custom-workouts" class="page">
+  <div class="scroll-content pb-nav">
+    <div class="top-bar">
+      <button class="back-btn" onclick="goBack()">‹</button>
+      <div class="top-bar-title">✏️ My Workouts</div>
+      <button class="btn btn-primary btn-sm" onclick="openCreateWorkout()" style="padding:8px 14px">+ New</button>
+    </div>
+    <div class="container" style="padding-top:16px">
+      <div id="cw-list"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PAGE: CUSTOM WORKOUT EDITOR                                      -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="page-cw-editor" class="page">
+  <div class="scroll-content" style="padding-bottom:100px">
+    <div class="top-bar">
+      <button class="back-btn" onclick="goBack()">‹</button>
+      <div class="top-bar-title" id="cw-editor-title">Create Workout</div>
+      <div style="width:38px"></div>
+    </div>
+    <div class="container" style="padding-top:16px">
+      <div class="form-group" style="margin-bottom:16px">
+        <label class="form-label">Workout Name</label>
+        <input id="cw-workout-name" type="text" class="form-input" placeholder="e.g. My Monday Blast, Upper Body, Leg Day...">
+        <div id="cw-name-error" style="color:#ef9a9a;font-size:13px;min-height:16px;margin-top:4px"></div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div class="section-title" style="margin:0">Exercises</div>
+        <button class="btn btn-outline btn-sm" onclick="addExerciseToCW()">+ Add Exercise</button>
+      </div>
+
+      <div id="cw-exercises-list" style="margin-bottom:16px"></div>
+
+      <button class="btn btn-accent btn-full btn-lg" onclick="saveWorkout()">💾 Save Workout</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PAGE: DO CUSTOM WORKOUT                                          -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="page-cw-workout" class="page">
+  <div class="scroll-content pb-nav">
+    <div class="top-bar">
+      <button class="back-btn" onclick="goBack()">‹</button>
+      <div>
+        <div class="top-bar-title" id="cw-workout-title"></div>
+        <div id="cw-workout-subtitle" style="font-size:12px;color:var(--text3)"></div>
+      </div>
+      <div style="width:38px"></div>
+    </div>
+    <div class="container" style="padding-top:16px">
+      <div id="cw-workout-exercises" style="margin-bottom:16px"></div>
+      <button id="cw-complete-btn" class="btn btn-primary btn-full" style="margin-bottom:20px">Mark Complete</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PAGE: WEEKLY REPORT                                              -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="page-weekly-report" class="page">
+  <div class="scroll-content" style="padding-bottom:32px">
+    <div class="top-bar">
+      <button class="back-btn" onclick="goBack()">‹</button>
+      <div class="top-bar-title">📊 Weekly Report</div>
+      <div style="width:38px"></div>
+    </div>
+    <div class="container" style="padding-top:16px">
+      <div id="weekly-report-content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: Add/Edit Exercise in Custom Workout -->
+<div id="modal-cw-exercise" class="modal-overlay">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title" id="cw-ex-modal-title">Add Exercise</div>
+    <input type="hidden" id="cw-ex-idx">
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="form-group">
+        <label class="form-label">Exercise Name *</label>
+        <input id="cw-ex-name" type="text" class="form-input" placeholder="e.g. Push-Ups, Barbell Squat...">
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+        <div class="form-group">
+          <label class="form-label">Sets</label>
+          <input id="cw-ex-sets" type="number" class="form-input" min="1" max="20" value="3">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Reps / Duration</label>
+          <input id="cw-ex-reps" type="text" class="form-input" placeholder="10 reps / 30 sec">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Rest Between Sets (seconds, optional)</label>
+        <input id="cw-ex-rest" type="number" class="form-input" placeholder="e.g. 60" min="0">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Notes (optional)</label>
+        <textarea id="cw-ex-desc" class="form-input" rows="2" placeholder="Form tips, variations..."></textarea>
+      </div>
+      <div id="cw-ex-error" style="color:#ef9a9a;font-size:13px;min-height:16px"></div>
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-outline btn-full" onclick="closeModal('modal-cw-exercise')">Cancel</button>
+        <button class="btn btn-primary btn-full" onclick="saveExerciseModal()">Save Exercise</button>
+      </div>
+    </div>
   </div>
 </div>
 
