@@ -13,6 +13,7 @@ window.APP = {
   selectedPlan:     null,
   selectedPlanWeek: 1,
   editingContent:   null,
+  _planRunCtx:      null,   // tracks which plan day launched the current run
 };
 
 // ── STORAGE ───────────────────────────────────────────────────────
