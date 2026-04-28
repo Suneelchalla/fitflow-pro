@@ -115,6 +115,10 @@ function renderUsersList(users) {
                 style="${isActive ? 'color:#ef9a9a' : 'color:var(--g5)'}"
                 onclick="toggleStatus('${safeId}','${isActive ? 'INACTIVE' : 'ACTIVE'}','${safeId}')">
                 ${isActive ? '🚫 Disable' : '✅ Enable'}
+              </button>
+              <button class="btn btn-ghost btn-sm" style="color:var(--accent)"
+                onclick="openAdminResetPassword('${safeId}','${(u.name||'').replace(/'/g,"\\'")}')">
+                🔑 Reset Pass
               </button>`
             : '<span style="font-size:11px;color:var(--text3)">Admin</span>'}
         </div>
@@ -146,6 +150,43 @@ async function toggleStatus(userId, newStatus, safeId) {
   }
 }
 
+// ── ADMIN RESET USER PASSWORD ─────────────────────────────────────
+function openAdminResetPassword(userId, userName) {
+  document.getElementById('arp-user-name').textContent  = userName || 'User';
+  document.getElementById('arp-error').textContent      = '';
+  document.getElementById('arp-new-pass').value         = '';
+  document.getElementById('arp-confirm-pass').value     = '';
+  document.getElementById('arp-submit-btn').dataset.userId = userId;
+  openModal('modal-admin-reset-password');
+}
+
+async function submitAdminResetPassword() {
+  const newPass     = document.getElementById('arp-new-pass').value.trim();
+  const confirmPass = document.getElementById('arp-confirm-pass').value.trim();
+  const errEl       = document.getElementById('arp-error');
+  const btn         = document.getElementById('arp-submit-btn');
+  const userId      = btn.dataset.userId;
+
+  errEl.textContent = '';
+  if (!newPass)               { errEl.textContent = 'Please enter a new password.'; return; }
+  if (newPass.length < 6)     { errEl.textContent = 'Password must be at least 6 characters.'; return; }
+  if (newPass !== confirmPass) { errEl.textContent = 'Passwords do not match.'; return; }
+
+  btn.disabled = true; btn.textContent = 'Saving…';
+
+  const res = await Sheets.post('changePassword', { userId, newPassword: newPass });
+
+  btn.disabled = false; btn.textContent = 'Reset Password';
+
+  if (!res?.success) {
+    errEl.textContent = res?.error || 'Failed to reset password. Try again.';
+    return;
+  }
+
+  closeModal('modal-admin-reset-password');
+  showToast('Password reset successfully! 🔑', 'success');
+}
+
 function openAddUser() {
   ['new-user-name','new-user-email','new-user-pass'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('new-user-role').value           = 'USER';
@@ -163,8 +204,6 @@ async function saveNewUser() {
 
   errEl.textContent = '';
   if (!name || !email || !tmpPass) { errEl.textContent = 'All fields are required.'; return; }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errEl.textContent = 'Please enter a valid email address.'; return; }
-  if (name.trim().length < 2)      { errEl.textContent = 'Name must be at least 2 characters.'; return; }
   if (tmpPass.length < 4)          { errEl.textContent = 'Temp password must be at least 4 characters.'; return; }
   if (!Store.getSheetsConfig().webAppUrl) { errEl.textContent = 'Configure Google Sheets first (Content → Configure Sheets).'; return; }
 
