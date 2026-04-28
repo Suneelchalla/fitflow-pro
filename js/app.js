@@ -348,7 +348,18 @@ document.addEventListener('DOMContentLoaded', () => {
     mo.addEventListener('click', e => { if (e.target === mo) mo.classList.remove('open'); });
   });
 
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator) {
+    // Unregister ALL old service workers and clear ALL caches
+    // This forces every device to get fresh files immediately
+    navigator.serviceWorker.getRegistrations().then(registrations => {
+      registrations.forEach(reg => reg.unregister());
+    });
+    caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
+    // Re-register the fresh service worker
+    setTimeout(() => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }, 1000);
+  }
 
   const session = Store.getSession();
   if (session) {
