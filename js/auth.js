@@ -48,7 +48,9 @@ async function attemptLogin(email, password) {
 
   if (cfg.webAppUrl) {
     try {
-      const res = await Sheets.get('login', { email, password });
+      // Use POST so special characters in passwords (@ # $ etc.) aren't
+      // mangled by URL encoding that happens with Sheets.get / URLSearchParams
+      const res = await Sheets.post('login', { email, password });
       if (res && res.success !== undefined) return res;
     } catch (e) {
       console.warn('Sheets login error:', e);
