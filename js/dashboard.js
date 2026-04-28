@@ -967,3 +967,40 @@ function toggleNotificationSetting() {
     showToast('Push notifications not supported on this device', 'error');
   }
 }
+
+// ── CUSTOM WORKOUTS & WEEKLY REPORT RELAY ────────────────────────
+// These ensure the pages work even if their scripts load after the click
+function openCustomWorkouts() {
+  showPage('page-custom-workouts');
+  // Try immediately, then retry after scripts load
+  if (typeof renderCustomWorkoutsList === 'function') {
+    renderCustomWorkoutsList();
+  } else {
+    setTimeout(() => {
+      if (typeof renderCustomWorkoutsList === 'function') renderCustomWorkoutsList();
+    }, 300);
+  }
+}
+
+function openCreateWorkout() {
+  if (typeof _cwEdit !== 'undefined') {
+    // custom-workouts.js is loaded - use its function
+    window._cwEdit = { id: null, name: '', exercises: [] };
+    if (typeof _renderWorkoutEditor === 'function') _renderWorkoutEditor();
+    showPage('page-cw-editor');
+  } else {
+    // Fallback - just show the editor page
+    showPage('page-cw-editor');
+  }
+}
+
+function openWeeklyReport() {
+  showPage('page-weekly-report');
+  if (typeof renderWeeklyReport === 'function') {
+    renderWeeklyReport();
+  } else {
+    setTimeout(() => {
+      if (typeof renderWeeklyReport === 'function') renderWeeklyReport();
+    }, 300);
+  }
+}
