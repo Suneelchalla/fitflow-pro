@@ -40,11 +40,13 @@ function switchAdminTab(tab, btn) {
   document.querySelectorAll('.admin-tab-content').forEach(el => el.style.display = 'none');
   const tabEl = document.getElementById('admin-tab-' + tab);
   if (tabEl) tabEl.style.display = 'block';
-  if (tab === 'users')    loadAdminUsers();
-  if (tab === 'history')  renderAllHistory();
-  if (tab === 'custom')   renderAdminCustomWorkouts();
-  if (tab === 'feedback') renderFeedbackList();
-  if (tab === 'content')  renderContentHome();
+  if (tab === 'users')     loadAdminUsers();
+  if (tab === 'analytics') renderAdminAnalytics();
+  if (tab === 'history')   renderAllHistory();
+  if (tab === 'custom')    renderAdminCustomWorkouts();
+  if (tab === 'feedback')  renderFeedbackList();
+  if (tab === 'announce')  renderAdminAnnounce();
+  if (tab === 'content')   renderContentHome();
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -119,6 +121,10 @@ function renderUsersList(users) {
               <button class="btn btn-ghost btn-sm" style="color:var(--accent)"
                 onclick="openAdminResetPassword('${safeId}','${(u.name||'').replace(/'/g,"\\'")}')">
                 🔑 Reset Pass
+              </button>
+              <button class="btn btn-ghost btn-sm" style="color:#64b5f6"
+                onclick="openUserProgress('${safeId}','${(u.name||'').replace(/'/g,"\\'")}')">
+                📊 Progress
               </button>`
             : '<span style="font-size:11px;color:var(--text3)">Admin</span>'}
         </div>
@@ -1001,3 +1007,269 @@ function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '�
 function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running' }[mod] || mod; }
 
 // ── QUOTES TAB (inline in Admin Panel, not editor page) ───────────
+
+// ════════════════════════════════════════════════════════════════
+// ADMIN ANALYTICS DASHBOARD
+// ════════════════════════════════════════════════════════════════
+function renderAdminAnalytics() {
+  const container = document.getElementById('admin-analytics-content');
+  if (!container) return;
+
+  const allLogs    = Store.getLogs();
+  const allRuns    = Store.getRunLogs();
+  const allUsers   = JSON.parse(localStorage.getItem('ff_local_users') || '[]');
+  const today      = todayStr();
+  const monday     = getMonday();
+
+  // Week boundaries
+  const prevMon = (() => { const d = new Date(monday); d.setDate(d.getDate()-7); return d.toISOString().split('T')[0]; })();
+  const prevSun = (() => { const d = new Date(monday); d.setDate(d.getDate()-1); return d.toISOString().split('T')[0]; })();
+
+  const thisWeekLogs = allLogs.filter(l => l.date >= monday);
+  const lastWeekLogs = allLogs.filter(l => l.date >= prevMon && l.date <= prevSun);
+  const thisWeekRuns = allRuns.filter(r => r.date >= monday);
+  const todayLogs    = allLogs.filter(l => l.date === today);
+
+  // Module popularity
+  const modCounts = {};
+  allLogs.forEach(l => { const m = l.module.startsWith('custom_') ? 'custom' : l.module; modCounts[m] = (modCounts[m]||0)+1; });
+  const topMods = Object.entries(modCounts).sort((a,b)=>b[1]-a[1]);
+  const maxMod  = topMods[0]?.[1] || 1;
+
+  // Active users last 7 days
+  const last7 = new Date(); last7.setDate(last7.getDate()-7);
+  const last7Str = last7.toISOString().split('T')[0];
+  const activeUserIds = [...new Set(allLogs.filter(l=>l.date>=last7Str).map(l=>l.userId))];
+
+  // Per-day activity last 14 days
+  const dayActivity = {};
+  for (let i=13;i>=0;i--) { const d=new Date(); d.setDate(d.getDate()-i); dayActivity[d.toISOString().split('T')[0]]=0; }
+  allLogs.forEach(l => { if (dayActivity[l.date]!==undefined) dayActivity[l.date]++; });
+  const dayKeys = Object.keys(dayActivity);
+  const dayVals = Object.values(dayActivity);
+  const maxDay  = Math.max(...dayVals, 1);
+
+  // Dropout risk: users with no activity in 7+ days
+  const userLastActivity = {};
+  allLogs.forEach(l => { if (!userLastActivity[l.userId] || l.date > userLastActivity[l.userId]) userLastActivity[l.userId]=l.date; });
+  const dropout = Object.entries(userLastActivity).filter(([,d])=>d<last7Str).map(([uid])=>uid);
+
+  container.innerHTML = `
+    <!-- KPI row -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+      ${_aKpi('📅','This Week', thisWeekLogs.length + ' sessions', lastWeekLogs.length ? (thisWeekLogs.length>=lastWeekLogs.length?'↑':'↓')+' vs last week':'')}
+      ${_aKpi('🏃','Runs This Week', thisWeekRuns.length + ' runs', thisWeekRuns.reduce((a,r)=>a+(r.distance||0),0).toFixed(1)+' km total')}
+      ${_aKpi('👥','Active (7 days)', activeUserIds.length + ' users', 'out of tracked users')}
+      ${_aKpi('📍','Today Sessions', todayLogs.length + ' done', [...new Set(todayLogs.map(l=>l.userId))].length+' users active')}
+    </div>
+
+    <!-- Activity bar chart (last 14 days) -->
+    <div class="card card-sm" style="margin-bottom:14px">
+      <div class="section-title" style="margin-bottom:12px">📈 Activity — Last 14 Days</div>
+      <div style="display:flex;align-items:flex-end;gap:3px;height:60px">
+        ${dayKeys.map((d,i) => {
+          const h = Math.max(4, Math.round(dayVals[i]/maxDay*56));
+          const isToday = d===today;
+          return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px" title="${d}: ${dayVals[i]} sessions">
+            <div style="width:100%;background:${isToday?'var(--accent)':'var(--g3)'};height:${h}px;border-radius:3px 3px 0 0;opacity:${isToday?1:0.75}"></div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-top:4px">
+        <span>${dayKeys[0]?.slice(5)}</span><span>Today</span>
+      </div>
+    </div>
+
+    <!-- Module popularity -->
+    <div class="card card-sm" style="margin-bottom:14px">
+      <div class="section-title" style="margin-bottom:12px">🏆 Module Popularity</div>
+      ${topMods.slice(0,6).map(([mod,cnt]) => `
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+          <span style="font-size:18px;width:24px">${getModuleEmoji(mod)}</span>
+          <div style="flex:1">
+            <div style="display:flex;justify-content:space-between;margin-bottom:3px">
+              <span style="font-size:13px;font-weight:600">${getModuleName(mod)}</span>
+              <span style="font-size:12px;color:var(--text3)">${cnt}</span>
+            </div>
+            <div class="progress-bar"><div class="progress-fill" style="width:${Math.round(cnt/maxMod*100)}%"></div></div>
+          </div>
+        </div>`).join('')}
+    </div>
+
+    <!-- Dropout risk -->
+    ${dropout.length ? `
+    <div class="card card-sm" style="margin-bottom:14px;border-color:rgba(239,154,154,0.3);background:rgba(229,57,53,0.05)">
+      <div class="section-title" style="margin-bottom:8px;color:#ef9a9a">⚠️ Inactive 7+ Days (${dropout.length})</div>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:10px">Consider sending them a motivation push.</div>
+      ${dropout.slice(0,5).map(uid => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+          <span style="font-size:13px">${uid}</span>
+          <span style="font-size:12px;color:#ef9a9a">Last: ${userLastActivity[uid]}</span>
+        </div>`).join('')}
+      ${dropout.length>5?`<div style="font-size:12px;color:var(--text3);margin-top:6px">+${dropout.length-5} more</div>`:''}
+    </div>` : `
+    <div class="card card-sm" style="border-color:rgba(67,160,90,0.3);background:rgba(67,160,90,0.05)">
+      <div style="font-size:13px;color:var(--g5)">✅ All users have been active in the last 7 days!</div>
+    </div>`}
+  `;
+}
+
+function _aKpi(emoji, label, val, sub) {
+  return `<div class="card card-sm" style="text-align:center">
+    <div style="font-size:24px">${emoji}</div>
+    <div style="font-family:var(--font-display);font-size:26px;color:var(--g5);line-height:1.1;margin:4px 0">${val}</div>
+    <div style="font-size:12px;font-weight:700;color:var(--text2)">${label}</div>
+    ${sub?`<div style="font-size:11px;color:var(--text3);margin-top:2px">${sub}</div>`:''}
+  </div>`;
+}
+
+// ════════════════════════════════════════════════════════════════
+// PER-USER PROGRESS (Admin)
+// ════════════════════════════════════════════════════════════════
+function openUserProgress(userId, userName) {
+  const container = document.getElementById('user-progress-content');
+  const logs      = Store.getLogs().filter(l => l.userId === userId);
+  const runLogs   = Store.getRunLogs().filter(r => r.userId === userId);
+  const cwLogs    = logs.filter(l => l.module.startsWith('custom_'));
+  const stdLogs   = logs.filter(l => !l.module.startsWith('custom_'));
+
+  const totalKm   = runLogs.reduce((a,r)=>a+(r.distance||0),0);
+  const streak    = _calcStreakForUser(userId);
+  const monday    = getMonday();
+  const weekLogs  = stdLogs.filter(l=>l.date>=monday);
+
+  // Module breakdown
+  const modCounts = {};
+  stdLogs.forEach(l => { modCounts[l.module]=(modCounts[l.module]||0)+1; });
+
+  // Last 30 days activity heatmap
+  const last30 = {};
+  for (let i=29;i>=0;i--) { const d=new Date(); d.setDate(d.getDate()-i); last30[d.toISOString().split('T')[0]]=0; }
+  logs.forEach(l => { if (last30[l.date]!==undefined) last30[l.date]++; });
+
+  // Best run
+  const bestRun = runLogs.sort((a,b)=>(b.distance||0)-(a.distance||0))[0];
+
+  container.innerHTML = `
+    <div style="text-align:center;padding:20px 16px 12px">
+      <div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,var(--g2),var(--g3));display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;margin:0 auto 10px">
+        ${(userName||'?').charAt(0).toUpperCase()}
+      </div>
+      <div style="font-weight:700;font-size:18px">${userName}</div>
+      <div style="font-size:12px;color:var(--text3)">${userId}</div>
+    </div>
+
+    <!-- Stats -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 16px 14px">
+      <div class="stat-card"><div class="stat-val">${logs.length}</div><div class="stat-label">Workouts</div></div>
+      <div class="stat-card"><div class="stat-val">${streak}🔥</div><div class="stat-label">Streak</div></div>
+      <div class="stat-card"><div class="stat-val">${totalKm.toFixed(1)}</div><div class="stat-label">km Run</div></div>
+    </div>
+
+    <!-- This week -->
+    <div style="padding:0 16px 14px">
+      <div class="card card-sm" style="background:rgba(67,160,90,0.08);border-color:rgba(67,160,90,0.2)">
+        <div style="font-size:13px;font-weight:700;color:var(--g5);margin-bottom:6px">This Week</div>
+        <div style="font-size:13px;color:var(--text2)">${weekLogs.length} session${weekLogs.length!==1?'s':''} · ${runLogs.filter(r=>r.date>=monday).length} run${runLogs.filter(r=>r.date>=monday).length!==1?'s':''}</div>
+      </div>
+    </div>
+
+    <!-- 30-day heatmap -->
+    <div style="padding:0 16px 14px">
+      <div class="section-title" style="margin-bottom:8px">Last 30 Days</div>
+      <div style="display:flex;gap:3px;flex-wrap:wrap">
+        ${Object.entries(last30).map(([d,cnt])=>`
+          <div title="${d}: ${cnt} sessions" style="width:calc((100% - 87px)/30);min-width:8px;aspect-ratio:1;border-radius:2px;
+            background:${cnt>2?'var(--g4)':cnt>0?'var(--g3)':'var(--bg3)'}"></div>`).join('')}
+      </div>
+      <div style="display:flex;gap:12px;margin-top:6px;font-size:10px;color:var(--text3)">
+        <span>⬜ None</span><span style="color:var(--g3)">▪ Active</span><span style="color:var(--g4)">▪ Very active</span>
+      </div>
+    </div>
+
+    <!-- Module breakdown -->
+    ${Object.keys(modCounts).length ? `
+    <div style="padding:0 16px 14px">
+      <div class="section-title" style="margin-bottom:8px">Favourite Modules</div>
+      ${Object.entries(modCounts).sort((a,b)=>b[1]-a[1]).map(([mod,cnt])=>`
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-size:16px">${getModuleEmoji(mod)}</span>
+          <span style="flex:1;font-size:13px">${getModuleName(mod)}</span>
+          <span class="badge badge-green">${cnt}</span>
+        </div>`).join('')}
+    </div>` : ''}
+
+    <!-- Best run -->
+    ${bestRun ? `
+    <div style="padding:0 16px 14px">
+      <div class="card card-sm" style="background:rgba(30,136,229,0.08);border-color:rgba(30,136,229,0.2)">
+        <div style="font-size:13px;font-weight:700;color:#64b5f6;margin-bottom:6px">🏅 Best Run</div>
+        <div style="font-size:13px;color:var(--text2)">${(bestRun.distance||0).toFixed(2)} km · ${fmtTime(bestRun.duration||0)} · ${bestRun.date}</div>
+      </div>
+    </div>` : ''}
+  `;
+  openModal('modal-user-progress');
+}
+
+function _calcStreakForUser(userId) {
+  const dates = [...new Set(Store.getLogs().filter(l=>l.userId===userId).map(l=>l.date))].sort().reverse();
+  if (!dates.length) return 0;
+  let streak=0, cur=new Date();
+  for (let i=0;i<60;i++) {
+    const d=cur.toISOString().split('T')[0];
+    if (dates.includes(d)) { streak++; cur.setDate(cur.getDate()-1); }
+    else if (i>0) break;
+    else { cur.setDate(cur.getDate()-1); if (!dates.includes(cur.toISOString().split('T')[0])) break; }
+  }
+  return streak;
+}
+
+// ════════════════════════════════════════════════════════════════
+// ADMIN ANNOUNCEMENT BANNER
+// ════════════════════════════════════════════════════════════════
+function renderAdminAnnounce() {
+  const container = document.getElementById('admin-announce-content');
+  if (!container) return;
+  const current = Store.getContent('announcement') || { text:'', type:'info', active:false };
+  container.innerHTML = `
+    <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6">
+      Post a banner that appears at the top of every user's dashboard. Use it for schedule changes, announcements, or motivation messages.
+    </div>
+    <div class="form-group" style="margin-bottom:12px">
+      <label class="form-label">Banner Message</label>
+      <textarea id="announce-text" class="form-input" rows="3" placeholder="e.g. Gym closed this Saturday. Resume Sunday!">${current.text||''}</textarea>
+    </div>
+    <div class="form-group" style="margin-bottom:16px">
+      <label class="form-label">Type</label>
+      <select id="announce-type" class="form-input">
+        <option value="info"    ${(current.type||'info')==='info'   ?'selected':''}>ℹ️ Info (Blue)</option>
+        <option value="success" ${current.type==='success'?'selected':''}>✅ Success (Green)</option>
+        <option value="warning" ${current.type==='warning'?'selected':''}>⚠️ Warning (Yellow)</option>
+        <option value="danger"  ${current.type==='danger' ?'selected':''}>🚨 Urgent (Red)</option>
+      </select>
+    </div>
+    ${current.text && current.active ? `
+    <div class="card card-sm" style="margin-bottom:14px;background:rgba(67,160,90,0.08);border-color:rgba(67,160,90,0.2)">
+      <div style="font-size:13px;color:var(--g5)">✅ Banner currently active on all dashboards</div>
+    </div>` : ''}
+    <div style="display:flex;gap:10px">
+      <button class="btn btn-primary btn-full" onclick="saveAnnouncement(true)">📣 Publish Banner</button>
+      ${current.active ? `<button class="btn btn-ghost btn-full" onclick="saveAnnouncement(false)">🔇 Unpublish</button>` : ''}
+    </div>
+    <div id="announce-status" style="margin-top:10px;font-size:13px;min-height:16px"></div>
+  `;
+}
+
+async function saveAnnouncement(active) {
+  const text   = document.getElementById('announce-text').value.trim();
+  const type   = document.getElementById('announce-type').value;
+  const status = document.getElementById('announce-status');
+  if (active && !text) { status.style.color='#ef9a9a'; status.textContent='Please enter a message.'; return; }
+  const data = { text, type, active, updatedAt: todayStr() };
+  Store.setContent('announcement', data);
+  await Sheets.post('saveContent', { key:'announcement', value:data });
+  status.style.color = 'var(--g5)';
+  status.textContent = active ? '✅ Banner published!' : '🔇 Banner unpublished.';
+  showToast(active ? 'Announcement published! 📣' : 'Announcement removed.', 'success');
+  renderAdminAnnounce();
+}
