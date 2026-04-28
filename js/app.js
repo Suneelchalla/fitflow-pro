@@ -110,7 +110,7 @@ function showToast(msg, type = 'success') {
 }
 
 // ── PAGE ROUTING ─────────────────────────────────────────────────
-const ROOT_PAGES = ['page-login', 'page-dashboard', 'page-admin', 'page-quote'];
+const ROOT_PAGES = ['page-login', 'page-dashboard', 'page-admin', 'page-quote', 'page-onboarding'];
 
 function showPage(id, addToHistory = true) {
   const prev = APP.currentPage;
