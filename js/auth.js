@@ -48,13 +48,16 @@ async function attemptLogin(email, password) {
 
   if (cfg.webAppUrl) {
     try {
-      // Base64-encode password so special chars (@#$% etc) survive URL encoding
-      // Strip = padding to avoid %3D corruption in URL
-      const encodedPass = btoa(unescape(encodeURIComponent(password))).replace(/=/g, '');
-      const res = await Sheets.get('login', { email, password: encodedPass, encoded: '1' });
+      // Send via POST so password travels as JSON body - no URL encoding issues
+      const r = await fetch(cfg.webAppUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'login', email, password }),
+      });
+      const res = await r.json();
       if (res && res.success !== undefined) return res;
     } catch (e) {
-      console.warn('Sheets login error:', e);
+      console.warn('Login error:', e);
     }
   }
 
