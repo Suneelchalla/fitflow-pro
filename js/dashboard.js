@@ -7,6 +7,7 @@ function initDashboard() {
   renderDashboardTiles();
   renderDashboardStats();
   refreshDashboardBadges();
+  renderAnnouncementBanner();
 }
 
 function refreshDashboardBadges() {
@@ -271,6 +272,30 @@ function refreshDashboard() {
   renderDashboardStats();
   renderDashboardTiles();
   refreshDashboardBadges();
+  renderAnnouncementBanner();
+}
+
+function renderAnnouncementBanner() {
+  const el   = document.getElementById('dash-announcement');
+  if (!el) return;
+  const data = Store.getContent('announcement');
+  if (!data?.active || !data?.text) { el.style.display='none'; return; }
+  const colors = {
+    info:    { bg:'rgba(30,136,229,0.12)', border:'rgba(30,136,229,0.3)', color:'#90caf9', icon:'ℹ️' },
+    success: { bg:'rgba(67,160,90,0.12)',  border:'rgba(67,160,90,0.3)',  color:'var(--g5)', icon:'✅' },
+    warning: { bg:'rgba(240,192,64,0.12)', border:'rgba(240,192,64,0.3)', color:'var(--accent)', icon:'⚠️' },
+    danger:  { bg:'rgba(229,57,53,0.12)',  border:'rgba(229,57,53,0.3)',  color:'#ef9a9a', icon:'🚨' },
+  };
+  const c = colors[data.type] || colors.info;
+  el.style.display = '';
+  el.innerHTML = `
+    <div style="display:flex;align-items:flex-start;gap:10px;padding:13px 16px;border-radius:14px;
+      background:${c.bg};border:1px solid ${c.border}">
+      <span style="font-size:18px;flex-shrink:0">${c.icon}</span>
+      <div style="flex:1;font-size:13px;color:${c.color};line-height:1.5;font-weight:500">${data.text}</div>
+      <button onclick="this.closest('[style]').style.display='none'" 
+        style="background:none;border:none;color:${c.color};font-size:16px;cursor:pointer;flex-shrink:0;opacity:0.6">✕</button>
+    </div>`;
 }
 
 // ── OPEN MODULE ───────────────────────────────────────────────────
@@ -791,3 +816,103 @@ function renderGlobalHistory() {
 
 function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🤸', running: '🏃' }[mod] || '💪'; }
 function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running' }[mod] || mod; }
+
+// ════════════════════════════════════════════════════════════════
+// USER PROFILE PAGE
+// ════════════════════════════════════════════════════════════════
+function openProfilePage() {
+  document.getElementById('profile-menu').style.display = 'none';
+  renderProfilePage();
+  showPage('page-profile');
+}
+
+function renderProfilePage() {
+  const user    = APP.currentUser;
+  const logs    = Store.getUserLogs(user.id);
+  const runLogs = Store.getUserRunLogs(user.id);
+  const streak  = calcStreak(user.id);
+  const monday  = getMonday();
+
+  const totalKm      = runLogs.reduce((a,r)=>a+(r.distance||0),0);
+  const totalRuns    = runLogs.length;
+  const thisWeek     = logs.filter(l=>l.date>=monday).length;
+  const activeDays   = [...new Set(logs.map(l=>l.date))].length;
+  const memberSince  = logs.length ? [...logs].sort((a,b)=>a.date.localeCompare(b.date))[0].date : todayStr();
+
+  // Best run
+  const bestRun = [...runLogs].sort((a,b)=>(b.distance||0)-(a.distance||0))[0];
+
+  // Favourite module
+  const modCounts = {};
+  logs.filter(l=>!l.module.startsWith('custom_')).forEach(l=>{ modCounts[l.module]=(modCounts[l.module]||0)+1; });
+  const favMod = Object.entries(modCounts).sort((a,b)=>b[1]-a[1])[0];
+
+  const container = document.getElementById('profile-content');
+  container.innerHTML = `
+    <!-- Avatar + name -->
+    <div style="text-align:center;padding:20px 0 24px">
+      <div style="width:80px;height:80px;border-radius:50%;background:linear-gradient(135deg,var(--g2),var(--g4));
+        display:flex;align-items:center;justify-content:center;font-size:36px;font-weight:700;
+        margin:0 auto 14px;border:3px solid var(--g3)">
+        ${user.name.charAt(0).toUpperCase()}
+      </div>
+      <div style="font-family:var(--font-display);font-size:28px;color:var(--g5)">${user.name.toUpperCase()}</div>
+      <div style="font-size:13px;color:var(--text3);margin-top:4px">${user.email}</div>
+      <div style="margin-top:10px">
+        <span class="badge badge-green">🔥 ${streak} day streak</span>
+        ${user.role==='ADMIN'?'<span class="badge badge-yellow" style="margin-left:6px">👑 Admin</span>':''}
+      </div>
+    </div>
+
+    <!-- Stats grid -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:20px">
+      <div class="stat-card"><div class="stat-val">${logs.length}</div><div class="stat-label">Workouts</div></div>
+      <div class="stat-card"><div class="stat-val">${activeDays}</div><div class="stat-label">Active Days</div></div>
+      <div class="stat-card"><div class="stat-val">${thisWeek}</div><div class="stat-label">This Week</div></div>
+      <div class="stat-card"><div class="stat-val">${totalRuns}</div><div class="stat-label">Total Runs</div></div>
+      <div class="stat-card"><div class="stat-val">${totalKm.toFixed(1)}</div><div class="stat-label">km Run</div></div>
+      <div class="stat-card"><div class="stat-val">${streak}🔥</div><div class="stat-label">Streak</div></div>
+    </div>
+
+    <!-- Highlights -->
+    <div class="section-title" style="margin-bottom:10px">Highlights</div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:20px">
+      ${bestRun ? `
+      <div class="card card-sm" style="display:flex;align-items:center;gap:12px;background:rgba(30,136,229,0.08);border-color:rgba(30,136,229,0.2)">
+        <span style="font-size:28px">🏅</span>
+        <div>
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase">Best Run</div>
+          <div style="font-weight:700;font-size:15px">${(bestRun.distance||0).toFixed(2)} km</div>
+          <div style="font-size:12px;color:var(--text3)">${fmtTime(bestRun.duration||0)} · ${bestRun.date}</div>
+        </div>
+      </div>` : ''}
+      ${favMod ? `
+      <div class="card card-sm" style="display:flex;align-items:center;gap:12px;background:rgba(67,160,90,0.08);border-color:rgba(67,160,90,0.2)">
+        <span style="font-size:28px">${getModuleEmoji(favMod[0])}</span>
+        <div>
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase">Favourite Module</div>
+          <div style="font-weight:700;font-size:15px">${getModuleName(favMod[0])}</div>
+          <div style="font-size:12px;color:var(--text3)">${favMod[1]} sessions logged</div>
+        </div>
+      </div>` : ''}
+      <div class="card card-sm" style="display:flex;align-items:center;gap:12px">
+        <span style="font-size:28px">📅</span>
+        <div>
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase">Member Since</div>
+          <div style="font-weight:700;font-size:15px">${memberSince}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick actions -->
+    <div class="section-title" style="margin-bottom:10px">Account</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:24px">
+      <button class="btn btn-ghost btn-full" style="text-align:left;justify-content:flex-start;gap:12px"
+        onclick="openChangePasswordModal()">🔑 Change Password</button>
+      <button class="btn btn-ghost btn-full" style="text-align:left;justify-content:flex-start;gap:12px"
+        onclick="openFeedbackModal()">💬 Send Feedback</button>
+      <button class="btn btn-ghost btn-full" style="text-align:left;justify-content:flex-start;gap:12px;color:#ef9a9a"
+        onclick="logout()">🚪 Sign Out</button>
+    </div>
+  `;
+}
