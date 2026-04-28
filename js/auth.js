@@ -109,6 +109,8 @@ function completeLogin(user) {
 
   // Init push notifications for regular users (non-blocking)
   if (typeof initPushNotifications === 'function') initPushNotifications();
+  // Show My Plan nav tab if user has a registered plan
+  if (typeof _refreshMyPlanNav === 'function') _refreshMyPlanNav();
 
   const lastQuote = Store.get('ff_quote_' + user.id);
   const today     = todayStr();
