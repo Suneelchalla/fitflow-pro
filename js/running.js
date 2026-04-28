@@ -725,6 +725,99 @@ function renderMyPlan() {
     <div class="card card-sm" style="margin-top:6px;background:rgba(30,136,229,0.06);border-color:rgba(30,136,229,0.2);text-align:center;cursor:pointer" onclick="openModule('running')">
       <div style="font-size:13px;color:#64b5f6">🏃 Want a free run outside the plan? <strong>Open Running →</strong></div>
     </div>
+
+    <!-- ── Hydration & Diet section ── -->
+    <div style="margin-top:20px">
+
+      <!-- Pill tabs -->
+      <div style="display:flex;gap:8px;margin-bottom:14px">
+        <button id="myplan-tab-hydration"
+          onclick="switchMyPlanInfoTab('hydration')"
+          style="flex:1;padding:9px 0;border-radius:20px;font-size:13px;font-weight:700;cursor:pointer;
+                 background:rgba(30,136,229,0.15);border:1px solid rgba(30,136,229,0.35);color:#64b5f6;
+                 transition:all .2s">
+          💧 Hydration
+        </button>
+        <button id="myplan-tab-diet"
+          onclick="switchMyPlanInfoTab('diet')"
+          style="flex:1;padding:9px 0;border-radius:20px;font-size:13px;font-weight:700;cursor:pointer;
+                 background:transparent;border:1px solid var(--border);color:var(--text3);
+                 transition:all .2s">
+          🥗 Diet
+        </button>
+      </div>
+
+      <!-- Hydration content -->
+      <div id="myplan-info-hydration">
+        <div class="card" style="background:linear-gradient(135deg,rgba(30,136,229,0.12),rgba(30,136,229,0.04));border-color:rgba(30,136,229,0.25);margin-bottom:12px;padding:16px 16px 12px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <span style="font-size:28px">💧</span>
+            <div>
+              <div style="font-weight:700;font-size:15px">Running Day Hydration</div>
+              <div style="font-size:12px;color:var(--text3)">Fluid loss increases significantly while running</div>
+            </div>
+          </div>
+        </div>
+        ${[
+          { phase:'Pre-Run',    icon:'🌅', time:'2 hrs before',   tip:'500ml water + light electrolytes', color:'rgba(30,136,229,0.12)', border:'rgba(30,136,229,0.25)' },
+          { phase:'Pre-Run',    icon:'⏱',  time:'15 min before',  tip:'200ml water — top up the tank',    color:'rgba(30,136,229,0.08)', border:'rgba(30,136,229,0.2)'  },
+          { phase:'During',     icon:'🏃', time:'< 45 min run',   tip:'150–200ml every 20 min',           color:'rgba(67,160,90,0.1)',   border:'rgba(67,160,90,0.25)'  },
+          { phase:'During',     icon:'⚡', time:'> 45 min run',   tip:'Sports drink or water + salt every 20 min', color:'rgba(67,160,90,0.12)', border:'rgba(67,160,90,0.3)' },
+          { phase:'Post-Run',   icon:'🔄', time:'Within 30 min',  tip:'500ml + electrolytes',             color:'rgba(240,192,64,0.1)', border:'rgba(240,192,64,0.25)' },
+          { phase:'Post-Run',   icon:'💤', time:'Next 2 hrs',     tip:'Keep sipping — 1.5L per kg lost',  color:'rgba(240,192,64,0.08)', border:'rgba(240,192,64,0.2)' },
+        ].map(h => `
+          <div style="display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:12px;margin-bottom:8px;
+                      background:${h.color};border:1px solid ${h.border}">
+            <span style="font-size:22px;flex-shrink:0">${h.icon}</span>
+            <div style="flex:1;min-width:0">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--text3)">${h.phase}</span>
+                <span style="font-size:10px;color:var(--text3)">·</span>
+                <span style="font-size:11px;color:var(--text2)">${h.time}</span>
+              </div>
+              <div style="font-size:13px;font-weight:600;color:var(--text);margin-top:2px">${h.tip}</div>
+            </div>
+          </div>`).join('')}
+        <div style="padding:12px 14px;border-radius:12px;background:rgba(240,192,64,0.08);border:1px solid rgba(240,192,64,0.2);margin-top:4px">
+          <div style="font-size:12px;color:var(--accent);line-height:1.6">⚡ <strong>Watch for:</strong> dark urine, headache, fatigue, cramping — stop and rehydrate immediately.</div>
+        </div>
+      </div>
+
+      <!-- Diet content (hidden by default) -->
+      <div id="myplan-info-diet" style="display:none">
+        <div class="card" style="background:linear-gradient(135deg,rgba(67,160,90,0.12),rgba(67,160,90,0.04));border-color:rgba(67,160,90,0.25);margin-bottom:12px;padding:16px 16px 12px">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <span style="font-size:28px">🥗</span>
+            <div>
+              <div style="font-weight:700;font-size:15px">Running Day Nutrition</div>
+              <div style="font-size:12px;color:var(--text3)">Fuel smart — eat to run, run to fuel</div>
+            </div>
+          </div>
+        </div>
+        ${[
+          { time:'2–3 hrs before',     emoji:'🍌', name:'Pre-Run Meal',      cal:350, color:'rgba(30,136,229,0.1)',   border:'rgba(30,136,229,0.2)',  items:'Oats + banana + honey  OR  toast + peanut butter + banana',         note:'Easy-to-digest carbs only' },
+          { time:'30–60 min before',   emoji:'⚡', name:'Light Top-Up',      cal:120, color:'rgba(30,136,229,0.07)', border:'rgba(30,136,229,0.15)', items:'Banana, 3–4 dates, or an energy bar',                               note:'Quick-release energy boost' },
+          { time:'During  > 60 min',   emoji:'🏃', name:'Intra-Run Fuel',    cal:100, color:'rgba(67,160,90,0.1)',   border:'rgba(67,160,90,0.2)',   items:'Energy gel, banana chunk, or dates every 45 min',                   note:'Per serving, repeat as needed' },
+          { time:'Within 30 min post', emoji:'🥛', name:'Recovery Window',   cal:300, color:'rgba(240,192,64,0.1)', border:'rgba(240,192,64,0.25)', items:'Chocolate milk  OR  protein shake + banana',                        note:'Critical: 3:1 carb-to-protein ratio' },
+          { time:'1–2 hrs post',       emoji:'🍚', name:'Recovery Meal',     cal:600, color:'rgba(67,160,90,0.08)', border:'rgba(67,160,90,0.18)',  items:'Rice / pasta + grilled chicken or fish + vegetables',               note:'Replenish glycogen stores' },
+        ].map(m => `
+          <div style="padding:13px 14px;border-radius:14px;margin-bottom:10px;background:${m.color};border:1px solid ${m.border}">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+              <div style="display:flex;align-items:center;gap:8px">
+                <span style="font-size:22px">${m.emoji}</span>
+                <div>
+                  <div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.06em">${m.time}</div>
+                  <div style="font-weight:700;font-size:14px;color:var(--text)">${m.name}</div>
+                </div>
+              </div>
+              <span style="background:rgba(67,160,90,0.2);color:var(--g5);font-size:11px;font-weight:700;padding:3px 9px;border-radius:10px;flex-shrink:0;margin-left:8px">${m.cal} kcal</span>
+            </div>
+            <div style="font-size:13px;color:var(--text2);margin-bottom:4px;line-height:1.5">${m.items}</div>
+            <div style="font-size:11px;color:var(--text3)">📌 ${m.note}</div>
+          </div>`).join('')}
+      </div>
+
+    </div>
   `;
 }
 
@@ -734,6 +827,34 @@ function changeMyPlanWeek(delta) {
   const plan   = APP_DATA.running.plans[active.planKey];
   APP._myPlanViewWeek = Math.max(1, Math.min(plan.weeks, (APP._myPlanViewWeek || 1) + delta));
   renderMyPlan();
+}
+
+function switchMyPlanInfoTab(tab) {
+  const hydEl  = document.getElementById('myplan-info-hydration');
+  const dietEl = document.getElementById('myplan-info-diet');
+  const hydBtn = document.getElementById('myplan-tab-hydration');
+  const dietBtn= document.getElementById('myplan-tab-diet');
+  if (!hydEl || !dietEl) return;
+
+  if (tab === 'hydration') {
+    hydEl.style.display  = '';
+    dietEl.style.display = 'none';
+    hydBtn.style.background  = 'rgba(30,136,229,0.15)';
+    hydBtn.style.borderColor = 'rgba(30,136,229,0.35)';
+    hydBtn.style.color       = '#64b5f6';
+    dietBtn.style.background  = 'transparent';
+    dietBtn.style.borderColor = 'var(--border)';
+    dietBtn.style.color       = 'var(--text3)';
+  } else {
+    hydEl.style.display  = 'none';
+    dietEl.style.display = '';
+    dietBtn.style.background  = 'rgba(67,160,90,0.15)';
+    dietBtn.style.borderColor = 'rgba(67,160,90,0.35)';
+    dietBtn.style.color       = 'var(--g5)';
+    hydBtn.style.background  = 'transparent';
+    hydBtn.style.borderColor = 'var(--border)';
+    hydBtn.style.color       = 'var(--text3)';
+  }
 }
 
 function renderTrainingPlans() {
