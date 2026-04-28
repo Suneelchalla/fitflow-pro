@@ -328,6 +328,7 @@ function saveRun() {
   const s       = APP.runSession;
   const user    = APP.currentUser;
   const elapsed = s.finalElapsed || _calcElapsed(s);
+  const ctx     = APP._planRunCtx || null;
 
   const log = {
     userId:    user.id,
@@ -336,12 +337,21 @@ function saveRun() {
     distance:  parseFloat(s.distance.toFixed(3)),
     duration:  elapsed,
     pace:      parseFloat((elapsed / 60 / Math.max(s.distance, 0.01)).toFixed(2)),
-    planType:  APP.selectedPlan || 'Free Run',
+    planType:  ctx ? `${ctx.planKey} · Wk${ctx.week} D${ctx.day}` : (APP.selectedPlan || 'Free Run'),
     timestamp: new Date().toISOString(),
   };
 
   Store.addRunLog(log);
   sheetsPost('logRun', log);
+
+  // Auto-complete the plan day this run was started from
+  if (ctx) {
+    Store.set(_planDayKey(ctx.planKey, ctx.week, ctx.day), {
+      date: todayStr(), dist: log.distance, dur: elapsed, ts: Date.now()
+    });
+    APP._planRunCtx = null;
+  }
+
   _clearRunSession();
   LockScreen.stop();
   showToast('Run saved! Great effort! 🏃', 'success');
@@ -356,6 +366,7 @@ function discardRun() {
   navigator.geolocation?.clearWatch(APP.runWatchId);
   APP.runWatchId = null;
   APP.runSession = null;
+  APP._planRunCtx = null;
   _clearRunSession();
   LockScreen.stop();
   document.getElementById('run-summary').classList.add('hidden');
@@ -400,15 +411,84 @@ function selectPlan(key) {
   renderTrainingPlans();
 }
 
+// ── PLAN DAY COMPLETION HELPERS ───────────────────────────────────
+function _planDayKey(planKey, week, day) {
+  return `ff_pday_${APP.currentUser?.id}_${planKey}_w${week}_d${day}`;
+}
+
+function isPlanDayDone(planKey, week, day) {
+  return !!Store.get(_planDayKey(planKey, week, day));
+}
+
+function _markPlanDayDone(planKey, week, day, distKm, durSecs) {
+  Store.set(_planDayKey(planKey, week, day), {
+    date: todayStr(), dist: distKm || 0, dur: durSecs || 0, ts: Date.now()
+  });
+  // Log a run entry so it surfaces in history & weekly report
+  const user = APP.currentUser;
+  if (distKm > 0 || durSecs > 0) {
+    const log = {
+      userId:    user.id,
+      email:     user.email,
+      date:      todayStr(),
+      distance:  parseFloat((distKm  || 0).toFixed(3)),
+      duration:  durSecs || 0,
+      pace:      (durSecs && distKm > 0) ? parseFloat((durSecs / 60 / distKm).toFixed(2)) : 0,
+      planType:  `${planKey} · Wk${week} D${day}`,
+      timestamp: new Date().toISOString(),
+    };
+    Store.addRunLog(log);
+    sheetsPost('logRun', log);
+  }
+}
+
+function startPlanDayRun(planKey, week, day, targetDist) {
+  // Remember plan context — saveRun() will auto-complete the day
+  APP._planRunCtx = { planKey, week, day, targetDist };
+  APP.selectedPlan = planKey;
+  renderRunningTabs('log');
+  setTimeout(() => startRun(), 150);
+}
+
+function confirmMarkPlanDone(planKey, week, day, dist, dur) {
+  if (isPlanDayDone(planKey, week, day)) return; // already done
+  _markPlanDayDone(planKey, week, day, dist, dur);
+  showToast('Day marked complete! 🎉', 'success');
+  renderPlanDetail(planKey);
+  renderRunHistory();
+}
+
+function _renderWeekProgress(planKey, week, sessions, color) {
+  const done  = sessions.filter(s => isPlanDayDone(planKey, week, s.day)).length;
+  const total = sessions.filter(s => s.dist > 0 || s.type.includes('RACE')).length || sessions.length;
+  const pct   = total > 0 ? Math.round(done / total * 100) : 0;
+  return `
+    <div style="display:flex;align-items:center;gap:10px">
+      <div style="flex:1;height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">
+        <div style="width:${pct}%;height:100%;background:${color};border-radius:3px;transition:width .4s"></div>
+      </div>
+      <span style="font-size:12px;color:var(--text3);flex-shrink:0">${done}/${total} done</span>
+    </div>`;
+}
+
 function renderPlanDetail(key) {
   const plan      = APP_DATA.running.plans[key];
   const container = document.getElementById('plan-detail');
   container.style.display = 'block';
   const weekSessions = plan.schedule.filter(s => s.week === APP.selectedPlanWeek);
 
+  // Pad missing days 1–6 with implied Rest entries
+  const allDays = [];
+  for (let d = 1; d <= 6; d++) {
+    const found = weekSessions.find(s => s.day === d);
+    allDays.push(found || { week: APP.selectedPlanWeek, day: d, type: 'Rest', dist: 0, dur: 0, desc: 'Rest day — recovery is part of training.' });
+  }
+
+  const DAY_NAMES = ['Mon','Tue','Wed','Thu','Fri','Sat'];
+
   container.innerHTML = `
     <div style="padding:16px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
         <div style="font-weight:700;font-size:16px">${plan.emoji} ${key} Plan</div>
         <div style="display:flex;align-items:center;gap:8px">
           <button class="btn btn-ghost btn-sm" onclick="changeWeek(-1)" ${APP.selectedPlanWeek<=1?'disabled':''}>‹</button>
@@ -416,23 +496,63 @@ function renderPlanDetail(key) {
           <button class="btn btn-ghost btn-sm" onclick="changeWeek(1)" ${APP.selectedPlanWeek>=plan.weeks?'disabled':''}>›</button>
         </div>
       </div>
-      ${weekSessions.map(s => {
-        const isRace = s.type.includes('RACE');
+
+      <div style="margin-bottom:14px">${_renderWeekProgress(key, APP.selectedPlanWeek, allDays, plan.color)}</div>
+
+      ${allDays.map(s => {
+        const isRace   = s.type.includes('RACE');
+        const isRest   = s.dist === 0 && !isRace;
+        const isDone   = isPlanDayDone(key, s.week, s.day);
+        const doneData = isDone ? Store.get(_planDayKey(key, s.week, s.day)) : null;
+        const dayLabel = DAY_NAMES[s.day - 1] || `Day ${s.day}`;
+
         return `
-          <div class="card card-sm" style="margin-bottom:8px;${isRace?'border-color:var(--accent);background:rgba(240,192,64,0.08)':''}">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start">
-              <div>
-                <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.06em">Day ${s.day}</div>
-                <div style="font-weight:700;margin-top:3px;${isRace?'color:var(--accent)':''}">${s.type}</div>
+          <div class="card card-sm" style="margin-bottom:10px;
+            ${isDone ? 'border-color:rgba(67,160,90,0.5);background:rgba(67,160,90,0.06)' : ''}
+            ${isRace && !isDone ? 'border-color:var(--accent);background:rgba(240,192,64,0.08)' : ''}
+          ">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:${isDone?'4px':'10px'}">
+              <div style="flex:1">
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                  <span style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.06em">${dayLabel}</span>
+                  ${isDone ? `<span style="background:rgba(67,160,90,0.85);color:white;font-size:10px;font-weight:700;padding:1px 8px;border-radius:10px">✓ DONE</span>` : ''}
+                  ${isRace && !isDone ? `<span style="background:var(--accent);color:#000;font-size:10px;font-weight:700;padding:1px 8px;border-radius:10px">🏆 RACE</span>` : ''}
+                </div>
+                <div style="font-weight:700;margin-top:3px;font-size:15px;
+                  ${isRace?'color:var(--accent)':''}${isDone?'color:var(--g5)':''}">
+                  ${s.type}
+                </div>
                 <div style="font-size:13px;color:var(--text2);margin-top:4px;line-height:1.5">${s.desc}</div>
+                ${isDone && doneData?.dist > 0
+                  ? `<div style="font-size:12px;color:var(--g5);margin-top:5px">📍 ${doneData.dist.toFixed(2)} km · ${fmtTime(doneData.dur || 0)} · ${doneData.date}</div>`
+                  : isDone
+                    ? `<div style="font-size:12px;color:var(--text3);margin-top:4px">Completed on ${doneData?.date || 'earlier'}</div>`
+                    : ''}
               </div>
               ${s.dist > 0
                 ? `<div style="text-align:right;flex-shrink:0;margin-left:12px">
-                    <div style="font-family:var(--font-display);font-size:28px;color:${plan.color}">${s.dist}</div>
+                    <div style="font-family:var(--font-display);font-size:28px;color:${isDone?'var(--g5)':plan.color}">${s.dist}</div>
                     <div style="font-size:11px;color:var(--text3)">km</div>
                    </div>`
-                : `<div class="badge badge-blue">Rest</div>`}
+                : `<div class="badge badge-blue" style="flex-shrink:0;margin-left:8px;align-self:flex-start">Rest</div>`}
             </div>
+
+            ${!isDone ? `
+              <div style="display:flex;gap:8px">
+                ${!isRest ? `
+                  <button class="btn btn-primary btn-sm" style="flex:1;background:${plan.color};border-color:${plan.color};font-size:13px"
+                    onclick="startPlanDayRun('${key}',${s.week},${s.day},${s.dist})">
+                    ▶ Start Run
+                  </button>` : ''}
+                <button class="btn ${isRest?'btn-primary':'btn-ghost'} btn-sm"
+                  style="${isRest?'flex:1;':''}font-size:13px"
+                  onclick="confirmMarkPlanDone('${key}',${s.week},${s.day},${s.dist},${s.dur})">
+                  ${isRest ? '✓ Mark Rest Done' : '✓ Log Manually'}
+                </button>
+              </div>
+            ` : `
+              <div style="text-align:center;font-size:12px;color:var(--g5)">✅ Session complete!</div>
+            `}
           </div>`;
       }).join('')}
     </div>`;
