@@ -48,12 +48,11 @@ async function attemptLogin(email, password) {
 
   if (cfg.webAppUrl) {
     try {
-      // Send via POST so password travels as JSON body - no URL encoding issues
-      const r = await fetch(cfg.webAppUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({ action: 'login', email, password }),
-      });
+      // Convert password to char codes joined by dashes - survives URL encoding perfectly
+      // e.g. "Hema@123" → "72-101-109-97-64-49-50-51"
+      const pwCodes = Array.from(password).map(c => c.charCodeAt(0)).join('-');
+      const qs = new URLSearchParams({ action: 'login', email, pwcodes: pwCodes }).toString();
+      const r = await fetch(`${cfg.webAppUrl}?${qs}`);
       const res = await r.json();
       if (res && res.success !== undefined) return res;
     } catch (e) {
