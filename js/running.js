@@ -349,14 +349,21 @@ function saveRun() {
     Store.set(_planDayKey(ctx.planKey, ctx.week, ctx.day), {
       date: todayStr(), dist: log.distance, dur: elapsed, ts: Date.now()
     });
-    APP._planRunCtx = null;
   }
 
   _clearRunSession();
   LockScreen.stop();
   showToast('Run saved! Great effort! 🏃', 'success');
   discardRun();
-  renderRunHistory();
+
+  // Return to My Plan tab if that's where the run was started from
+  const fromMyPlan = ctx?.fromMyPlan;
+  APP._planRunCtx = null;
+  if (fromMyPlan) {
+    navTo('myplan');
+  } else {
+    renderRunHistory();
+  }
 }
 
 // ── DISCARD ───────────────────────────────────────────────────────
@@ -366,7 +373,6 @@ function discardRun() {
   navigator.geolocation?.clearWatch(APP.runWatchId);
   APP.runWatchId = null;
   APP.runSession = null;
-  APP._planRunCtx = null;
   _clearRunSession();
   LockScreen.stop();
   document.getElementById('run-summary').classList.add('hidden');
@@ -386,48 +392,20 @@ document.addEventListener('visibilitychange', () => {
 APP.selectedPlan     = null;
 APP.selectedPlanWeek = 1;
 
-function renderTrainingPlans() {
-  const plans     = APP_DATA.running.plans;
-  const container = document.getElementById('training-plans-list');
-  container.innerHTML = Object.entries(plans).map(([key, plan]) => `
-    <div class="plan-card ${APP.selectedPlan === key ? 'selected' : ''}" onclick="selectPlan('${key}')">
-      <div class="plan-header" style="background:${plan.color}22;border-bottom:1px solid ${plan.color}33">
-        <div>
-          <div class="plan-title">${plan.emoji} ${key}</div>
-          <div class="plan-sub">${plan.desc}</div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-family:var(--font-display);font-size:24px;color:${plan.color}">${plan.weeks}wk</div>
-          <div style="font-size:11px;color:var(--text3)">programme</div>
-        </div>
-      </div>
-    </div>`).join('');
-  if (APP.selectedPlan) renderPlanDetail(APP.selectedPlan);
-}
-
-function selectPlan(key) {
-  APP.selectedPlan     = key;
-  APP.selectedPlanWeek = 1;
-  renderTrainingPlans();
-}
-
 // ── PLAN DAY COMPLETION HELPERS ───────────────────────────────────
 function _planDayKey(planKey, week, day) {
   return `ff_pday_${APP.currentUser?.id}_${planKey}_w${week}_d${day}`;
 }
-
 function isPlanDayDone(planKey, week, day) {
   return !!Store.get(_planDayKey(planKey, week, day));
 }
-
 function _markPlanDayDone(planKey, week, day, distKm, durSecs) {
   Store.set(_planDayKey(planKey, week, day), {
     date: todayStr(), dist: distKm || 0, dur: durSecs || 0, ts: Date.now()
   });
-  // Log a run entry so it surfaces in history & weekly report
-  const user = APP.currentUser;
   if (distKm > 0 || durSecs > 0) {
-    const log = {
+    const user = APP.currentUser;
+    const log  = {
       userId:    user.id,
       email:     user.email,
       date:      todayStr(),
@@ -441,26 +419,25 @@ function _markPlanDayDone(planKey, week, day, distKm, durSecs) {
     sheetsPost('logRun', log);
   }
 }
-
-function startPlanDayRun(planKey, week, day, targetDist) {
-  // Remember plan context — saveRun() will auto-complete the day
-  APP._planRunCtx = { planKey, week, day, targetDist };
-  APP.selectedPlan = planKey;
-  renderRunningTabs('log');
-  setTimeout(() => startRun(), 150);
-}
-
 function confirmMarkPlanDone(planKey, week, day, dist, dur) {
-  if (isPlanDayDone(planKey, week, day)) return; // already done
+  if (isPlanDayDone(planKey, week, day)) return;
   _markPlanDayDone(planKey, week, day, dist, dur);
   showToast('Day marked complete! 🎉', 'success');
-  renderPlanDetail(planKey);
   renderRunHistory();
 }
-
+function startPlanDayRun(planKey, week, day, targetDist) {
+  APP._planRunCtx  = { planKey, week, day, targetDist, fromMyPlan: APP.currentPage === 'page-my-plan' };
+  APP.selectedPlan = planKey;
+  openModule('running');
+  setTimeout(() => {
+    renderRunningTabs('log');
+    setTimeout(() => startRun(), 150);
+  }, 200);
+}
 function _renderWeekProgress(planKey, week, sessions, color) {
-  const done  = sessions.filter(s => isPlanDayDone(planKey, week, s.day)).length;
-  const total = sessions.filter(s => s.dist > 0 || s.type.includes('RACE')).length || sessions.length;
+  const runSessions = sessions.filter(s => s.dist > 0 || s.type.includes('RACE'));
+  const done  = runSessions.filter(s => isPlanDayDone(planKey, week, s.day)).length;
+  const total = runSessions.length || sessions.length;
   const pct   = total > 0 ? Math.round(done / total * 100) : 0;
   return `
     <div style="display:flex;align-items:center;gap:10px">
@@ -471,24 +448,300 @@ function _renderWeekProgress(planKey, week, sessions, color) {
     </div>`;
 }
 
+
+function getActivePlanKey() {
+  const uid = APP.currentUser?.id;
+  return uid ? `ff_activeplan_${uid}` : null;
+}
+function getActivePlan() {
+  const k = getActivePlanKey();
+  return k ? Store.get(k) : null;        // { planKey, startDate, startWeek }
+}
+function setActivePlan(planKey) {
+  const k = getActivePlanKey();
+  if (!k) return;
+  Store.set(k, { planKey, startDate: todayStr(), registeredAt: Date.now() });
+  _refreshMyPlanNav();
+}
+function clearActivePlan() {
+  const k = getActivePlanKey();
+  if (k) Store.remove(k);
+  _refreshMyPlanNav();
+}
+
+// Show / hide "My Plan" bottom nav tab based on whether user has registered a plan
+function _refreshMyPlanNav() {
+  const tab   = document.getElementById('nav-myplan');
+  const label = document.getElementById('nav-myplan-label');
+  if (!tab) return;
+  const active = getActivePlan();
+  if (active) {
+    const plan  = APP_DATA.running.plans[active.planKey];
+    tab.style.display = '';
+    if (label) label.textContent = plan ? active.planKey : 'My Plan';
+  } else {
+    tab.style.display = 'none';
+  }
+}
+
+// ── REGISTER PLAN ─────────────────────────────────────────────────
+function registerPlan(planKey) {
+  const existing = getActivePlan();
+  if (existing && existing.planKey !== planKey) {
+    if (!confirm(`You're already on the ${existing.planKey} plan. Switch to ${planKey}? Your progress will be kept.`)) return;
+  }
+  setActivePlan(planKey);
+  closeModal('modal-choose-plan');
+  showToast(`✅ Registered for ${planKey} plan! Check your new tab.`, 'success');
+  navTo('myplan');
+}
+
+// Show the choose-plan bottom sheet (from My Plan tab header)
+function showChangePlanSheet() {
+  const plans     = APP_DATA.running.plans;
+  const active    = getActivePlan();
+  const container = document.getElementById('choose-plan-list');
+  container.innerHTML = Object.entries(plans).map(([key, plan]) => {
+    const isActive = active?.planKey === key;
+    return `
+      <div class="card card-sm" style="cursor:pointer;border-color:${isActive ? plan.color : 'var(--border)'};background:${isActive ? plan.color+'11' : ''}"
+           onclick="registerPlan('${key}')">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div style="font-weight:700;font-size:15px">${plan.emoji} ${key}</div>
+            <div style="font-size:12px;color:var(--text2);margin-top:2px">${plan.desc}</div>
+          </div>
+          <div style="text-align:right;flex-shrink:0;margin-left:12px">
+            <div style="font-family:var(--font-display);font-size:22px;color:${plan.color}">${plan.weeks}wk</div>
+            ${isActive ? `<div style="font-size:10px;color:var(--g5);font-weight:700">ACTIVE</div>` : ''}
+          </div>
+        </div>
+      </div>`;
+  }).join('');
+  openModal('modal-choose-plan');
+}
+
+// ── MY PLAN PAGE ──────────────────────────────────────────────────
+function renderMyPlan() {
+  const container = document.getElementById('myplan-content');
+  const active    = getActivePlan();
+
+  // Update header title
+  const titleEl = document.getElementById('myplan-title');
+
+  if (!active) {
+    // No plan registered — show picker inline
+    if (titleEl) titleEl.textContent = '🎯 Choose a Plan';
+    const plans = APP_DATA.running.plans;
+    container.innerHTML = `
+      <div class="card" style="text-align:center;padding:28px 20px;background:linear-gradient(135deg,var(--bg2),var(--surface));margin-bottom:20px">
+        <div style="font-size:48px;margin-bottom:12px">🏃</div>
+        <div style="font-weight:700;font-size:18px;margin-bottom:6px">No Plan Registered</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.6">Pick a training plan below and it will live right here in this tab — your daily schedule, progress and run launcher all in one place.</div>
+      </div>
+      <div class="section-title" style="margin-bottom:12px">Choose Your Goal</div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        ${Object.entries(plans).map(([key, plan]) => `
+          <div class="card" style="cursor:pointer;border-color:${plan.color}44;background:${plan.color}0a"
+               onclick="registerPlan('${key}')">
+            <div style="display:flex;align-items:center;justify-content:space-between">
+              <div>
+                <div style="font-weight:700;font-size:16px">${plan.emoji} ${key} Training Plan</div>
+                <div style="font-size:13px;color:var(--text2);margin-top:3px">${plan.desc}</div>
+                <div style="font-size:12px;color:${plan.color};margin-top:5px;font-weight:600">${plan.weeks} weeks · starts today</div>
+              </div>
+              <div style="font-family:var(--font-display);font-size:36px;color:${plan.color};margin-left:12px;flex-shrink:0">${plan.weeks}w</div>
+            </div>
+          </div>`).join('')}
+      </div>`;
+    return;
+  }
+
+  const plan      = APP_DATA.running.plans[active.planKey];
+  if (!plan) { clearActivePlan(); renderMyPlan(); return; }
+
+  // Calculate current week based on registration date
+  const daysSince  = Math.floor((Date.now() - active.registeredAt) / 86400000);
+  const curWeek    = Math.min(plan.weeks, Math.max(1, Math.floor(daysSince / 7) + 1));
+  // Allow user to override week view
+  if (APP._myPlanViewWeek == null) APP._myPlanViewWeek = curWeek;
+  const viewWeek   = APP._myPlanViewWeek;
+
+  if (titleEl) titleEl.textContent = `${plan.emoji} ${active.planKey} Plan`;
+
+  // Build all days for the view week
+  const weekSessions = plan.schedule.filter(s => s.week === viewWeek);
+  const allDays      = [];
+  for (let d = 1; d <= 6; d++) {
+    const found = weekSessions.find(s => s.day === d);
+    allDays.push(found || { week: viewWeek, day: d, type: 'Rest', dist: 0, dur: 0, desc: 'Rest day — recovery is part of training.' });
+  }
+
+  const DAY_NAMES   = ['Mon','Tue','Wed','Thu','Fri','Sat'];
+  const totalWeeks  = plan.weeks;
+  // Overall plan completion %
+  let doneTotal = 0, sessTotal = 0;
+  for (let w = 1; w <= totalWeeks; w++) {
+    const wSess = plan.schedule.filter(s => s.week === w && (s.dist > 0 || s.type.includes('RACE')));
+    sessTotal += wSess.length || 6;
+    wSess.forEach(s => { if (isPlanDayDone(active.planKey, w, s.day)) doneTotal++; });
+  }
+  const overallPct = sessTotal > 0 ? Math.round(doneTotal / sessTotal * 100) : 0;
+
+  container.innerHTML = `
+    <!-- Plan header banner -->
+    <div class="card" style="background:linear-gradient(135deg,${plan.color}22,${plan.color}08);border-color:${plan.color}44;margin-bottom:16px;padding:20px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px">
+        <div>
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;font-weight:700">Active Plan</div>
+          <div style="font-family:var(--font-display);font-size:30px;color:${plan.color};line-height:1;margin-top:4px">${active.planKey}</div>
+          <div style="font-size:12px;color:var(--text2);margin-top:4px">${plan.desc}</div>
+        </div>
+        <div style="text-align:right;flex-shrink:0;margin-left:12px">
+          <div style="font-family:var(--font-display);font-size:38px;color:${plan.color};line-height:1">${overallPct}%</div>
+          <div style="font-size:11px;color:var(--text3)">complete</div>
+        </div>
+      </div>
+      <!-- Overall progress bar -->
+      <div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden;margin-bottom:10px">
+        <div style="width:${overallPct}%;height:100%;background:${plan.color};border-radius:3px;transition:width .5s"></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:12px;color:var(--text3)">Week ${curWeek} of ${totalWeeks} · Started ${active.startDate}</div>
+        <button onclick="clearActivePlan();renderMyPlan()" style="background:none;border:none;color:var(--text3);font-size:11px;cursor:pointer;text-decoration:underline">Unregister</button>
+      </div>
+    </div>
+
+    <!-- Week navigator -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div style="font-weight:700;font-size:15px">
+        Week ${viewWeek}
+        ${viewWeek === curWeek ? `<span style="background:${plan.color};color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:6px">CURRENT</span>` : ''}
+      </div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="btn btn-ghost btn-sm" onclick="changeMyPlanWeek(-1)" ${viewWeek<=1?'disabled':''}>‹</button>
+        <span style="font-size:12px;color:var(--text3)">${viewWeek}/${totalWeeks}</span>
+        <button class="btn btn-ghost btn-sm" onclick="changeMyPlanWeek(1)" ${viewWeek>=totalWeeks?'disabled':''}>›</button>
+      </div>
+    </div>
+
+    <!-- Week progress bar -->
+    <div style="margin-bottom:14px">${_renderWeekProgress(active.planKey, viewWeek, allDays, plan.color)}</div>
+
+    <!-- Day cards -->
+    ${allDays.map(s => {
+      const isRace   = s.type.includes('RACE');
+      const isRest   = s.dist === 0 && !isRace;
+      const isDone   = isPlanDayDone(active.planKey, s.week, s.day);
+      const doneData = isDone ? Store.get(_planDayKey(active.planKey, s.week, s.day)) : null;
+
+      return `
+        <div class="card card-sm" style="margin-bottom:10px;
+          ${isDone ? 'border-color:rgba(67,160,90,0.5);background:rgba(67,160,90,0.06)' : ''}
+          ${isRace && !isDone ? 'border-color:var(--accent);background:rgba(240,192,64,0.08)' : ''}
+        ">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:${isDone?'4':'10'}px">
+            <div style="flex:1">
+              <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+                <span style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.06em">${DAY_NAMES[s.day-1]}</span>
+                ${isDone ? `<span style="background:rgba(67,160,90,0.85);color:white;font-size:10px;font-weight:700;padding:1px 8px;border-radius:10px">✓ DONE</span>` : ''}
+                ${isRace && !isDone ? `<span style="background:var(--accent);color:#000;font-size:10px;font-weight:700;padding:1px 8px;border-radius:10px">🏆 RACE</span>` : ''}
+              </div>
+              <div style="font-weight:700;margin-top:3px;font-size:15px;${isRace?'color:var(--accent)':''}${isDone?'color:var(--g5)':''}">${s.type}</div>
+              <div style="font-size:13px;color:var(--text2);margin-top:4px;line-height:1.5">${s.desc}</div>
+              ${isDone && doneData?.dist > 0
+                ? `<div style="font-size:12px;color:var(--g5);margin-top:5px">📍 ${doneData.dist.toFixed(2)} km · ${fmtTime(doneData.dur||0)} · ${doneData.date}</div>`
+                : isDone
+                  ? `<div style="font-size:12px;color:var(--text3);margin-top:4px">Completed ${doneData?.date||'earlier'}</div>`
+                  : ''}
+            </div>
+            ${s.dist > 0
+              ? `<div style="text-align:right;flex-shrink:0;margin-left:12px">
+                  <div style="font-family:var(--font-display);font-size:28px;color:${isDone?'var(--g5)':plan.color}">${s.dist}</div>
+                  <div style="font-size:11px;color:var(--text3)">km</div>
+                 </div>`
+              : `<div class="badge badge-blue" style="flex-shrink:0;margin-left:8px;align-self:flex-start">Rest</div>`}
+          </div>
+
+          ${!isDone ? `
+            <div style="display:flex;gap:8px">
+              ${!isRest ? `
+                <button class="btn btn-primary btn-sm" style="flex:1;background:${plan.color};border-color:${plan.color}"
+                  onclick="startPlanDayRun('${active.planKey}',${s.week},${s.day},${s.dist})">
+                  ▶ Start Run
+                </button>` : ''}
+              <button class="btn ${isRest?'btn-primary':'btn-ghost'} btn-sm" style="${isRest?'flex:1;':''}"
+                onclick="confirmMarkPlanDone('${active.planKey}',${s.week},${s.day},${s.dist},${s.dur});renderMyPlan()">
+                ${isRest ? '✓ Mark Rest Done' : '✓ Log Manually'}
+              </button>
+            </div>
+          ` : `<div style="text-align:center;font-size:12px;color:var(--g5)">✅ Session complete!</div>`}
+        </div>`;
+    }).join('')}
+
+    <!-- Quick jump to running page for free runs -->
+    <div class="card card-sm" style="margin-top:6px;background:rgba(30,136,229,0.06);border-color:rgba(30,136,229,0.2);text-align:center;cursor:pointer" onclick="openModule('running')">
+      <div style="font-size:13px;color:#64b5f6">🏃 Want a free run outside the plan? <strong>Open Running →</strong></div>
+    </div>
+  `;
+}
+
+function changeMyPlanWeek(delta) {
+  const active = getActivePlan();
+  if (!active) return;
+  const plan   = APP_DATA.running.plans[active.planKey];
+  APP._myPlanViewWeek = Math.max(1, Math.min(plan.weeks, (APP._myPlanViewWeek || 1) + delta));
+  renderMyPlan();
+}
+
+function renderTrainingPlans() {
+  const plans     = APP_DATA.running.plans;
+  const active    = getActivePlan();
+  const container = document.getElementById('training-plans-list');
+  container.innerHTML = `
+    <div style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.5">
+      Register a plan to get a dedicated tab in the bottom nav with your daily schedule, progress tracker, and one-tap run starter.
+    </div>
+    ${Object.entries(plans).map(([key, plan]) => {
+      const isActive = active?.planKey === key;
+      return `
+        <div class="plan-card ${APP.selectedPlan === key ? 'selected' : ''}" onclick="selectPlan('${key}')">
+          <div class="plan-header" style="background:${plan.color}22;border-bottom:1px solid ${plan.color}33">
+            <div style="flex:1">
+              <div style="display:flex;align-items:center;gap:8px">
+                <div class="plan-title">${plan.emoji} ${key}</div>
+                ${isActive ? `<span style="background:${plan.color};color:white;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px">ACTIVE</span>` : ''}
+              </div>
+              <div class="plan-sub">${plan.desc}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;margin-left:10px">
+              <div style="font-family:var(--font-display);font-size:24px;color:${plan.color};line-height:1">${plan.weeks}wk</div>
+              <button class="btn btn-sm" style="background:${isActive?plan.color:'transparent'};border:1px solid ${plan.color};color:${isActive?'white':plan.color};font-size:11px;padding:4px 10px;font-weight:700"
+                onclick="event.stopPropagation();registerPlan('${key}')">
+                ${isActive ? '✓ Registered' : '＋ Register'}
+              </button>
+            </div>
+          </div>
+        </div>`;
+    }).join('')}`;
+  if (APP.selectedPlan) renderPlanDetail(APP.selectedPlan);
+}
+
+function selectPlan(key) {
+  APP.selectedPlan     = key;
+  APP.selectedPlanWeek = 1;
+  renderTrainingPlans();
+}
+
 function renderPlanDetail(key) {
   const plan      = APP_DATA.running.plans[key];
   const container = document.getElementById('plan-detail');
   container.style.display = 'block';
   const weekSessions = plan.schedule.filter(s => s.week === APP.selectedPlanWeek);
 
-  // Pad missing days 1–6 with implied Rest entries
-  const allDays = [];
-  for (let d = 1; d <= 6; d++) {
-    const found = weekSessions.find(s => s.day === d);
-    allDays.push(found || { week: APP.selectedPlanWeek, day: d, type: 'Rest', dist: 0, dur: 0, desc: 'Rest day — recovery is part of training.' });
-  }
-
-  const DAY_NAMES = ['Mon','Tue','Wed','Thu','Fri','Sat'];
-
   container.innerHTML = `
     <div style="padding:16px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
         <div style="font-weight:700;font-size:16px">${plan.emoji} ${key} Plan</div>
         <div style="display:flex;align-items:center;gap:8px">
           <button class="btn btn-ghost btn-sm" onclick="changeWeek(-1)" ${APP.selectedPlanWeek<=1?'disabled':''}>‹</button>
@@ -496,63 +749,23 @@ function renderPlanDetail(key) {
           <button class="btn btn-ghost btn-sm" onclick="changeWeek(1)" ${APP.selectedPlanWeek>=plan.weeks?'disabled':''}>›</button>
         </div>
       </div>
-
-      <div style="margin-bottom:14px">${_renderWeekProgress(key, APP.selectedPlanWeek, allDays, plan.color)}</div>
-
-      ${allDays.map(s => {
-        const isRace   = s.type.includes('RACE');
-        const isRest   = s.dist === 0 && !isRace;
-        const isDone   = isPlanDayDone(key, s.week, s.day);
-        const doneData = isDone ? Store.get(_planDayKey(key, s.week, s.day)) : null;
-        const dayLabel = DAY_NAMES[s.day - 1] || `Day ${s.day}`;
-
+      ${weekSessions.map(s => {
+        const isRace = s.type.includes('RACE');
         return `
-          <div class="card card-sm" style="margin-bottom:10px;
-            ${isDone ? 'border-color:rgba(67,160,90,0.5);background:rgba(67,160,90,0.06)' : ''}
-            ${isRace && !isDone ? 'border-color:var(--accent);background:rgba(240,192,64,0.08)' : ''}
-          ">
-            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:${isDone?'4px':'10px'}">
-              <div style="flex:1">
-                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
-                  <span style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.06em">${dayLabel}</span>
-                  ${isDone ? `<span style="background:rgba(67,160,90,0.85);color:white;font-size:10px;font-weight:700;padding:1px 8px;border-radius:10px">✓ DONE</span>` : ''}
-                  ${isRace && !isDone ? `<span style="background:var(--accent);color:#000;font-size:10px;font-weight:700;padding:1px 8px;border-radius:10px">🏆 RACE</span>` : ''}
-                </div>
-                <div style="font-weight:700;margin-top:3px;font-size:15px;
-                  ${isRace?'color:var(--accent)':''}${isDone?'color:var(--g5)':''}">
-                  ${s.type}
-                </div>
+          <div class="card card-sm" style="margin-bottom:8px;${isRace?'border-color:var(--accent);background:rgba(240,192,64,0.08)':''}">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start">
+              <div>
+                <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.06em">Day ${s.day}</div>
+                <div style="font-weight:700;margin-top:3px;${isRace?'color:var(--accent)':''}">${s.type}</div>
                 <div style="font-size:13px;color:var(--text2);margin-top:4px;line-height:1.5">${s.desc}</div>
-                ${isDone && doneData?.dist > 0
-                  ? `<div style="font-size:12px;color:var(--g5);margin-top:5px">📍 ${doneData.dist.toFixed(2)} km · ${fmtTime(doneData.dur || 0)} · ${doneData.date}</div>`
-                  : isDone
-                    ? `<div style="font-size:12px;color:var(--text3);margin-top:4px">Completed on ${doneData?.date || 'earlier'}</div>`
-                    : ''}
               </div>
               ${s.dist > 0
                 ? `<div style="text-align:right;flex-shrink:0;margin-left:12px">
-                    <div style="font-family:var(--font-display);font-size:28px;color:${isDone?'var(--g5)':plan.color}">${s.dist}</div>
+                    <div style="font-family:var(--font-display);font-size:28px;color:${plan.color}">${s.dist}</div>
                     <div style="font-size:11px;color:var(--text3)">km</div>
                    </div>`
-                : `<div class="badge badge-blue" style="flex-shrink:0;margin-left:8px;align-self:flex-start">Rest</div>`}
+                : `<div class="badge badge-blue">Rest</div>`}
             </div>
-
-            ${!isDone ? `
-              <div style="display:flex;gap:8px">
-                ${!isRest ? `
-                  <button class="btn btn-primary btn-sm" style="flex:1;background:${plan.color};border-color:${plan.color};font-size:13px"
-                    onclick="startPlanDayRun('${key}',${s.week},${s.day},${s.dist})">
-                    ▶ Start Run
-                  </button>` : ''}
-                <button class="btn ${isRest?'btn-primary':'btn-ghost'} btn-sm"
-                  style="${isRest?'flex:1;':''}font-size:13px"
-                  onclick="confirmMarkPlanDone('${key}',${s.week},${s.day},${s.dist},${s.dur})">
-                  ${isRest ? '✓ Mark Rest Done' : '✓ Log Manually'}
-                </button>
-              </div>
-            ` : `
-              <div style="text-align:center;font-size:12px;color:var(--g5)">✅ Session complete!</div>
-            `}
           </div>`;
       }).join('')}
     </div>`;
