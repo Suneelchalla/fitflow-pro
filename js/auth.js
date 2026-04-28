@@ -48,17 +48,28 @@ async function attemptLogin(email, password) {
 
   if (cfg.webAppUrl) {
     try {
-      // Use POST so special characters in passwords (@ # $ etc.) aren't
-      // mangled by URL encoding that happens with Sheets.get / URLSearchParams
+      // Try POST first (handles special chars like @ in passwords)
       const res = await Sheets.post('login', { email, password });
       if (res && res.success !== undefined) return res;
     } catch (e) {
-      console.warn('Sheets login error:', e);
+      console.warn('Sheets POST login error:', e);
     }
-    // Network failure → fall through to local
+
+    try {
+      // Fall back to GET (for older deployments)
+      const res = await Sheets.get('login', { email, password });
+      if (res && res.success !== undefined) return res;
+    } catch (e) {
+      console.warn('Sheets GET login error:', e);
+    }
+
+    return {
+      success: false,
+      error: 'Cannot reach server. Check your connection.',
+    };
   }
 
-  // Local fallback (admin only when Sheets unreachable)
+  // Local fallback — only for admin when Sheets is unreachable
   const local = JSON.parse(localStorage.getItem('ff_local_users') || '[]');
   const u     = local.find(u => u.email.toLowerCase() === email.toLowerCase());
 
@@ -66,7 +77,7 @@ async function attemptLogin(email, password) {
     return {
       success: false,
       error: cfg.webAppUrl
-        ? 'Cannot reach server. Check your connection.'
+        ? 'Cannot reach server. Please check your internet connection.'
         : 'Sheets not configured. Contact Admin.',
     };
   }
