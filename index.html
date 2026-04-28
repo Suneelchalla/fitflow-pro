@@ -736,8 +736,11 @@ function fillDemo(email, pass) {
 async function toggleNotificationSetting() {
   document.getElementById('profile-menu').style.display = 'none';
 
-  // Check if push is supported
-  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+  if (typeof PUSH === 'undefined') {
+    showToast('Notification module not loaded. Try refreshing the app.', 'error');
+    return;
+  }
+  if (!PUSH.isSupported()) {
     showToast('Push notifications not supported on this browser.', 'info');
     return;
   }
@@ -747,37 +750,30 @@ async function toggleNotificationSetting() {
     const sub = await reg.pushManager.getSubscription();
 
     if (sub) {
-      // Currently ON — ask to disable
+      // Currently ON — disable
       if (confirm('Disable daily 6 AM workout reminders?')) {
         await PUSH.unsubscribe();
         showToast('Daily reminders disabled.', 'info');
         updateReminderBtn();
       }
     } else {
-      // Currently OFF — enable
-      const result = await PUSH.subscribe();
-      if (result) {
-        showToast('🔔 Daily reminders enabled! You will get a motivational message at 6 AM.', 'success');
-      } else {
-        // Permission denied or VAPID not configured
-        if (Notification.permission === 'denied') {
-          showToast('Notifications blocked. Enable in browser Settings → Site Settings.', 'error');
-        } else {
-          showToast('Could not enable. Make sure notifications are allowed for this site.', 'error');
-        }
-      }
-      updateReminderBtn();
+      // Currently OFF — show the enable banner (force show even if dismissed)
+      Store.remove('ff_push_dismissed_today'); // clear any dismissal
+      showPushPrompt(true);                    // force show banner
     }
   } catch(e) {
     showToast('Error: ' + e.message, 'error');
   }
 }
 
-// Update button label based on current subscription state
 async function updateReminderBtn() {
   const btn = document.getElementById('notif-toggle-btn');
   if (!btn) return;
   try {
+    if (typeof PUSH === 'undefined' || !PUSH.isSupported()) {
+      btn.textContent = '🔔 Daily Reminders';
+      return;
+    }
     const isSubscribed = await PUSH.isSubscribed();
     btn.textContent = isSubscribed ? '🔕 Reminders: ON (tap to disable)' : '🔔 Daily Reminders: OFF';
     btn.style.color  = isSubscribed ? 'var(--g5)' : 'var(--text2)';
