@@ -56,29 +56,22 @@ async function attemptLogin(email, password) {
     }
 
     try {
-      // Fall back to GET (for older deployments)
+      // Fall back to GET
       const res = await Sheets.get('login', { email, password });
       if (res && res.success !== undefined) return res;
     } catch (e) {
       console.warn('Sheets GET login error:', e);
     }
-
-    return {
-      success: false,
-      error: 'Cannot reach server. Check your connection.',
-    };
   }
 
-  // Local fallback — only for admin when Sheets is unreachable
+  // Local fallback — admin only, when Sheets is unreachable
   const local = JSON.parse(localStorage.getItem('ff_local_users') || '[]');
   const u     = local.find(u => u.email.toLowerCase() === email.toLowerCase());
 
   if (!u) {
     return {
       success: false,
-      error: cfg.webAppUrl
-        ? 'Cannot reach server. Please check your internet connection.'
-        : 'Sheets not configured. Contact Admin.',
+      error: 'Cannot reach server. Check your internet connection.',
     };
   }
   if ((u.status || '').toUpperCase() === 'INACTIVE') {
