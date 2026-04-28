@@ -1,17 +1,17 @@
-const CACHE = 'fitflow-v3'; // bumped: new push.js VAPID, no Firebase
+const CACHE = 'fitflow-v5';
 const ASSETS = [
   './',
   './index.html',
   './css/style.css',
-  './js/data.js?v=4',
-  './js/app.js?v=4',
-  './js/auth.js?v=4',
-  './js/dashboard.js?v=4',
-  './js/running.js?v=4',
-  './js/admin.js?v=4',
-  './push.js?v=4',
-  './js/custom-workouts.js?v=4',
-  './js/weekly-report.js?v=4',
+  './js/data.js?v=5',
+  './js/app.js?v=5',
+  './js/auth.js?v=5',
+  './js/dashboard.js?v=5',
+  './js/running.js?v=5',
+  './js/admin.js?v=5',
+  './push.js?v=5',
+  './js/custom-workouts.js?v=5',
+  './js/weekly-report.js?v=5',
   './manifest.json',
   'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap'
 ];
