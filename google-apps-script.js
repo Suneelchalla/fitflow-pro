@@ -28,6 +28,7 @@ const SHEETS = {
   USERS:           'Users',
   LOGS:            'CompletionLog',
   RUN_LOGS:        'RunningLog',
+  PLAN_PROGRESS:   'PlanProgress',
   CONTENT:         'Content',
   FEEDBACK:        'UserFeedback',
   CUSTOM_WORKOUTS: 'CustomWorkouts',
@@ -62,6 +63,9 @@ function doGet(e) {
       case 'login':        result = handleLogin(p.email, p.password); break;
       case 'getAllUsers':  result = { success:true, users:getAllUsers() }; break;
       case 'getUserLogs':  result = { success:true, logs:getUserLogs(p.userId) }; break;
+      case 'getUserRunLogs': result = { success:true, logs:getUserRunLogs(p.userId) }; break;
+      case 'getActivePlan':  result = getActivePlan(p.userId); break;
+      case 'getPlanProgress':result = getPlanProgress(p.userId, p.planKey); break;
       case 'getContent':   result = { success:true, content:getContent(p.key) }; break;
       case 'getAllContent': result = getAllContent(); break;
       case 'getFeedback':  result = getFeedback(); break;
@@ -84,6 +88,9 @@ function doPost(e) {
       case 'deleteUser':            result = deleteUser(body);            break;
       case 'logCompletion':         result = logCompletion(body);         break;
       case 'logRun':                result = logRun(body);                break;
+      case 'savePlanRegistration':  result = savePlanRegistration(body);  break;
+      case 'savePlanDayCompletion': result = savePlanDayCompletion(body); break;
+      case 'clearActivePlan':       result = clearActivePlan(body);       break;
       case 'saveContent':           result = saveContent(body);           break;
       case 'submitFeedback':        result = submitFeedback(body);        break;
       case 'saveCustomWorkout':     result = saveCustomWorkout(body);     break;
@@ -145,6 +152,7 @@ function setupSheets() {
   }
   _ensureSheet(SHEETS.LOGS,        ['LogID','UserID','UserEmail','Module','Day','Date','Timestamp']);
   _ensureSheet(SHEETS.RUN_LOGS,    ['LogID','UserID','UserEmail','Date','Distance_km','Duration_sec','Pace_min_km','PlanType','Timestamp']);
+  _ensureSheet(SHEETS.PLAN_PROGRESS,['RecordID','UserID','UserEmail','PlanKey','StartDate','RegisteredAt','Week','Day','CompletedDate','DistanceKm','DurationSec','Status','Timestamp']);
   _ensureSheet(SHEETS.CONTENT,     ['Key','Value','UpdatedAt']);
   _ensureSheet(SHEETS.FEEDBACK,    ['FeedbackID','UserID','Name','Email','Category','Rating','Message','Date','Timestamp']);
   _ensureSheet(SHEETS.PUSH_SUBS,   ['UserID','Name','Email','Endpoint','P256DH','Auth','SavedAt','Active']);
@@ -273,6 +281,16 @@ function deleteUser(body) {
 function logCompletion(body) {
   const sh = getSheet(SHEETS.LOGS);
   ensureHeaders(sh,['LogID','UserID','UserEmail','Module','Day','Date','Timestamp']);
+  // Prevent duplicate rows: same user + module + day + date
+  const data = sh.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if ((data[i][1]||'').toString() === (body.userId||'').toString() &&
+        (data[i][3]||'').toString() === (body.module||'').toString()  &&
+        (data[i][4]||'').toString() === (body.day||'').toString()     &&
+        (data[i][5]||'').toString() === (body.date||'').toString()) {
+      return { success:true, duplicate:true }; // already logged, silently OK
+    }
+  }
   sh.appendRow(['log_'+Date.now(),body.userId||'',body.email||'',body.module||'',body.day||'',body.date||'',new Date().toISOString()]);
   return { success:true };
 }
@@ -288,8 +306,163 @@ function getUserLogs(userId) {
 function logRun(body) {
   const sh = getSheet(SHEETS.RUN_LOGS);
   ensureHeaders(sh,['LogID','UserID','UserEmail','Date','Distance_km','Duration_sec','Pace_min_km','PlanType','Timestamp']);
+  // Prevent duplicates: same user + date + planType + distance (within 0.01 km)
+  const data = sh.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if ((data[i][1]||'').toString()  === (body.userId||'').toString()   &&
+        (data[i][3]||'').toString()  === (body.date||'').toString()     &&
+        (data[i][7]||'').toString()  === (body.planType||'Free Run').toString() &&
+        Math.abs((parseFloat(data[i][4])||0) - (parseFloat(body.distance)||0)) < 0.01) {
+      return { success:true, duplicate:true };
+    }
+  }
   sh.appendRow(['run_'+Date.now(),body.userId||'',body.email||'',body.date||'',body.distance||0,body.duration||0,body.pace||0,body.planType||'Free Run',new Date().toISOString()]);
   return { success:true };
+}
+
+function getUserRunLogs(userId) {
+  const sh   = getSheet(SHEETS.RUN_LOGS);
+  const data = sh.getDataRange().getValues();
+  if (data.length < 2) return [];
+  return data.slice(1)
+    .filter(r => (r[1]||'').toString() === userId.toString())
+    .map(r => ({
+      id:        (r[0]||'').toString(),
+      userId:    (r[1]||'').toString(),
+      email:     (r[2]||'').toString(),
+      date:      (r[3]||'').toString(),
+      distance:  parseFloat(r[4]) || 0,
+      duration:  parseInt(r[5])   || 0,
+      pace:      parseFloat(r[6]) || 0,
+      planType:  (r[7]||'Free Run').toString(),
+      timestamp: (r[8]||'').toString(),
+    }));
+}
+
+// ════════════════════════════════════════════════════════════════
+// PLAN PROGRESS
+// ════════════════════════════════════════════════════════════════
+// Sheet columns:
+// RecordID | UserID | UserEmail | PlanKey | StartDate | RegisteredAt
+// Week | Day | CompletedDate | DistanceKm | DurationSec | Status | Timestamp
+//
+// Two row types per user:
+//   Status = 'REGISTERED' — one row, Week=0, Day=0 → the active plan registration
+//   Status = 'DAY_DONE'   — one row per completed day
+
+function savePlanRegistration(body) {
+  const { userId, email, planKey, startDate, registeredAt } = body;
+  if (!userId || !planKey) return { success:false, error:'userId and planKey required.' };
+  const sh   = getSheet(SHEETS.PLAN_PROGRESS);
+  ensureHeaders(sh,['RecordID','UserID','UserEmail','PlanKey','StartDate','RegisteredAt','Week','Day','CompletedDate','DistanceKm','DurationSec','Status','Timestamp']);
+  const data = sh.getDataRange().getValues();
+
+  // Update existing REGISTERED row for this user if present, else insert
+  for (let i = 1; i < data.length; i++) {
+    if ((data[i][1]||'').toString() === userId.toString() &&
+        (data[i][11]||'').toString() === 'REGISTERED') {
+      sh.getRange(i+1,1,1,13).setValues([[
+        data[i][0], userId, email||'', planKey,
+        startDate||'', registeredAt||new Date().toISOString(),
+        0, 0, '', 0, 0, 'REGISTERED', new Date().toISOString()
+      ]]);
+      SpreadsheetApp.flush();
+      return { success:true, updated:true };
+    }
+  }
+  sh.appendRow([
+    'plan_'+Date.now(), userId, email||'', planKey,
+    startDate||'', registeredAt||new Date().toISOString(),
+    0, 0, '', 0, 0, 'REGISTERED', new Date().toISOString()
+  ]);
+  return { success:true, created:true };
+}
+
+function clearActivePlan(body) {
+  const { userId } = body;
+  if (!userId) return { success:false, error:'userId required.' };
+  const sh   = getSheet(SHEETS.PLAN_PROGRESS);
+  const data = sh.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if ((data[i][1]||'').toString() === userId.toString() &&
+        (data[i][11]||'').toString() === 'REGISTERED') {
+      sh.getRange(i+1,12).setValue('UNREGISTERED');
+      SpreadsheetApp.flush();
+      return { success:true };
+    }
+  }
+  return { success:true }; // nothing to clear is still success
+}
+
+function getActivePlan(userId) {
+  if (!userId) return { success:false, error:'userId required.' };
+  const sh   = getSheet(SHEETS.PLAN_PROGRESS);
+  const data = sh.getDataRange().getValues();
+  if (data.length < 2) return { success:true, plan:null };
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if ((row[1]||'').toString() === userId.toString() &&
+        (row[11]||'').toString() === 'REGISTERED') {
+      return { success:true, plan:{
+        planKey:      (row[3]||'').toString(),
+        startDate:    (row[4]||'').toString(),
+        registeredAt: (row[5]||'').toString(),
+      }};
+    }
+  }
+  return { success:true, plan:null };
+}
+
+function savePlanDayCompletion(body) {
+  const { userId, email, planKey, week, day, completedDate, distanceKm, durationSec } = body;
+  if (!userId || !planKey || !week || !day) return { success:false, error:'userId, planKey, week, day required.' };
+  const sh   = getSheet(SHEETS.PLAN_PROGRESS);
+  ensureHeaders(sh,['RecordID','UserID','UserEmail','PlanKey','StartDate','RegisteredAt','Week','Day','CompletedDate','DistanceKm','DurationSec','Status','Timestamp']);
+  const data = sh.getDataRange().getValues();
+
+  // Check if this day already logged — update if so
+  for (let i = 1; i < data.length; i++) {
+    const row = data[i];
+    if ((row[1]||'').toString() === userId.toString() &&
+        (row[3]||'').toString() === planKey &&
+        parseInt(row[6]) === parseInt(week) &&
+        parseInt(row[7]) === parseInt(day) &&
+        (row[11]||'').toString() === 'DAY_DONE') {
+      sh.getRange(i+1,9,1,5).setValues([[
+        completedDate||'', distanceKm||0, durationSec||0, 'DAY_DONE', new Date().toISOString()
+      ]]);
+      SpreadsheetApp.flush();
+      return { success:true, updated:true };
+    }
+  }
+  sh.appendRow([
+    'pd_'+Date.now(), userId, email||'', planKey,
+    '', '', week, day,
+    completedDate||'', distanceKm||0, durationSec||0, 'DAY_DONE', new Date().toISOString()
+  ]);
+  return { success:true, created:true };
+}
+
+function getPlanProgress(userId, planKey) {
+  if (!userId) return { success:false, error:'userId required.' };
+  const sh   = getSheet(SHEETS.PLAN_PROGRESS);
+  const data = sh.getDataRange().getValues();
+  if (data.length < 2) return { success:true, completedDays:[] };
+  const days = data.slice(1)
+    .filter(r =>
+      (r[1]||'').toString() === userId.toString() &&
+      (!planKey || (r[3]||'').toString() === planKey) &&
+      (r[11]||'').toString() === 'DAY_DONE'
+    )
+    .map(r => ({
+      planKey:       (r[3]||'').toString(),
+      week:          parseInt(r[6]) || 0,
+      day:           parseInt(r[7]) || 0,
+      completedDate: (r[8]||'').toString(),
+      distanceKm:    parseFloat(r[9]) || 0,
+      durationSec:   parseInt(r[10])  || 0,
+    }));
+  return { success:true, completedDays:days };
 }
 
 // ════════════════════════════════════════════════════════════════
