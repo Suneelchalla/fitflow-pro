@@ -526,16 +526,19 @@ function clearActivePlan() {
 
 // Show / hide "My Plan" bottom nav tab based on whether user has registered a plan
 function _refreshMyPlanNav() {
-  const tab   = document.getElementById('nav-myplan');
-  const label = document.getElementById('nav-myplan-label');
+  const tab     = document.getElementById('nav-myplan');
+  const label   = document.getElementById('nav-myplan-label');
+  const runTab  = document.querySelector('.nav-item[data-nav="running"]');
   if (!tab) return;
   const active = getActivePlan();
   if (active) {
-    const plan  = APP_DATA.running.plans[active.planKey];
+    const plan = APP_DATA.running.plans[active.planKey];
     tab.style.display = '';
     if (label) label.textContent = plan ? active.planKey : 'My Plan';
+    if (runTab) runTab.style.display = 'none'; // hide Run tab when plan active
   } else {
     tab.style.display = 'none';
+    if (runTab) runTab.style.display = ''; // show Run tab when no plan
   }
 }
 
