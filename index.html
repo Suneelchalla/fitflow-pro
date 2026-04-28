@@ -180,6 +180,7 @@
     <button class="nav-item active" data-nav="home" onclick="navTo('home')"><span class="nav-icon">🏠</span>Home</button>
     <button class="nav-item" data-nav="history" onclick="navTo('history')"><span class="nav-icon">📅</span>History</button>
     <button class="nav-item" data-nav="running" onclick="navTo('running')"><span class="nav-icon">🏃</span>Run</button>
+    <button id="nav-myplan" class="nav-item" data-nav="myplan" onclick="navTo('myplan')" style="display:none"><span class="nav-icon">🎯</span><span id="nav-myplan-label">My Plan</span></button>
     <button id="nav-admin" class="nav-item" data-nav="admin" onclick="navTo('admin')" style="display:none"><span class="nav-icon">⚙️</span>Admin</button>
   </nav>
 </div>
@@ -348,6 +349,22 @@
 
   </div><!-- /scroll-content -->
 </div><!-- /page-running -->
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PAGE: MY PLAN                                                    -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="page-my-plan" class="page">
+  <div class="page-header">
+    <button class="back-btn" onclick="navTo('home')">←</button>
+    <h2 id="myplan-title">🎯 My Plan</h2>
+    <div></div>
+  </div>
+  <div class="scroll-content" style="padding:16px">
+    <div id="myplan-content">
+      <div class="loader-wrap"><div class="loader"></div></div>
+    </div>
+  </div>
+</div><!-- /page-my-plan -->
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <!-- PAGE: GLOBAL HISTORY                                             -->
