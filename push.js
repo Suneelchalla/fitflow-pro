@@ -132,11 +132,12 @@ async function initPushNotifications() {
   }
 }
 
-function showPushPrompt() {
+function showPushPrompt(force = false) {
   if (!APP.currentUser) return;
   if (APP.currentUser.role === 'ADMIN') return;
-  if (APP.currentPage !== 'page-dashboard') return;
-  if (Store.get('ff_push_dismissed_today') === new Date().toDateString()) return;
+  // Only auto-show on dashboard; but can be forced from profile menu
+  if (!force && APP.currentPage !== 'page-dashboard') return;
+  if (!force && Store.get('ff_push_dismissed_today') === new Date().toDateString()) return;
   const banner = document.getElementById('push-banner');
   if (banner) {
     banner.classList.remove('hidden');
