@@ -63,7 +63,9 @@ function doGet(e) {
       case 'login':        result = handleLogin(p.email, p.password); break;
       case 'getAllUsers':  result = { success:true, users:getAllUsers() }; break;
       case 'getUserLogs':  result = { success:true, logs:getUserLogs(p.userId) }; break;
+      case 'getAllLogs':   result = { success:true, logs:getAllLogs() }; break;
       case 'getUserRunLogs': result = { success:true, logs:getUserRunLogs(p.userId) }; break;
+      case 'getAllRunLogs':  result = { success:true, logs:getAllRunLogs() }; break;
       case 'getActivePlan':  result = getActivePlan(p.userId); break;
       case 'getPlanProgress':result = getPlanProgress(p.userId, p.planKey); break;
       case 'getContent':   result = { success:true, content:getContent(p.key) }; break;
@@ -83,6 +85,7 @@ function doPost(e) {
   try {
     switch (body.action) {
       case 'createUser':            result = createUser(body);            break;
+      case 'login':                 result = handleLogin(body.email, body.password); break;
       case 'changePassword':        result = changePassword(body);        break;
       case 'updateUserStatus':      result = updateUserStatus(body);      break;
       case 'deleteUser':            result = deleteUser(body);            break;
@@ -301,6 +304,28 @@ function getUserLogs(userId) {
   if (data.length<2) return [];
   return data.slice(1).filter(r=>(r[1]||'').toString()===userId.toString())
     .map(r=>({ id:r[0],userId:r[1],email:r[2],module:r[3],day:r[4],date:r[5],timestamp:r[6] }));
+}
+
+function getAllLogs() {
+  const sh   = getSheet(SHEETS.LOGS);
+  const data = sh.getDataRange().getValues();
+  if (data.length<2) return [];
+  return data.slice(1).map(r=>({
+    id:r[0], userId:(r[1]||'').toString(), email:(r[2]||'').toString(),
+    module:(r[3]||'').toString(), day:(r[4]||'').toString(),
+    date:(r[5]||'').toString(), timestamp:(r[6]||'').toString()
+  }));
+}
+
+function getAllRunLogs() {
+  const sh   = getSheet(SHEETS.RUN_LOGS);
+  const data = sh.getDataRange().getValues();
+  if (data.length<2) return [];
+  return data.slice(1).map(r=>({
+    id:(r[0]||'').toString(), userId:(r[1]||'').toString(), email:(r[2]||'').toString(),
+    date:(r[3]||'').toString(), distance:parseFloat(r[4])||0, duration:parseInt(r[5])||0,
+    pace:parseFloat(r[6])||0, planType:(r[7]||'Free Run').toString(), timestamp:(r[8]||'').toString()
+  }));
 }
 
 function logRun(body) {
