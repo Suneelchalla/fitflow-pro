@@ -13,6 +13,8 @@ window.APP = {
   selectedPlan:     null,
   selectedPlanWeek: 1,
   editingContent:   null,
+  _planRunCtx:      null,
+  _myPlanViewWeek:  null,
 };
 
 // ── STORAGE ───────────────────────────────────────────────────────
@@ -123,7 +125,7 @@ function showToast(msg, type = 'success') {
 }
 
 // ── PAGE ROUTING ─────────────────────────────────────────────────
-const ROOT_PAGES = ['page-login', 'page-dashboard', 'page-admin', 'page-quote', 'page-onboarding'];
+const ROOT_PAGES = ['page-login', 'page-dashboard', 'page-admin', 'page-quote', 'page-onboarding', 'page-my-plan'];
 
 function showPage(id, addToHistory = true) {
   const prev = APP.currentPage;
@@ -170,14 +172,14 @@ window.addEventListener('popstate', () => {
   goBack();
 });
 
-// Swipe-right → back
+// Swipe-left → back
 (function () {
   let sx = 0, sy = 0;
   document.addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
   document.addEventListener('touchend', e => {
     const dx = e.changedTouches[0].clientX - sx;
     const dy = Math.abs(e.changedTouches[0].clientY - sy);
-    if (dx > 70 && dy < 80 && !ROOT_PAGES.includes(APP.currentPage)) goBack();
+    if (dx < -70 && dy < 80 && !ROOT_PAGES.includes(APP.currentPage)) goBack();
   }, { passive: true });
 })();
 
@@ -275,6 +277,7 @@ function navTo(tab) {
   if      (tab === 'home')    { showPage('page-dashboard', false); refreshDashboard(); }
   else if (tab === 'history') { showPage('page-history-global'); renderGlobalHistory(); }
   else if (tab === 'running') { openModule('running'); }
+  else if (tab === 'myplan')  { if (typeof openMyPlanPage === 'function') openMyPlanPage(); }
   else if (tab === 'admin')   { showPage('page-admin', false); renderAdminPanel(); }
 }
 
