@@ -14,6 +14,7 @@ window.APP = {
   selectedPlanWeek: 1,
   editingContent:   null,
   _planRunCtx:      null,   // tracks which plan day launched the current run
+  _myPlanViewWeek:  null,   // which week user is viewing in My Plan tab
 };
 
 // ── STORAGE ───────────────────────────────────────────────────────
@@ -133,7 +134,7 @@ function goBack() {
 function _syncNav(pageId) {
   if      (pageId === 'page-dashboard')      setActiveNav('home');
   else if (pageId === 'page-history-global') setActiveNav('history');
-  else if (pageId === 'page-running')        setActiveNav('running');
+  else if (pageId === 'page-my-plan')        setActiveNav('myplan');
   else if (pageId === 'page-admin')          setActiveNav('admin');
 }
 
@@ -181,7 +182,7 @@ window.addEventListener('popstate', () => {
 
   document.addEventListener('touchstart', e => {
     // Only on root pages (dashboard, admin) and when scrolled to top
-    const rootPages = ['page-dashboard', 'page-admin', 'page-history-global'];
+    const rootPages = ['page-dashboard', 'page-admin', 'page-history-global', 'page-my-plan'];
     if (!rootPages.includes(APP.currentPage)) return;
     const scrollEl = document.querySelector('#' + APP.currentPage + ' .scroll-content');
     if (scrollEl && scrollEl.scrollTop > 5) return; // not at top
@@ -227,6 +228,8 @@ window.addEventListener('popstate', () => {
         renderAdminPanel();
       } else if (APP.currentPage === 'page-history-global') {
         renderGlobalHistory();
+      } else if (APP.currentPage === 'page-my-plan') {
+        renderMyPlan();
       }
     } catch (e) {
       showToast('Refresh failed. Check connection.', 'error');
@@ -249,7 +252,7 @@ function navTo(tab) {
   APP.pageHistory = [];
   if      (tab === 'home')    { showPage('page-dashboard', false); refreshDashboard(); }
   else if (tab === 'history') { showPage('page-history-global'); renderGlobalHistory(); }
-  else if (tab === 'running') { openModule('running'); }
+  else if (tab === 'myplan')  { showPage('page-my-plan'); renderMyPlan(); }
   else if (tab === 'admin')   { showPage('page-admin', false); renderAdminPanel(); }
 }
 
@@ -352,6 +355,11 @@ document.addEventListener('DOMContentLoaded', () => {
       renderQuote();
     } else {
       setActiveNav('home');
+    }
+
+    // Restore My Plan nav tab if user has a registered plan
+    if (session.role !== 'ADMIN' && typeof _refreshMyPlanNav === 'function') {
+      _refreshMyPlanNav();
     }
 
     // Init push for non-admin on session restore (page reload)
