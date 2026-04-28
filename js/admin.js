@@ -1011,34 +1011,34 @@ function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workout
 // ════════════════════════════════════════════════════════════════
 // ADMIN ANALYTICS DASHBOARD
 // ════════════════════════════════════════════════════════════════
-function renderAdminAnalytics() {
+async function renderAdminAnalytics() {
   const container = document.getElementById('admin-analytics-content');
   if (!container) return;
+  container.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text3)"><div class="loader" style="margin:0 auto 12px"></div>Loading analytics…</div>`;
 
-  const allLogs    = Store.getLogs();
-  const allRuns    = Store.getRunLogs();
-  const allUsers   = JSON.parse(localStorage.getItem('ff_local_users') || '[]');
-  const today      = todayStr();
-  const monday     = getMonday();
+  // Fetch all logs from Sheets (authoritative cross-device data)
+  let allLogs = Store.getLogs();
+  let allRuns = Store.getRunLogs();
+  try {
+    const [logsRes, runsRes] = await Promise.all([
+      Sheets.get('getAllLogs'),
+      Sheets.get('getAllRunLogs'),
+    ]);
+    if (logsRes?.success && logsRes.logs?.length) allLogs = logsRes.logs;
+    if (runsRes?.success && runsRes.logs?.length) allRuns = runsRes.logs;
+  } catch(e) { /* fall through to local data */ }
 
-  // Week boundaries
-  const prevMon = (() => { const d = new Date(monday); d.setDate(d.getDate()-7); return d.toISOString().split('T')[0]; })();
-  const prevSun = (() => { const d = new Date(monday); d.setDate(d.getDate()-1); return d.toISOString().split('T')[0]; })();
+  const today  = todayStr();
+  const monday = getMonday();
+  const prevMon = (() => { const d=new Date(monday); d.setDate(d.getDate()-7); return d.toISOString().split('T')[0]; })();
+  const prevSun = (() => { const d=new Date(monday); d.setDate(d.getDate()-1); return d.toISOString().split('T')[0]; })();
 
   const thisWeekLogs = allLogs.filter(l => l.date >= monday);
   const lastWeekLogs = allLogs.filter(l => l.date >= prevMon && l.date <= prevSun);
   const thisWeekRuns = allRuns.filter(r => r.date >= monday);
   const todayLogs    = allLogs.filter(l => l.date === today);
 
-  // Module popularity
-  const modCounts = {};
-  allLogs.forEach(l => { const m = l.module.startsWith('custom_') ? 'custom' : l.module; modCounts[m] = (modCounts[m]||0)+1; });
-  const topMods = Object.entries(modCounts).sort((a,b)=>b[1]-a[1]);
-  const maxMod  = topMods[0]?.[1] || 1;
-
-  // Active users last 7 days
-  const last7 = new Date(); last7.setDate(last7.getDate()-7);
-  const last7Str = last7.toISOString().split('T')[0];
+  const last7Str = (() => { const d=new Date(); d.setDate(d.getDate()-7); return d.toISOString().split('T')[0]; })();
   const activeUserIds = [...new Set(allLogs.filter(l=>l.date>=last7Str).map(l=>l.userId))];
 
   // Per-day activity last 14 days
@@ -1049,28 +1049,32 @@ function renderAdminAnalytics() {
   const dayVals = Object.values(dayActivity);
   const maxDay  = Math.max(...dayVals, 1);
 
-  // Dropout risk: users with no activity in 7+ days
+  // Module popularity
+  const modCounts = {};
+  allLogs.forEach(l => { const m=l.module?.startsWith('custom_')?'custom':l.module; modCounts[m]=(modCounts[m]||0)+1; });
+  const topMods = Object.entries(modCounts).sort((a,b)=>b[1]-a[1]);
+  const maxMod  = topMods[0]?.[1] || 1;
+
+  // Dropout risk
   const userLastActivity = {};
-  allLogs.forEach(l => { if (!userLastActivity[l.userId] || l.date > userLastActivity[l.userId]) userLastActivity[l.userId]=l.date; });
+  allLogs.forEach(l => { if (!userLastActivity[l.userId]||l.date>userLastActivity[l.userId]) userLastActivity[l.userId]=l.date; });
   const dropout = Object.entries(userLastActivity).filter(([,d])=>d<last7Str).map(([uid])=>uid);
 
   container.innerHTML = `
-    <!-- KPI row -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-      ${_aKpi('📅','This Week', thisWeekLogs.length + ' sessions', lastWeekLogs.length ? (thisWeekLogs.length>=lastWeekLogs.length?'↑':'↓')+' vs last week':'')}
-      ${_aKpi('🏃','Runs This Week', thisWeekRuns.length + ' runs', thisWeekRuns.reduce((a,r)=>a+(r.distance||0),0).toFixed(1)+' km total')}
-      ${_aKpi('👥','Active (7 days)', activeUserIds.length + ' users', 'out of tracked users')}
-      ${_aKpi('📍','Today Sessions', todayLogs.length + ' done', [...new Set(todayLogs.map(l=>l.userId))].length+' users active')}
+      ${_aKpi('📅','This Week', thisWeekLogs.length+' sessions', lastWeekLogs.length?(thisWeekLogs.length>=lastWeekLogs.length?'↑':'↓')+' vs last week':'')}
+      ${_aKpi('🏃','Runs This Week', thisWeekRuns.length+' runs', thisWeekRuns.reduce((a,r)=>a+(r.distance||0),0).toFixed(1)+' km total')}
+      ${_aKpi('👥','Active (7 days)', activeUserIds.length+' users', 'across all users')}
+      ${_aKpi('📍','Today Sessions', todayLogs.length+' done', [...new Set(todayLogs.map(l=>l.userId))].length+' users active')}
     </div>
 
-    <!-- Activity bar chart (last 14 days) -->
     <div class="card card-sm" style="margin-bottom:14px">
       <div class="section-title" style="margin-bottom:12px">📈 Activity — Last 14 Days</div>
       <div style="display:flex;align-items:flex-end;gap:3px;height:60px">
         ${dayKeys.map((d,i) => {
           const h = Math.max(4, Math.round(dayVals[i]/maxDay*56));
           const isToday = d===today;
-          return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px" title="${d}: ${dayVals[i]} sessions">
+          return `<div style="flex:1;display:flex;flex-direction:column;align-items:center" title="${d}: ${dayVals[i]} sessions">
             <div style="width:100%;background:${isToday?'var(--accent)':'var(--g3)'};height:${h}px;border-radius:3px 3px 0 0;opacity:${isToday?1:0.75}"></div>
           </div>`;
         }).join('')}
@@ -1080,7 +1084,6 @@ function renderAdminAnalytics() {
       </div>
     </div>
 
-    <!-- Module popularity -->
     <div class="card card-sm" style="margin-bottom:14px">
       <div class="section-title" style="margin-bottom:12px">🏆 Module Popularity</div>
       ${topMods.slice(0,6).map(([mod,cnt]) => `
@@ -1096,12 +1099,11 @@ function renderAdminAnalytics() {
         </div>`).join('')}
     </div>
 
-    <!-- Dropout risk -->
     ${dropout.length ? `
     <div class="card card-sm" style="margin-bottom:14px;border-color:rgba(239,154,154,0.3);background:rgba(229,57,53,0.05)">
       <div class="section-title" style="margin-bottom:8px;color:#ef9a9a">⚠️ Inactive 7+ Days (${dropout.length})</div>
-      <div style="font-size:13px;color:var(--text2);margin-bottom:10px">Consider sending them a motivation push.</div>
-      ${dropout.slice(0,5).map(uid => `
+      <div style="font-size:13px;color:var(--text2);margin-bottom:10px">Consider sending a motivation push.</div>
+      ${dropout.slice(0,5).map(uid=>`
         <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
           <span style="font-size:13px">${uid}</span>
           <span style="font-size:12px;color:#ef9a9a">Last: ${userLastActivity[uid]}</span>
@@ -1109,7 +1111,7 @@ function renderAdminAnalytics() {
       ${dropout.length>5?`<div style="font-size:12px;color:var(--text3);margin-top:6px">+${dropout.length-5} more</div>`:''}
     </div>` : `
     <div class="card card-sm" style="border-color:rgba(67,160,90,0.3);background:rgba(67,160,90,0.05)">
-      <div style="font-size:13px;color:var(--g5)">✅ All users have been active in the last 7 days!</div>
+      <div style="font-size:13px;color:var(--g5)">✅ All users active in the last 7 days!</div>
     </div>`}
   `;
 }
@@ -1126,29 +1128,38 @@ function _aKpi(emoji, label, val, sub) {
 // ════════════════════════════════════════════════════════════════
 // PER-USER PROGRESS (Admin)
 // ════════════════════════════════════════════════════════════════
-function openUserProgress(userId, userName) {
+async function openUserProgress(userId, userName) {
   const container = document.getElementById('user-progress-content');
-  const logs      = Store.getLogs().filter(l => l.userId === userId);
-  const runLogs   = Store.getRunLogs().filter(r => r.userId === userId);
-  const cwLogs    = logs.filter(l => l.module.startsWith('custom_'));
-  const stdLogs   = logs.filter(l => !l.module.startsWith('custom_'));
+  container.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text3)"><div class="loader" style="margin:0 auto 12px"></div>Loading…</div>`;
+  openModal('modal-user-progress');
 
-  const totalKm   = runLogs.reduce((a,r)=>a+(r.distance||0),0);
-  const streak    = _calcStreakForUser(userId);
-  const monday    = getMonday();
-  const weekLogs  = stdLogs.filter(l=>l.date>=monday);
+  // Fetch from Sheets for cross-device accuracy, fall back to local
+  let logs    = Store.getLogs().filter(l => l.userId === userId);
+  let runLogs = Store.getRunLogs().filter(r => r.userId === userId);
+  try {
+    const [logsRes, runsRes] = await Promise.all([
+      Sheets.get('getUserLogs',    { userId }),
+      Sheets.get('getUserRunLogs', { userId }),
+    ]);
+    if (logsRes?.success  && logsRes.logs?.length)  logs    = logsRes.logs;
+    if (runsRes?.success  && runsRes.logs?.length)  runLogs = runsRes.logs;
+  } catch(e) { /* use local */ }
 
-  // Module breakdown
+  const cwLogs   = logs.filter(l => l.module?.startsWith('custom_'));
+  const stdLogs  = logs.filter(l => !l.module?.startsWith('custom_'));
+  const totalKm  = runLogs.reduce((a,r)=>a+(r.distance||0),0);
+  const streak   = _calcStreakForUser(userId);
+  const monday   = getMonday();
+  const weekLogs = stdLogs.filter(l=>l.date>=monday);
+
   const modCounts = {};
   stdLogs.forEach(l => { modCounts[l.module]=(modCounts[l.module]||0)+1; });
 
-  // Last 30 days activity heatmap
   const last30 = {};
   for (let i=29;i>=0;i--) { const d=new Date(); d.setDate(d.getDate()-i); last30[d.toISOString().split('T')[0]]=0; }
   logs.forEach(l => { if (last30[l.date]!==undefined) last30[l.date]++; });
 
-  // Best run
-  const bestRun = runLogs.sort((a,b)=>(b.distance||0)-(a.distance||0))[0];
+  const bestRun = [...runLogs].sort((a,b)=>(b.distance||0)-(a.distance||0))[0];
 
   container.innerHTML = `
     <div style="text-align:center;padding:20px 16px 12px">
@@ -1158,23 +1169,17 @@ function openUserProgress(userId, userName) {
       <div style="font-weight:700;font-size:18px">${userName}</div>
       <div style="font-size:12px;color:var(--text3)">${userId}</div>
     </div>
-
-    <!-- Stats -->
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 16px 14px">
       <div class="stat-card"><div class="stat-val">${logs.length}</div><div class="stat-label">Workouts</div></div>
       <div class="stat-card"><div class="stat-val">${streak}🔥</div><div class="stat-label">Streak</div></div>
       <div class="stat-card"><div class="stat-val">${totalKm.toFixed(1)}</div><div class="stat-label">km Run</div></div>
     </div>
-
-    <!-- This week -->
     <div style="padding:0 16px 14px">
       <div class="card card-sm" style="background:rgba(67,160,90,0.08);border-color:rgba(67,160,90,0.2)">
         <div style="font-size:13px;font-weight:700;color:var(--g5);margin-bottom:6px">This Week</div>
         <div style="font-size:13px;color:var(--text2)">${weekLogs.length} session${weekLogs.length!==1?'s':''} · ${runLogs.filter(r=>r.date>=monday).length} run${runLogs.filter(r=>r.date>=monday).length!==1?'s':''}</div>
       </div>
     </div>
-
-    <!-- 30-day heatmap -->
     <div style="padding:0 16px 14px">
       <div class="section-title" style="margin-bottom:8px">Last 30 Days</div>
       <div style="display:flex;gap:3px;flex-wrap:wrap">
@@ -1186,8 +1191,6 @@ function openUserProgress(userId, userName) {
         <span>⬜ None</span><span style="color:var(--g3)">▪ Active</span><span style="color:var(--g4)">▪ Very active</span>
       </div>
     </div>
-
-    <!-- Module breakdown -->
     ${Object.keys(modCounts).length ? `
     <div style="padding:0 16px 14px">
       <div class="section-title" style="margin-bottom:8px">Favourite Modules</div>
@@ -1198,8 +1201,6 @@ function openUserProgress(userId, userName) {
           <span class="badge badge-green">${cnt}</span>
         </div>`).join('')}
     </div>` : ''}
-
-    <!-- Best run -->
     ${bestRun ? `
     <div style="padding:0 16px 14px">
       <div class="card card-sm" style="background:rgba(30,136,229,0.08);border-color:rgba(30,136,229,0.2)">
@@ -1208,7 +1209,6 @@ function openUserProgress(userId, userName) {
       </div>
     </div>` : ''}
   `;
-  openModal('modal-user-progress');
 }
 
 function _calcStreakForUser(userId) {
