@@ -48,19 +48,12 @@ async function attemptLogin(email, password) {
 
   if (cfg.webAppUrl) {
     try {
-      // Try POST first (handles special chars like @ in passwords)
-      const res = await Sheets.post('login', { email, password });
+      // Base64-encode password so special chars (@#$% etc) survive URL encoding
+      const encodedPass = btoa(unescape(encodeURIComponent(password)));
+      const res = await Sheets.get('login', { email, password: encodedPass, encoded: '1' });
       if (res && res.success !== undefined) return res;
     } catch (e) {
-      console.warn('Sheets POST login error:', e);
-    }
-
-    try {
-      // Fall back to GET
-      const res = await Sheets.get('login', { email, password });
-      if (res && res.success !== undefined) return res;
-    } catch (e) {
-      console.warn('Sheets GET login error:', e);
+      console.warn('Sheets login error:', e);
     }
   }
 
