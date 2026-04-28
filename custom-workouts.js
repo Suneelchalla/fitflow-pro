@@ -234,7 +234,13 @@ function saveWorkout() {
   if (!name) { errEl.textContent = 'Please enter a workout name.'; return; }
   if (_cwEdit.exercises.length === 0) { errEl.textContent = 'Add at least one exercise.'; return; }
 
+  // Prevent duplicate names (case-insensitive) for new workouts only
   const user = APP.currentUser;
+  const isNew = !_cwEdit.id;
+  if (isNew) {
+    const nameExists = CW.getAll(user.id).some(w => w.name.trim().toLowerCase() === name.toLowerCase());
+    if (nameExists) { errEl.textContent = `A workout named "${name}" already exists. Choose a different name.`; return; }
+  }
   const workout = {
     id:          _cwEdit.id || 'cw_' + Date.now(),
     name,
