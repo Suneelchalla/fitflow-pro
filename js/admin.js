@@ -163,6 +163,8 @@ async function saveNewUser() {
 
   errEl.textContent = '';
   if (!name || !email || !tmpPass) { errEl.textContent = 'All fields are required.'; return; }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { errEl.textContent = 'Please enter a valid email address.'; return; }
+  if (name.trim().length < 2)      { errEl.textContent = 'Name must be at least 2 characters.'; return; }
   if (tmpPass.length < 4)          { errEl.textContent = 'Temp password must be at least 4 characters.'; return; }
   if (!Store.getSheetsConfig().webAppUrl) { errEl.textContent = 'Configure Google Sheets first (Content → Configure Sheets).'; return; }
 
