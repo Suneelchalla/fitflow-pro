@@ -174,7 +174,7 @@
   <nav class="bottom-nav" style="position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px">
     <button class="nav-item active" data-nav="home" onclick="navTo('home')"><span class="nav-icon">🏠</span>Home</button>
     <button class="nav-item" data-nav="history" onclick="navTo('history')"><span class="nav-icon">📅</span>History</button>
-    <button class="nav-item" data-nav="running" onclick="navTo('running')"><span class="nav-icon">🏃</span>Run</button>
+    <button id="nav-myplan" class="nav-item" data-nav="myplan" onclick="navTo('myplan')" style="display:none"><span class="nav-icon">🎯</span><span id="nav-myplan-label">My Plan</span></button>
     <button id="nav-admin" class="nav-item" data-nav="admin" onclick="navTo('admin')" style="display:none"><span class="nav-icon">⚙️</span>Admin</button>
   </nav>
 </div>
@@ -339,6 +339,38 @@
 
   </div><!-- /scroll-content -->
 </div><!-- /page-running -->
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PAGE: MY PLAN (registered training plan — bottom tab)           -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="page-my-plan" class="page">
+  <div class="scroll-content pb-nav">
+
+    <div class="top-bar">
+      <button class="back-btn" onclick="navTo('home')">‹</button>
+      <div class="top-bar-title" id="myplan-title">🎯 My Plan</div>
+      <button class="btn btn-ghost btn-sm" onclick="showChangePlanSheet()" style="font-size:12px;padding:6px 10px">Change</button>
+    </div>
+
+    <div class="container" style="padding-top:16px">
+      <div id="myplan-content"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- BOTTOM SHEET: Choose / Change Plan -->
+<div id="modal-choose-plan" class="modal-overlay">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🏃 Choose Your Training Plan</div>
+    <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.5">
+      Pick a goal. Your daily schedule will appear in the <strong>My Plan</strong> tab so you can track every session.
+    </div>
+    <div id="choose-plan-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px"></div>
+    <button class="btn btn-outline btn-full" onclick="closeModal('modal-choose-plan')">Cancel</button>
+  </div>
+</div>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <!-- PAGE: GLOBAL HISTORY                                             -->
