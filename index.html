@@ -799,6 +799,19 @@
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <!-- SCRIPTS                                                          -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- Force kill old service workers before loading any scripts -->
+<script>
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.getRegistrations().then(function(regs) {
+      regs.forEach(function(r) { r.unregister(); });
+    });
+    if (window.caches) {
+      caches.keys().then(function(keys) {
+        keys.forEach(function(k) { caches.delete(k); });
+      });
+    }
+  }
+</script>
 <script src="js/data.js?v=6"></script>
 <script src="js/app.js?v=6"></script>
 <script src="js/auth.js?v=6"></script>
