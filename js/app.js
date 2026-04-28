@@ -69,7 +69,7 @@ const Store = {
   // Hardcoded URL ensures ALL users connect automatically.
   // This always takes priority — localStorage config is ignored
   // to prevent stale/wrong URLs from breaking login.
-  _defaultSheetsUrl: 'https://script.google.com/macros/s/AKfycbwvwOfbFS5xgS_H_cvVb8ipT9qBOxU26QRBNGxl6i75T06KOR07ZyyE5fZDh-ans5DG/exec',
+  _defaultSheetsUrl: 'https://script.google.com/macros/s/AKfycbxIQbKngcobi-f2MmU6iSn2awYyWtK4KjRbKkXhabtV1M7BuRMNG9wwn0nAifM1ik_A/exec',
 
   getSheetsConfig() {
     // Always use the hardcoded URL — never trust localStorage for this
