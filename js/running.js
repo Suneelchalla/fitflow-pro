@@ -325,6 +325,12 @@ function stopRun() {
   document.getElementById('sum-time').textContent = fmtTime(elapsed);
   document.getElementById('sum-pace').textContent = fmtPace(s.distance, elapsed) + ' /km';
   document.getElementById('sum-cal').textContent  = Math.round(s.distance * 60) + ' kcal';
+
+  // PB detection
+  _renderRunPBBadges(s.distance, elapsed);
+
+  // Route map
+  _renderRunRouteMap(APP.gpsCoords);
 }
 
 // ── SAVE ─────────────────────────────────────────────────────────
@@ -374,12 +380,14 @@ function saveRun() {
 
   // Return to My Plan tab if that's where the run was started from
   const fromMyPlan = ctx?.fromMyPlan;
+  const ctxCopy = ctx ? { ...ctx } : null;
   APP._planRunCtx = null;
   if (fromMyPlan) {
     navTo('myplan');
   } else {
     renderRunHistory();
   }
+  if (ctxCopy) checkPlanCompletion(ctxCopy.planKey, ctxCopy.week);
 }
 
 // ── DISCARD ───────────────────────────────────────────────────────
@@ -455,6 +463,7 @@ function confirmMarkPlanDone(planKey, week, day, dist, dur) {
   _markPlanDayDone(planKey, week, day, dist, dur);
   showToast('Day marked complete! 🎉', 'success');
   renderRunHistory();
+  checkPlanCompletion(planKey, week);
 }
 function startPlanDayRun(planKey, week, day, targetDist) {
   APP._planRunCtx  = { planKey, week, day, targetDist, fromMyPlan: APP.currentPage === 'page-my-plan' };
@@ -1036,4 +1045,152 @@ function renderDietRunning() {
           <div style="font-size:12px;color:var(--text3)">📌 ${m.note}</div>
         </div>`).join('')}
     </div>`;
+}
+
+// ════════════════════════════════════════════════════════════════
+// PERSONAL BESTS
+// ════════════════════════════════════════════════════════════════
+function _getPBs(userId) {
+  return Store.get('ff_pbs_' + userId, { distance: 0, pace: 9999, duration: 0 });
+}
+function _savePBs(userId, pbs) {
+  Store.set('ff_pbs_' + userId, pbs);
+}
+
+function _renderRunPBBadges(distance, elapsed) {
+  const el = document.getElementById('sum-pb-badges');
+  if (!el) return;
+  const user   = APP.currentUser;
+  const pbs    = _getPBs(user.id);
+  const pace   = distance > 0 ? elapsed / 60 / distance : 9999;
+  const badges = [];
+  const newPbs = { ...pbs };
+
+  if (distance > 0 && distance > (pbs.distance || 0)) {
+    badges.push(`<span style="background:var(--accent);color:#000;font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px">🏆 NEW PB — Longest Run!</span>`);
+    newPbs.distance = distance;
+  }
+  if (distance >= 0.5 && pace < (pbs.pace || 9999)) {
+    badges.push(`<span style="background:rgba(30,136,229,0.8);color:white;font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px">⚡ NEW PB — Best Pace!</span>`);
+    newPbs.pace = pace;
+  }
+  if (elapsed > (pbs.duration || 0)) {
+    badges.push(`<span style="background:rgba(67,160,90,0.8);color:white;font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px">⏱ NEW PB — Longest Time!</span>`);
+    newPbs.duration = elapsed;
+  }
+
+  if (badges.length) {
+    _savePBs(user.id, newPbs);
+    el.innerHTML = badges.join('');
+    el.style.display = 'flex';
+  } else {
+    el.style.display = 'none';
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// RUN ROUTE MAP (SVG canvas from GPS coords)
+// ════════════════════════════════════════════════════════════════
+function _renderRunRouteMap(coords) {
+  const el = document.getElementById('sum-route-map');
+  if (!el) return;
+
+  // Filter valid coords
+  const pts = (coords || []).filter(c => c.lat && c.lon);
+  if (pts.length < 2) { el.innerHTML = ''; return; }
+
+  // Bounding box
+  const lats = pts.map(p => p.lat);
+  const lons = pts.map(p => p.lon);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const minLon = Math.min(...lons), maxLon = Math.max(...lons);
+  const padPct = 0.15;
+  const latRange = (maxLat - minLat) || 0.001;
+  const lonRange = (maxLon - minLon) || 0.001;
+
+  const W = 340, H = 200;
+  const toX = lon => ((lon - minLon) / lonRange * (1 - 2*padPct) + padPct) * W;
+  const toY = lat => ((1 - (lat - minLat) / latRange) * (1 - 2*padPct) + padPct) * H;
+
+  const pathD = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${toX(p.lon).toFixed(1)},${toY(p.lat).toFixed(1)}`).join(' ');
+  const start = pts[0], end = pts[pts.length - 1];
+
+  el.innerHTML = `
+    <div class="card card-sm" style="padding:12px">
+      <div style="font-size:12px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">📍 Your Route</div>
+      <svg viewBox="0 0 ${W} ${H}" width="100%" style="border-radius:8px;background:var(--bg3)">
+        <!-- Grid lines -->
+        <line x1="0" y1="${H/2}" x2="${W}" y2="${H/2}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+        <line x1="${W/2}" y1="0" x2="${W/2}" y2="${H}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
+        <!-- Route shadow -->
+        <path d="${pathD}" fill="none" stroke="rgba(46,125,70,0.3)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+        <!-- Route line -->
+        <path d="${pathD}" fill="none" stroke="var(--g4)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+        <!-- Start dot -->
+        <circle cx="${toX(start.lon).toFixed(1)}" cy="${toY(start.lat).toFixed(1)}" r="6" fill="var(--g5)" stroke="white" stroke-width="2"/>
+        <!-- End dot -->
+        <circle cx="${toX(end.lon).toFixed(1)}" cy="${toY(end.lat).toFixed(1)}" r="6" fill="var(--accent)" stroke="white" stroke-width="2"/>
+      </svg>
+      <div style="display:flex;gap:16px;margin-top:8px;font-size:11px;color:var(--text3)">
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--g5);margin-right:4px;vertical-align:middle"></span>Start</span>
+        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--accent);margin-right:4px;vertical-align:middle"></span>Finish</span>
+        <span style="margin-left:auto">${pts.length} GPS points</span>
+      </div>
+    </div>`;
+}
+
+// ════════════════════════════════════════════════════════════════
+// PLAN COMPLETION CERTIFICATE
+// ════════════════════════════════════════════════════════════════
+function checkPlanCompletion(planKey, week) {
+  const plan   = APP_DATA.running.plans[planKey];
+  if (!plan || week < plan.weeks) return;
+  const active = getActivePlan();
+  if (!active || active.planKey !== planKey) return;
+
+  // Check all sessions in final week done
+  const finalWeek = plan.schedule.filter(s => s.week === plan.weeks);
+  const allDone   = finalWeek.every(s => isPlanDayDone(planKey, plan.weeks, s.day));
+  if (!allDone) return;
+
+  // Check not already celebrated
+  const celebKey = `ff_plan_cert_${APP.currentUser.id}_${planKey}`;
+  if (Store.get(celebKey)) return;
+  Store.set(celebKey, todayStr());
+
+  setTimeout(() => showPlanCertificate(planKey), 500);
+}
+
+function showPlanCertificate(planKey) {
+  const plan = APP_DATA.running.plans[planKey];
+  const user = APP.currentUser;
+  document.getElementById('plan-complete-content').innerHTML = `
+    <div style="padding:20px 8px">
+      <div style="font-size:64px;margin-bottom:8px">🏆</div>
+      <div style="font-family:var(--font-display);font-size:36px;color:var(--accent);margin-bottom:4px">FINISHER!</div>
+      <div style="font-size:18px;font-weight:700;margin-bottom:8px">${plan.emoji} ${planKey} Plan Complete</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:16px">
+        Congratulations <strong>${user.name.split(' ')[0]}</strong>!<br>
+        You completed all ${plan.weeks} weeks of the ${planKey} training plan. That's real dedication! 💪
+      </div>
+      <div style="background:var(--bg3);border-radius:12px;padding:14px;margin-bottom:8px">
+        <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.08em">Certificate of Completion</div>
+        <div style="font-size:15px;font-weight:700;margin-top:6px">${user.name}</div>
+        <div style="font-size:13px;color:var(--text2)">${planKey} Training Programme · ${plan.weeks} Weeks</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:4px">Completed ${todayStr()}</div>
+      </div>
+    </div>`;
+  openModal('modal-plan-complete');
+}
+
+function sharePlanCertificate() {
+  const active = getActivePlan();
+  if (!active) return;
+  const plan = APP_DATA.running.plans[active.planKey];
+  const text = `🏆 I just completed the ${active.planKey} (${plan.weeks}-week) training plan on FitFlow Pro! 💪 #FitFlowPro #Running #${active.planKey}`;
+  if (navigator.share) {
+    navigator.share({ title: 'FitFlow Pro — Plan Complete!', text }).catch(()=>{});
+  } else {
+    navigator.clipboard?.writeText(text).then(()=>showToast('Copied to clipboard!','success'));
+  }
 }
