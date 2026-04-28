@@ -191,6 +191,10 @@ function startRun() {
   if (!navigator.geolocation) {
     showToast('GPS not available on this device.', 'error'); return;
   }
+  // Guard: don't overwrite an already-active run session
+  if (APP.runSession) {
+    showToast('A run is already in progress!', 'info'); return;
+  }
 
   APP.runSession = {
     startTime:   Date.now(),
@@ -529,6 +533,12 @@ function _refreshMyPlanNav() {
 // ── REGISTER PLAN ─────────────────────────────────────────────────
 function registerPlan(planKey) {
   const existing = getActivePlan();
+  if (existing && existing.planKey === planKey) {
+    closeModal('modal-choose-plan');
+    showToast(`You're already on the ${planKey} plan! 💪`, 'info');
+    navTo('myplan');
+    return;
+  }
   if (existing && existing.planKey !== planKey) {
     if (!confirm(`You're already on the ${existing.planKey} plan. Switch to ${planKey}? Your progress will be kept.`)) return;
   }
