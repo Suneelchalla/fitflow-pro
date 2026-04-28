@@ -32,7 +32,7 @@ window.APP_DATA = {
     ],
   },
 
-    cooldowns: {
+  cooldowns: {
     cardio: [
       { name:"Cool-Down & Stretch", sets:1, reps:"5 min", desc:"Slow walk 2 min → standing quad stretch 30 sec each → standing hamstring stretch 30 sec each → hip flexor stretch 30 sec each → chest opener 45 sec. Essential for recovery and flexibility.", image:"", demo:"https://www.youtube.com/results?search_query=cardio+cool+down+stretch+routine", tag:"cooldown" },
     ],
