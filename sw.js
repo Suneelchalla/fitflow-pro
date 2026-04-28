@@ -1,4 +1,4 @@
-const CACHE = 'fitflow-v2'; // bumped: running.js lock-screen update
+const CACHE = 'fitflow-v3'; // bumped: new push.js VAPID, no Firebase
 const ASSETS = [
   './',
   './index.html',
