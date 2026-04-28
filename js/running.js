@@ -583,6 +583,12 @@ function showChangePlanSheet() {
 }
 
 // ── MY PLAN PAGE ──────────────────────────────────────────────────
+function openMyPlanPage() {
+  showPage('page-my-plan', false);
+  APP._myPlanViewWeek = null;
+  renderMyPlan();
+}
+
 function renderMyPlan() {
   const container = document.getElementById('myplan-content');
   const active    = getActivePlan();
