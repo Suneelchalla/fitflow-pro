@@ -128,16 +128,17 @@ function completeLogin(user) {
 }
 
 // ── SYNC FROM SHEETS (background, non-blocking) ──────────────────
-// Fetches: all admin content edits + user's own workout logs
+// Fetches: all admin content edits + user's own workout logs + run logs + plan progress
 async function syncContentFromSheets() {
   const cfg  = Store.getSheetsConfig();
   const user = APP.currentUser;
   if (!cfg.webAppUrl) return;
 
-  // Run both in parallel
   await Promise.all([
     _syncContent(),
-    user ? _syncUserLogs(user.id) : Promise.resolve(),
+    user ? _syncUserLogs(user.id)        : Promise.resolve(),
+    user ? _syncUserRunLogs(user.id)     : Promise.resolve(),
+    user ? _syncPlanProgress(user.id)    : Promise.resolve(),
   ]);
 }
 
@@ -179,6 +180,71 @@ async function _syncUserLogs(userId) {
     if (changed) Store.set('ff_logs', local);
   } catch (e) {
     console.warn('Log sync skipped:', e.message);
+  }
+}
+
+async function _syncUserRunLogs(userId) {
+  try {
+    const res = await Sheets.get('getUserRunLogs', { userId });
+    if (!res?.success || !Array.isArray(res.logs) || !res.logs.length) return;
+
+    const local = Store.getRunLogs();
+    let changed = false;
+    res.logs.forEach(sheetLog => {
+      // Deduplicate by date + planType + distance (close enough for runs)
+      const exists = local.find(l =>
+        l.userId   === sheetLog.userId &&
+        l.date     === sheetLog.date   &&
+        l.planType === sheetLog.planType &&
+        Math.abs((l.distance||0) - (sheetLog.distance||0)) < 0.01
+      );
+      if (!exists) {
+        local.push({ ...sheetLog, id: sheetLog.id || 'run_' + Date.now() + Math.random() });
+        changed = true;
+      }
+    });
+    if (changed) Store.set('ff_runlogs', local);
+  } catch (e) {
+    console.warn('Run log sync skipped:', e.message);
+  }
+}
+
+async function _syncPlanProgress(userId) {
+  try {
+    // Sync active plan registration
+    const planRes = await Sheets.get('getActivePlan', { userId });
+    if (planRes?.success && planRes.plan) {
+      const k = `ff_activeplan_${userId}`;
+      const local = Store.get(k);
+      // Only overwrite if Sheets has a plan and local doesn't, or planKey differs
+      if (!local || local.planKey !== planRes.plan.planKey) {
+        Store.set(k, {
+          planKey:      planRes.plan.planKey,
+          startDate:    planRes.plan.startDate    || '',
+          registeredAt: planRes.plan.registeredAt
+            ? new Date(planRes.plan.registeredAt).getTime()
+            : Date.now(),
+        });
+        if (typeof _refreshMyPlanNav === 'function') _refreshMyPlanNav();
+      }
+    }
+
+    // Sync completed plan days
+    const progRes = await Sheets.get('getPlanProgress', { userId });
+    if (!progRes?.success || !Array.isArray(progRes.completedDays)) return;
+    progRes.completedDays.forEach(d => {
+      const key = `ff_pday_${userId}_${d.planKey}_w${d.week}_d${d.day}`;
+      if (!Store.get(key)) {
+        Store.set(key, {
+          date: d.completedDate || '',
+          dist: d.distanceKm   || 0,
+          dur:  d.durationSec  || 0,
+          ts:   d.completedDate ? new Date(d.completedDate).getTime() : Date.now(),
+        });
+      }
+    });
+  } catch (e) {
+    console.warn('Plan progress sync skipped:', e.message);
   }
 }
 
