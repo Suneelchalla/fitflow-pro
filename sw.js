@@ -1,4 +1,4 @@
-const CACHE = 'fitflow-v1';
+const CACHE = 'fitflow-v2'; // bumped: running.js lock-screen update
 const ASSETS = [
   './',
   './index.html',
@@ -9,6 +9,9 @@ const ASSETS = [
   './js/dashboard.js',
   './js/running.js',
   './js/admin.js',
+  './js/push.js',
+  './js/custom-workouts.js',
+  './js/weekly-report.js',
   './manifest.json',
   'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap'
 ];
