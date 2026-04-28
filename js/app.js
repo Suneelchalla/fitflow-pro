@@ -66,22 +66,20 @@ const Store = {
   setContent(key, val)        { this.set('ff_content_' + key, val); },
 
   // ── SHEETS URL ────────────────────────────────────────────────
-  // Paste your Google Apps Script Web App URL below.
-  // This ensures ALL users (not just admin) can reach the backend
-  // even on a fresh device where localStorage has no saved config.
+  // Hardcoded URL ensures ALL users connect automatically.
+  // This always takes priority — localStorage config is ignored
+  // to prevent stale/wrong URLs from breaking login.
   _defaultSheetsUrl: 'https://script.google.com/macros/s/AKfycbwvwOfbFS5xgS_H_cvVb8ipT9qBOxU26QRBNGxl6i75T06KOR07ZyyE5fZDh-ans5DG/exec',
 
   getSheetsConfig() {
-    const saved = this.get('ff_sheets_config', { webAppUrl: '' });
-    // If admin has saved a URL in localStorage, use that.
-    // Otherwise fall back to the hardcoded default above.
-    if (saved.webAppUrl) return saved;
-    if (this._defaultSheetsUrl && this._defaultSheetsUrl !== 'PASTE_YOUR_APPS_SCRIPT_URL_HERE') {
-      return { webAppUrl: this._defaultSheetsUrl };
-    }
-    return { webAppUrl: '' };
+    // Always use the hardcoded URL — never trust localStorage for this
+    return { webAppUrl: this._defaultSheetsUrl };
   },
-  setSheetsConfig(cfg) { this.set('ff_sheets_config', cfg); },
+  setSheetsConfig(cfg) {
+    // Keep saving to localStorage for the admin UI display, but getSheetsConfig
+    // always returns the hardcoded URL above.
+    this.set('ff_sheets_config', cfg);
+  },
 
   getHydration(uid, d)        { return this.get(`ff_h_${uid}_${d}`, 0); },
   setHydration(uid, d, ml)    { this.set(`ff_h_${uid}_${d}`, ml); },
