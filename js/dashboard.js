@@ -916,3 +916,54 @@ function renderProfilePage() {
     </div>
   `;
 }
+
+// ── PROFILE MENU ──────────────────────────────────────────────────
+function toggleProfileMenu() {
+  const menu = document.getElementById('profile-menu');
+  if (!menu) return;
+  const isOpen = menu.style.display !== 'none';
+  menu.style.display = isOpen ? 'none' : 'block';
+  // Update profile name/email in menu
+  if (!isOpen && APP.currentUser) {
+    const el = document.getElementById('profile-menu-name');
+    const em = document.getElementById('profile-menu-email');
+    if (el) el.textContent = APP.currentUser.name;
+    if (em) em.textContent = APP.currentUser.email;
+  }
+  // Close menu when clicking outside
+  if (!isOpen) {
+    setTimeout(() => {
+      document.addEventListener('click', function handler(e) {
+        const menu = document.getElementById('profile-menu');
+        const btn  = document.getElementById('profile-btn');
+        if (menu && btn && !menu.contains(e.target) && !btn.contains(e.target)) {
+          menu.style.display = 'none';
+          document.removeEventListener('click', handler);
+        }
+      });
+    }, 10);
+  }
+}
+
+function openFeedbackModal() {
+  const menu = document.getElementById('profile-menu');
+  if (menu) menu.style.display = 'none';
+  openModal('modal-feedback');
+}
+
+function toggleNotificationSetting() {
+  const menu = document.getElementById('profile-menu');
+  if (menu) menu.style.display = 'none';
+  if (typeof PUSH !== 'undefined' && PUSH.isSupported()) {
+    PUSH.isSubscribed().then(subscribed => {
+      if (subscribed) {
+        PUSH.unsubscribe();
+        showToast('Daily reminders disabled', 'info');
+      } else {
+        acceptPushNotifications();
+      }
+    });
+  } else {
+    showToast('Push notifications not supported on this device', 'error');
+  }
+}
