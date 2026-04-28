@@ -346,8 +346,20 @@ function saveRun() {
 
   // Auto-complete the plan day this run was started from
   if (ctx) {
+    const today = todayStr();
     Store.set(_planDayKey(ctx.planKey, ctx.week, ctx.day), {
-      date: todayStr(), dist: log.distance, dur: elapsed, ts: Date.now()
+      date: today, dist: log.distance, dur: elapsed, ts: Date.now()
+    });
+    // Sync plan day completion to Sheets
+    sheetsPost('savePlanDayCompletion', {
+      userId:      user.id,
+      email:       user.email,
+      planKey:     ctx.planKey,
+      week:        ctx.week,
+      day:         ctx.day,
+      completedDate: today,
+      distanceKm:  log.distance,
+      durationSec: elapsed,
     });
   }
 
@@ -400,15 +412,30 @@ function isPlanDayDone(planKey, week, day) {
   return !!Store.get(_planDayKey(planKey, week, day));
 }
 function _markPlanDayDone(planKey, week, day, distKm, durSecs) {
+  const user = APP.currentUser;
+  const today = todayStr();
   Store.set(_planDayKey(planKey, week, day), {
-    date: todayStr(), dist: distKm || 0, dur: durSecs || 0, ts: Date.now()
+    date: today, dist: distKm || 0, dur: durSecs || 0, ts: Date.now()
   });
+  // Sync day completion to Sheets
+  if (user) {
+    sheetsPost('savePlanDayCompletion', {
+      userId:      user.id,
+      email:       user.email,
+      planKey,
+      week,
+      day,
+      completedDate: today,
+      distanceKm:  distKm  || 0,
+      durationSec: durSecs || 0,
+    });
+  }
+  // Also log as a run entry if there was distance or time
   if (distKm > 0 || durSecs > 0) {
-    const user = APP.currentUser;
-    const log  = {
+    const log = {
       userId:    user.id,
       email:     user.email,
-      date:      todayStr(),
+      date:      today,
       distance:  parseFloat((distKm  || 0).toFixed(3)),
       duration:  durSecs || 0,
       pace:      (durSecs && distKm > 0) ? parseFloat((durSecs / 60 / distKm).toFixed(2)) : 0,
@@ -458,15 +485,30 @@ function getActivePlan() {
   return k ? Store.get(k) : null;        // { planKey, startDate, startWeek }
 }
 function setActivePlan(planKey) {
-  const k = getActivePlanKey();
+  const k    = getActivePlanKey();
   if (!k) return;
-  Store.set(k, { planKey, startDate: todayStr(), registeredAt: Date.now() });
+  const data = { planKey, startDate: todayStr(), registeredAt: Date.now() };
+  Store.set(k, data);
   _refreshMyPlanNav();
+  // Sync to Sheets (non-blocking)
+  const user = APP.currentUser;
+  if (user) {
+    sheetsPost('savePlanRegistration', {
+      userId:       user.id,
+      email:        user.email,
+      planKey,
+      startDate:    data.startDate,
+      registeredAt: new Date(data.registeredAt).toISOString(),
+    });
+  }
 }
 function clearActivePlan() {
   const k = getActivePlanKey();
   if (k) Store.remove(k);
   _refreshMyPlanNav();
+  // Sync to Sheets (non-blocking)
+  const user = APP.currentUser;
+  if (user) sheetsPost('clearActivePlan', { userId: user.id });
 }
 
 // Show / hide "My Plan" bottom nav tab based on whether user has registered a plan
