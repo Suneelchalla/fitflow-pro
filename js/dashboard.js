@@ -310,6 +310,11 @@ function openModule(moduleId) {
   renderModulePage(moduleId);
 }
 
+function openRunningModule() {
+  openModule('running');
+  setTimeout(() => renderRunningTabs('achievements'), 300);
+}
+
 // ── MODULE PAGE ───────────────────────────────────────────────────
 function renderModulePage(moduleId) {
   const mod = APP_DATA.modules[moduleId];
@@ -940,6 +945,30 @@ function renderProfilePage() {
     </div>
 
     <!-- Quick actions -->
+    <div class="section-title" style="margin-bottom:10px">Achievements</div>
+    ${(() => {
+      const unlocked = typeof _getAchievements === 'function' ? _getAchievements(user.id) : {};
+      const unlockedList = Object.keys(unlocked);
+      if (!unlockedList.length) return `
+        <div class="card card-sm" style="text-align:center;padding:20px;margin-bottom:20px">
+          <div style="font-size:32px;margin-bottom:8px">🏅</div>
+          <div style="font-size:13px;color:var(--text2)">No badges yet — complete your first run!</div>
+        </div>`;
+      const recentBadges = typeof ACHIEVEMENTS !== 'undefined'
+        ? ACHIEVEMENTS.filter(a => unlocked[a.id]).slice(-6).reverse()
+        : [];
+      return `
+        <div style="margin-bottom:20px">
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:10px">
+            ${recentBadges.map(a => `
+              <div style="text-align:center;background:rgba(46,125,70,0.1);border:1px solid rgba(46,125,70,0.3);border-radius:10px;padding:8px 4px" title="${a.name} — ${a.desc}">
+                <div style="font-size:26px">${a.emoji}</div>
+                <div style="font-size:9px;color:var(--text3);margin-top:3px;line-height:1.2">${a.name}</div>
+              </div>`).join('')}
+          </div>
+          <div style="font-size:12px;color:var(--text3);text-align:center">${unlockedList.length} badges unlocked · <span style="color:var(--g5);cursor:pointer" onclick="openRunningModule()">See all →</span></div>
+        </div>`;
+    })()}
     <div class="section-title" style="margin-bottom:10px">Account</div>
     <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:24px">
       <button class="btn btn-ghost btn-full" style="text-align:left;justify-content:flex-start;gap:12px"
