@@ -1027,17 +1027,18 @@ function renderAllHistory() {
         const isCustom = l._type === 'custom';
         const emoji    = isCustom ? '✏️' : getModuleEmoji(l.module);
         const name     = isCustom
-          ? '✏️ Custom: ' + (l.module.replace('custom_','').substring(0,8) + '...')
+          ? 'Custom: ' + (l.module.replace('custom_','').substring(0,12))
           : getModuleName(l.module);
         const badge    = isRun ? 'badge-blue' : isCustom ? 'badge-yellow' : 'badge-green';
         const label    = isRun ? '🏃 Run' : isCustom ? '✏️ Custom' : '✓ Done';
-        const sub      = isRun ? `${(l.distance||0).toFixed(2)}km · ${fmtTime(l.duration||0)}` : l.day;
+        const sub      = isRun ? `${(l.distance||0).toFixed(2)}km · ${fmtTime(l.duration||0)}` : (l.day || '—');
+        const userLabel = l.email || l.userId || '—';
         return `
           <div class="user-row" style="margin-bottom:6px">
             <div class="user-avatar" style="font-size:18px">${emoji}</div>
             <div class="user-info">
-              <div class="user-name">${l.userId || '—'} — ${name}</div>
-              <div class="user-email">${sub} · ${l.date || '—'}</div>
+              <div class="user-name">${name}</div>
+              <div class="user-email">${userLabel} · ${sub} · ${l.date || '—'}</div>
             </div>
             <span class="badge ${badge}">${label}</span>
           </div>`;
@@ -1316,7 +1317,7 @@ async function openUserProgress(userId, userName) {
     </div>
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 16px 14px">
       <div class="stat-card"><div class="stat-val">${logs.length}</div><div class="stat-label">Workouts</div></div>
-      <div class="stat-card"><div class="stat-val">${streak}🔥</div><div class="stat-label">Streak</div></div>
+      <div class="stat-card"><div class="stat-val">${streak}🔥</div><div class="stat-label">Day Streak</div></div>
       <div class="stat-card"><div class="stat-val">${totalKm.toFixed(1)}</div><div class="stat-label">km Run</div></div>
     </div>
     <div style="padding:0 16px 14px">
