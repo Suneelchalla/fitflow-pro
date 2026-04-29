@@ -144,6 +144,7 @@ async function syncContentFromSheets() {
     user ? _syncUserLogs(user.id)        : Promise.resolve(),
     user ? _syncUserRunLogs(user.id)     : Promise.resolve(),
     user ? _syncPlanProgress(user.id)    : Promise.resolve(),
+    user ? _syncCaliProgress(user.id)    : Promise.resolve(),
   ]);
 }
 
@@ -250,6 +251,27 @@ async function _syncPlanProgress(userId) {
     });
   } catch (e) {
     console.warn('Plan progress sync skipped:', e.message);
+  }
+}
+
+async function _syncCaliProgress(userId) {
+  try {
+    const res = await Sheets.get('getCaliProgress', { userId });
+    if (!res?.success || !res.progress) return;
+    const p = res.progress;
+    // Restore level
+    if (p.level) Store.set('ff_cali_level_' + userId, p.level);
+    // Restore active skill
+    if (p.skill) Store.set('ff_cali_skill_' + userId, p.skill);
+    // Restore skill step completions
+    Object.keys(p).filter(k => k.startsWith('skill_step_')).forEach(k => {
+      Store.set('ff_cali_skill_step_' + userId + '_' + k.replace('skill_step_', ''), p[k]);
+    });
+    // Restore 21-day challenge state
+    if (p['21day_start']) Store.set('ff_cali21_start_' + userId, p['21day_start']);
+    if (p['21day_done'])  Store.set('ff_cali21_done_'  + userId, p['21day_done']);
+  } catch (e) {
+    console.warn('Cali progress sync skipped:', e.message);
   }
 }
 
