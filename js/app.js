@@ -1,7 +1,7 @@
 // ── APP STATE ────────────────────────────────────────────────────
 // DATA_VERSION: bump this whenever data.js exercises/plans are updated
 // This triggers auto-seed to Sheets on next admin login
-const DATA_VERSION = '2026-04-29-v5';
+const DATA_VERSION = '2026-04-29-v4';
 
 window.APP = {
   currentUser:      null,
@@ -19,9 +19,6 @@ window.APP = {
   editingContent:   null,
   _planRunCtx:      null,
   _myPlanViewWeek:  null,
-  caliLevel:        'beginner',
-  caliSkill:        null,
-  cali21Day:        false,
 };
 
 // ── STORAGE ───────────────────────────────────────────────────────
@@ -144,10 +141,6 @@ function showPage(id, addToHistory = true) {
   const pg = document.getElementById(id);
   if (pg) { pg.classList.add('active'); APP.currentPage = id; pg.scrollTop = 0; }
   window.history.pushState({ page: id }, '', '#' + id);
-  // Persist current page so session restore returns here after reload
-  if (APP.currentUser) {
-    Store.set('ff_last_page_' + APP.currentUser.id, id);
-  }
 }
 
 function goBack() {
@@ -185,45 +178,13 @@ window.addEventListener('popstate', () => {
 
 // Swipe-left → back
 (function () {
-  let sx = 0, sy = 0, _swipeTarget = null;
-
-  document.addEventListener('touchstart', e => {
-    sx = e.touches[0].clientX;
-    sy = e.touches[0].clientY;
-    _swipeTarget = e.target;
-  }, { passive: true });
-
+  let sx = 0, sy = 0;
+  document.addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
   document.addEventListener('touchend', e => {
     const dx = e.changedTouches[0].clientX - sx;
     const dy = Math.abs(e.changedTouches[0].clientY - sy);
-    if (dx < -70 && dy < 80 && !ROOT_PAGES.includes(APP.currentPage)) {
-      // Don't trigger back if the swipe started inside a horizontally scrollable element
-      // (tab strips, horizontal scroll containers)
-      if (_isHorizontallyScrollable(_swipeTarget)) return;
-      goBack();
-    }
+    if (dx < -70 && dy < 80 && !ROOT_PAGES.includes(APP.currentPage)) goBack();
   }, { passive: true });
-
-  function _isHorizontallyScrollable(el) {
-    // Walk up the DOM from the touch target
-    // If any ancestor scrolls horizontally and has overflow content, this is a scroll gesture
-    while (el && el !== document.body) {
-      const style = window.getComputedStyle(el);
-      const overflowX = style.overflowX;
-      if (overflowX === 'auto' || overflowX === 'scroll') {
-        if (el.scrollWidth > el.clientWidth) return true;
-      }
-      // Also catch elements with tab-strip or explicitly scrollable class/role
-      if (el.classList && (
-        el.classList.contains('tab-strip') ||
-        el.classList.contains('day-strip') ||
-        el.classList.contains('run-tabs') ||
-        el.getAttribute('data-scroll') === 'x'
-      )) return true;
-      el = el.parentElement;
-    }
-    return false;
-  }
 })();
 
 // ── CUSTOM PULL-TO-REFRESH ────────────────────────────────────────
@@ -250,11 +211,10 @@ window.addEventListener('popstate', () => {
   }
 
   document.addEventListener('touchstart', e => {
-    // Activate on ALL pages when scrolled to top — not just root pages
-    // This prevents the browser's native pull-to-refresh from firing on sub-pages
-    const scrollEl = APP.currentPage
-      ? document.querySelector('#' + APP.currentPage + ' .scroll-content')
-      : null;
+    // Only on root pages (dashboard, admin) and when scrolled to top
+    const rootPages = ['page-dashboard', 'page-admin', 'page-history-global'];
+    if (!rootPages.includes(APP.currentPage)) return;
+    const scrollEl = document.querySelector('#' + APP.currentPage + ' .scroll-content');
     if (scrollEl && scrollEl.scrollTop > 5) return; // not at top
     startY  = e.touches[0].clientY;
     pulling = true;
@@ -289,18 +249,16 @@ window.addEventListener('popstate', () => {
 
   async function _inAppRefresh() {
     try {
+      // Sync latest content + logs from Sheets
       await syncContentFromSheets();
-      // Re-render whatever page is currently showing
-      const p = APP.currentPage;
-      if      (p === 'page-dashboard')      refreshDashboard();
-      else if (p === 'page-admin')          renderAdminPanel();
-      else if (p === 'page-admin-editor')   { if (typeof renderModuleEditor  === 'function') renderModuleEditor(); }
-      else if (p === 'page-history-global') { if (typeof renderGlobalHistory === 'function') renderGlobalHistory(); }
-      else if (p === 'page-running')        { if (typeof initRunningPage     === 'function') initRunningPage(); }
-      else if (p === 'page-calisthenics')   { if (typeof renderCalisthenicsPage === 'function') renderCalisthenicsPage(); }
-      else if (p === 'page-weekly-report')  { if (typeof renderWeeklyReport  === 'function') renderWeeklyReport(); }
-      else if (p === 'page-my-plan')        { if (typeof renderMyPlan        === 'function') renderMyPlan(); }
-      // For other sub-pages (module exercises etc.) just sync is enough
+      // Re-render current page
+      if (APP.currentPage === 'page-dashboard') {
+        refreshDashboard();
+      } else if (APP.currentPage === 'page-admin') {
+        renderAdminPanel();
+      } else if (APP.currentPage === 'page-history-global') {
+        renderGlobalHistory();
+      }
     } catch (e) {
       showToast('Refresh failed. Check connection.', 'error');
     }
@@ -341,7 +299,7 @@ function fmtPace(km, secs) {
 }
 function todayStr()    { return new Date().toISOString().split('T')[0]; }
 function dayName()     { return ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]; }
-function getWeekDays() { return ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']; }
+function getWeekDays() { return ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']; }
 function getGreeting() {
   const h = new Date().getHours();
   if (h >= 5  && h < 12) return 'Good Morning';
@@ -391,91 +349,59 @@ document.addEventListener('DOMContentLoaded', () => {
     ]));
   }
 
+  window.history.replaceState({ page: 'page-login' }, '', '#page-login');
+
   document.querySelectorAll('.modal-overlay').forEach(mo => {
     mo.addEventListener('click', e => { if (e.target === mo) mo.classList.remove('open'); });
   });
 
   if ('serviceWorker' in navigator) {
-    // Register (or update) the service worker — the CACHE version bump in sw.js
-    // handles cache invalidation automatically. Never unregister on load:
-    // that destroys active push subscriptions tied to the SW registration.
-    navigator.serviceWorker.register('sw.js').then(reg => {
-      if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-      reg.addEventListener('updatefound', () => {
-        const newSW = reg.installing;
-        if (newSW) {
-          newSW.addEventListener('statechange', () => {
-            if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
-              newSW.postMessage({ type: 'SKIP_WAITING' });
-            }
-          });
-        }
-      });
-    }).catch(() => {});
+    // Unregister ALL old service workers and clear ALL caches
+    // This forces every device to get fresh files immediately
+    navigator.serviceWorker.getRegistrations().then(registrations => {
+      registrations.forEach(reg => reg.unregister());
+    });
+    caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
+    // Re-register the fresh service worker
+    setTimeout(() => {
+      navigator.serviceWorker.register('sw.js').catch(() => {});
+    }, 1000);
   }
 
   const session = Store.getSession();
   if (session) {
     APP.currentUser = session;
 
-    // Pages that require re-render on restore (they have dynamic content)
-    const renderOnRestore = {
-      'page-admin-editor':   () => { if (typeof renderModuleEditor  === 'function') renderModuleEditor(); },
-      'page-module':         () => { if (typeof renderModulePage    === 'function' && APP.currentModule) renderModulePage(APP.currentModule); },
-      'page-running':        () => { if (typeof initRunningPage     === 'function') initRunningPage(); },
-      'page-calisthenics':   () => { if (typeof renderCalisthenicsPage === 'function') renderCalisthenicsPage(); },
-      'page-weekly-report':  () => { if (typeof renderWeeklyReport  === 'function') renderWeeklyReport(); },
-      'page-custom-workouts':() => { if (typeof renderCustomWorkoutsList === 'function') renderCustomWorkoutsList(); },
-      'page-history-global': () => { if (typeof renderGlobalHistory === 'function') renderGlobalHistory(); },
-      'page-my-plan':        () => { if (typeof renderMyPlan        === 'function') renderMyPlan(); },
-    };
+    // Restore to correct page INSTANTLY before any rendering
+    // This prevents the login page flash on pull-down / reload
+    const targetPage = session.role === 'ADMIN'
+      ? 'page-admin'
+      : Store.get('ff_quote_' + session.id) === todayStr()
+        ? 'page-dashboard'
+        : 'page-quote';
 
-    // Determine target page — use last visited page if it's valid and exists in DOM
-    const lastPage  = Store.get('ff_last_page_' + session.id);
-    const adminRoot = 'page-admin';
-    const userRoot  = Store.get('ff_quote_' + session.id) === todayStr() ? 'page-dashboard' : 'page-quote';
-    const rootPage  = session.role === 'ADMIN' ? adminRoot : userRoot;
-
-    // Validate last page: must exist in DOM, and belong to the right role
-    const adminOnlyPages = ['page-admin', 'page-admin-editor'];
-    const lastPageEl     = lastPage ? document.getElementById(lastPage) : null;
-    const lastPageValid  = lastPageEl &&
-      !(session.role !== 'ADMIN' && adminOnlyPages.includes(lastPage));
-
-    const targetPage = lastPageValid ? lastPage : rootPage;
-
-    // Show target page immediately
+    // Show target page immediately (no animation, no flash)
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     const targetEl = document.getElementById(targetPage);
     if (targetEl) { targetEl.classList.add('active'); APP.currentPage = targetPage; }
 
-    window.history.replaceState({ page: targetPage }, '', '#' + targetPage);
-
-    // Sync content and init
+    // Then render content
     syncContentFromSheets();
     initDashboard();
 
     if (session.role === 'ADMIN') {
       renderAdminPanel();
-      // Re-render sub-page if needed
-      if (targetPage !== 'page-admin' && renderOnRestore[targetPage]) {
-        renderOnRestore[targetPage]();
-      }
     } else if (targetPage === 'page-quote') {
       renderQuote();
     } else {
       setActiveNav('home');
-      // Re-render sub-page if needed
-      if (renderOnRestore[targetPage]) {
-        renderOnRestore[targetPage]();
-      }
     }
 
+    // Init push for non-admin on session restore (page reload)
     if (session.role !== 'ADMIN' && typeof initPushNotifications === 'function') {
       initPushNotifications();
     }
   } else {
-    window.history.replaceState({ page: 'page-login' }, '', '#page-login');
     showPage('page-login', false);
   }
 });
