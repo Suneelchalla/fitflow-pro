@@ -284,6 +284,7 @@
         <button class="tab-btn run-tab-btn active" data-tab="log" onclick="renderRunningTabs('log')">📍 Log Run</button>
         <button class="tab-btn run-tab-btn" data-tab="plans" onclick="renderRunningTabs('plans')">📋 Plans</button>
         <button class="tab-btn run-tab-btn" data-tab="history" onclick="renderRunningTabs('history')">📊 History</button>
+        <button class="tab-btn run-tab-btn" data-tab="achievements" onclick="renderRunningTabs('achievements')">🏅 Badges</button>
         <button class="tab-btn run-tab-btn" data-tab="hydration" onclick="renderRunningTabs('hydration')">💧 Hydration</button>
         <button class="tab-btn run-tab-btn" data-tab="diet" onclick="renderRunningTabs('diet')">🥗 Diet</button>
       </div>
@@ -358,6 +359,10 @@
     </div>
 
     <!-- HISTORY TAB -->
+    <div id="run-tab-achievements" class="run-tab-content" style="padding:16px">
+      <div id="run-achievements-content"></div>
+    </div>
+
     <div id="run-tab-history" class="run-tab-content" style="padding:16px">
       <div id="run-stats-row" style="margin-bottom:16px"></div>
       <div class="section-title">Run Log</div>
