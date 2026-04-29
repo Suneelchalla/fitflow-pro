@@ -288,8 +288,16 @@ function _applyToAppData(key, value) {
       const mod = exMatch[1];
       if (mod === 'calisthenics' && value?.levels && APP_DATA.modules?.calisthenics) {
         APP_DATA.modules.calisthenics.levels = value.levels;
-      } else if (value?.days && APP_DATA.modules?.[mod]) {
-        APP_DATA.modules[mod].days = value.days;
+      } else if (APP_DATA.modules?.[mod]) {
+        // Unwrap double-nested structure { days: { days: { Monday: [] } } }
+        // that may exist in Sheets from the old data.js bug
+        let days = value?.days;
+        if (days && !Array.isArray(days) && days.days && typeof days.days === 'object') {
+          days = days.days; // unwrap one level
+        }
+        if (days && typeof days === 'object') {
+          APP_DATA.modules[mod].days = days;
+        }
       }
     }
     const wuMatch = key.match(/^warmup_(.+)$/);
