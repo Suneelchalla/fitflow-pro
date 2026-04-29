@@ -419,12 +419,15 @@ function renderExercises(moduleId, day) {
     const totalChecks = isHoldBased ? 1 : (parseInt(ex.sets) || 1);
     const allDone = checked.length >= totalChecks;
 
-    // Thumbnail: use pose emoji for yoga, image or generic for others
+    // Thumbnail: emoji for yoga/stretch, image if set, else colored letter avatar
+    const _tc = ['#2e7d46','#1565c0','#6a1b9a','#bf360c','#00695c','#558b2f','#4527a0','#ad1457'];
+    const _bg = _tc[(ex.name||'').charCodeAt(0) % _tc.length];
+    const _lt = (ex.name||'?').charAt(0).toUpperCase();
     const thumb = isHoldBased && ex.image
       ? `<div style="font-size:52px;display:flex;align-items:center;justify-content:center;height:100%">${ex.image}</div>`
       : ex.image && !isHoldBased
         ? `<img src="${ex.image}" alt="${ex.name}" loading="lazy" onerror="this.style.display='none'">`
-        : `<div style="font-size:48px;color:var(--text3);display:flex;align-items:center;justify-content:center;height:100%">${moduleId==='yoga' ? '🧘' : moduleId==='stretching' ? '🤸' : '💪'}</div>`;
+        : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:${_bg}33"><span style="font-size:36px;font-weight:700;color:${_bg}">${_lt}</span></div>`;
 
     // For yoga: single hold checkbox. For others: set-by-set checkboxes
     const checksHtml = isHoldBased
