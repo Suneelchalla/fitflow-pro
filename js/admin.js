@@ -315,7 +315,7 @@ function openModuleEditor(moduleId) {
   AdminEdit.section = 'exercises';
   AdminEdit.isDirty = false;
 
-  // Always clear stale localStorage cache for this module so APP_DATA shows fresh
+  // Clear stale localStorage cache so APP_DATA / Sheets shows fresh
   Store.remove('ff_content_exercises_' + moduleId);
   Store.remove('ff_content_warmup_'    + moduleId);
   Store.remove('ff_content_cooldown_'  + moduleId);
@@ -326,11 +326,12 @@ function openModuleEditor(moduleId) {
 
 function renderModuleEditor() {
   const info = {
-    cardio:    { name: 'Home Cardio',  emoji: '🏠' },
-    gym:       { name: 'Gym Workouts', emoji: '🏋️' },
-    yoga:      { name: 'Yoga',         emoji: '🧘' },
-    stretching:{ name: 'Stretching',   emoji: '🤸' },
-    running:   { name: 'Running',      emoji: '🏃' },
+    cardio:       { name: 'Home Cardio',  emoji: '🏠'   },
+    gym:          { name: 'Gym Workouts', emoji: '🏋️'  },
+    yoga:         { name: 'Yoga',         emoji: '🧘'   },
+    stretching:   { name: 'Stretching',   emoji: '🤸'   },
+    running:      { name: 'Running',      emoji: '🏃'   },
+    calisthenics: { name: 'Calisthenics', emoji: '🤸‍♂️' },
   }[AdminEdit.module] || { name: AdminEdit.module, emoji: '💪' };
 
   document.getElementById('editor-module-title').textContent = info.emoji + ' ' + info.name;
@@ -347,11 +348,12 @@ function renderModuleEditor() {
   // stretching = no warmup/cooldown
   // running = no main exercises, but has plans
   const excludeMap = {
-    stretching: ['warmup','cooldown','plans'],
-    running:    ['exercises'],
-    cardio:     ['plans'],
-    gym:        ['plans'],
-    yoga:       ['plans'],
+    stretching:   ['warmup','cooldown','plans'],
+    running:      ['exercises'],
+    cardio:       ['plans'],
+    gym:          ['plans'],
+    yoga:         ['plans'],
+    calisthenics: ['hydration','diet','plans'],
   };
   const excluded = excludeMap[AdminEdit.module] || ['plans'];
   const sections = allSections.filter(s => !excluded.includes(s.id));
@@ -444,8 +446,10 @@ async function _collectAndSave() {
     days.forEach(day => {
       const dayEl = document.querySelector(`[data-day="${day}"]`);
       if (!dayEl) {
-        // Day not in DOM — always use APP_DATA as the ground truth
-        result.days[day] = APP_DATA.modules[moduleId]?.days?.[day] || [];
+        // Day not in DOM — use APP_DATA as ground truth, unwrapping if double-nested
+        let appDays = APP_DATA.modules[moduleId]?.days;
+        if (appDays?.days && typeof appDays.days === 'object') appDays = appDays.days;
+        result.days[day] = appDays?.[day] || [];
         return;
       }
       result.days[day] = Array.from(dayEl.querySelectorAll('.ex-row')).map(row => {
@@ -552,18 +556,36 @@ function renderExerciseEditor(moduleId, body) {
     return renderCaliExerciseEditor(body);
   }
   const days = getWeekDays();
+
+  // Helper: resolve days object from saved content, unwrapping double-nesting if needed
+  function _resolveSavedDays(saved) {
+    if (!saved) return null;
+    let d = saved.days;
+    if (!d) return null;
+    // Unwrap { days: { days: { Monday: [] } } } — old Sheets bug
+    if (d.days && typeof d.days === 'object' && !Array.isArray(d.days)) d = d.days;
+    return d;
+  }
+
+  // Helper: resolve APP_DATA days, unwrapping if corrupted by sync
+  function _resolveAppDays(mod, day) {
+    let d = APP_DATA.modules?.[mod]?.days;
+    if (!d) return [];
+    // Unwrap if corrupted
+    if (d.days && typeof d.days === 'object' && !Array.isArray(d.days)) d = d.days;
+    return d?.[day] || [];
+  }
+
   body.innerHTML = `
     <div style="font-size:13px;color:var(--text2);padding:0 16px 12px;line-height:1.5">
       ✏️ <strong>Tap any field</strong> to edit. Applies to all users after saving.
     </div>
     ${days.map(day => {
-      // Always show APP_DATA (data.js ground truth) for admin editor.
-      // Sheets-saved version is only used if it has MORE exercises than APP_DATA
-      // (meaning admin manually added exercises via the panel).
-      const appDefault = APP_DATA.modules[moduleId]?.days?.[day] || [];
-      const saved      = Store.getContent('exercises_' + moduleId);
-      const savedDay   = saved?.days?.[day] || [];
-      const exercises  = savedDay.length > appDefault.length ? savedDay : appDefault;
+      const appDefault  = _resolveAppDays(moduleId, day);
+      const saved       = Store.getContent('exercises_' + moduleId);
+      const savedDays   = _resolveSavedDays(saved);
+      const savedDay    = savedDays?.[day] || [];
+      const exercises   = savedDay.length > appDefault.length ? savedDay : appDefault;
       return `
         <div style="margin-bottom:8px">
           <div style="padding:10px 16px;background:rgba(46,125,70,0.15);font-weight:700;font-size:14px;
