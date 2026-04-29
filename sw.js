@@ -1,4 +1,4 @@
-const CACHE = 'fitflow-v6';
+const CACHE = 'fitflow-v7';
 const ASSETS = [
   './',
   './index.html',
