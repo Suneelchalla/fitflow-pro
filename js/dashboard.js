@@ -80,9 +80,16 @@ const ALL_MODULES = [
 
 function getModuleOrder(userId) {
   const saved = Store.get('ff_module_order_' + userId);
-  if (saved && Array.isArray(saved) && saved.length === ALL_MODULES.length) {
-    // Return modules in saved order
-    return saved.map(id => ALL_MODULES.find(m => m.id === id)).filter(Boolean);
+  if (saved && Array.isArray(saved) && saved.length > 0) {
+    // Build ordered list from saved IDs, filtering out any that no longer exist
+    const ordered = saved.map(id => ALL_MODULES.find(m => m.id === id)).filter(Boolean);
+    // Append any new modules not in the saved order (e.g. calisthenics added after user saved)
+    const missing = ALL_MODULES.filter(m => !saved.includes(m.id));
+    if (missing.length) {
+      // Save the merged order so it persists
+      saveModuleOrder(userId, [...ordered, ...missing]);
+    }
+    return [...ordered, ...missing];
   }
   return [...ALL_MODULES];
 }
