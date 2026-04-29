@@ -27,28 +27,17 @@ function initLogin() {
     btn.textContent = 'Sign In';
 
     if (!result.success) {
-      errEl.textContent = '⚠️ ' + (result.error || 'Login failed. Please try again.');
+      errEl.textContent = '⚠️ ' + result.error;
       passIn.value = '';
       return;
     }
 
     const user = result.user;
-    if (!user || !user.id) {
-      errEl.textContent = '⚠️ Login failed. Please try again.';
-      console.error('Login returned success but no user object:', result);
-      return;
-    }
-
-    try {
-      if (user.isFirstLogin) {
-        APP.pendingUser = user;
-        openSetPasswordModal();
-      } else {
-        completeLogin(user);
-      }
-    } catch (err) {
-      console.error('Login completion error:', err);
-      errEl.textContent = '⚠️ Something went wrong. Please refresh and try again.';
+    if (user.isFirstLogin) {
+      APP.pendingUser = user;
+      openSetPasswordModal();
+    } else {
+      completeLogin(user);
     }
   });
 }
@@ -59,27 +48,19 @@ async function attemptLogin(email, password) {
 
   if (cfg.webAppUrl) {
     try {
-      const r = await fetch(cfg.webAppUrl, {
-        method:  'POST',
-        body:    JSON.stringify({ action: 'login', email, password }),
-        headers: { 'Content-Type': 'text/plain' },
-      });
+      // Convert password to char codes joined by dashes - survives URL encoding perfectly
+      // e.g. "Hema@123" → "72-101-109-97-64-49-50-51"
+      const pwCodes = Array.from(password).map(c => c.charCodeAt(0)).join('-');
+      const qs = new URLSearchParams({ action: 'login', email, pwcodes: pwCodes }).toString();
+      const r = await fetch(`${cfg.webAppUrl}?${qs}`);
       const res = await r.json();
-      // Validate response has the expected shape
-      if (res && res.success === true && res.user && res.user.id) return res;
-      if (res && res.success === false) return res;
-      // If success:true but no user object, something is wrong with the backend response
-      if (res && res.success === true) {
-        console.error('Sheets login returned success but no user:', res);
-        return { success: false, error: 'Server error. Please try again.' };
-      }
+      if (res && res.success !== undefined) return res;
     } catch (e) {
-      console.warn('Login fetch error:', e);
-      // Fall through to local fallback
+      console.warn('Login error:', e);
     }
   }
 
-  // Local fallback — admin only when Sheets is unreachable
+  // Local fallback — admin only, when Sheets is unreachable
   const local = JSON.parse(localStorage.getItem('ff_local_users') || '[]');
   const u     = local.find(u => u.email.toLowerCase() === email.toLowerCase());
 
@@ -112,7 +93,6 @@ async function attemptLogin(email, password) {
     },
   };
 }
-
 
 // ── COMPLETE LOGIN ────────────────────────────────────────────────
 function completeLogin(user) {
@@ -164,7 +144,6 @@ async function syncContentFromSheets() {
     user ? _syncUserLogs(user.id)        : Promise.resolve(),
     user ? _syncUserRunLogs(user.id)     : Promise.resolve(),
     user ? _syncPlanProgress(user.id)    : Promise.resolve(),
-    user ? _syncCaliProgress(user.id)    : Promise.resolve(),
   ]);
 }
 
@@ -274,27 +253,6 @@ async function _syncPlanProgress(userId) {
   }
 }
 
-async function _syncCaliProgress(userId) {
-  try {
-    const res = await Sheets.get('getCaliProgress', { userId });
-    if (!res?.success || !res.progress) return;
-    const p = res.progress;
-    // Restore level
-    if (p.level) Store.set('ff_cali_level_' + userId, p.level);
-    // Restore active skill
-    if (p.skill) Store.set('ff_cali_skill_' + userId, p.skill);
-    // Restore skill step completions
-    Object.keys(p).filter(k => k.startsWith('skill_step_')).forEach(k => {
-      Store.set('ff_cali_skill_step_' + userId + '_' + k.replace('skill_step_', ''), p[k]);
-    });
-    // Restore 21-day challenge state
-    if (p['21day_start']) Store.set('ff_cali21_start_' + userId, p['21day_start']);
-    if (p['21day_done'])  Store.set('ff_cali21_done_'  + userId, p['21day_done']);
-  } catch (e) {
-    console.warn('Cali progress sync skipped:', e.message);
-  }
-}
-
 function _applyToAppData(key, value) {
   try {
     if (key === 'custom_quotes' && Array.isArray(value)) {
@@ -304,21 +262,8 @@ function _applyToAppData(key, value) {
       renderAnnouncementBanner();
     }
     const exMatch = key.match(/^exercises_(.+)$/);
-    if (exMatch) {
-      const mod = exMatch[1];
-      if (mod === 'calisthenics' && value?.levels && APP_DATA.modules?.calisthenics) {
-        APP_DATA.modules.calisthenics.levels = value.levels;
-      } else if (APP_DATA.modules?.[mod]) {
-        // Unwrap double-nested structure { days: { days: { Monday: [] } } }
-        // that may exist in Sheets from the old data.js bug
-        let days = value?.days;
-        if (days && !Array.isArray(days) && days.days && typeof days.days === 'object') {
-          days = days.days; // unwrap one level
-        }
-        if (days && typeof days === 'object') {
-          APP_DATA.modules[mod].days = days;
-        }
-      }
+    if (exMatch && value?.days && APP_DATA.modules[exMatch[1]]) {
+      APP_DATA.modules[exMatch[1]].days = value.days;
     }
     const wuMatch = key.match(/^warmup_(.+)$/);
     if (wuMatch && Array.isArray(value)) {
@@ -344,7 +289,7 @@ async function _autoSeedIfVersionChanged(user) {
     if (storedVersion === currentVersion) return;
 
     // Clear stale localStorage exercise/warmup/cooldown cache before seeding
-    ['cardio','gym','yoga','stretching','running','calisthenics'].forEach(mod => {
+    ['cardio','gym','yoga','stretching','running'].forEach(mod => {
       Store.remove('ff_content_exercises_' + mod);
       Store.remove('ff_content_warmup_' + mod);
       Store.remove('ff_content_cooldown_' + mod);
@@ -353,26 +298,11 @@ async function _autoSeedIfVersionChanged(user) {
     // Version mismatch — push all module data to Sheets
     console.log('[FitFlow] Data version changed to', currentVersion, '— seeding Sheets...');
 
-    const modules = ['cardio', 'gym', 'yoga', 'stretching', 'calisthenics'];
+    const modules = ['cardio', 'gym', 'yoga', 'stretching'];
     const seedPromises = [];
 
     // Seed exercises for each module
     modules.forEach(mod => {
-      // Calisthenics uses 'levels' structure, not 'days'
-      if (mod === 'calisthenics') {
-        const levels = APP_DATA.modules?.calisthenics?.levels;
-        if (levels && Object.keys(levels).length > 0) {
-          seedPromises.push(
-            Sheets.post('saveContent', { key: 'exercises_calisthenics', value: { levels } })
-              .then(() => {
-                Store.setContent('exercises_calisthenics', { levels });
-                console.log('[FitFlow] Seeded exercises_calisthenics');
-              })
-              .catch(e => console.warn('[FitFlow] Seed failed for exercises_calisthenics', e.message))
-          );
-        }
-        return;
-      }
       const days = APP_DATA.modules?.[mod]?.days;
       if (days && Object.keys(days).length > 0) {
         seedPromises.push(
@@ -387,7 +317,7 @@ async function _autoSeedIfVersionChanged(user) {
     });
 
     // Seed warmups
-    const warmupMods = ['cardio','gym','yoga','running','stretching','calisthenics'];
+    const warmupMods = ['cardio','gym','yoga','running','stretching'];
     warmupMods.forEach(mod => {
       const wu = APP_DATA.warmups?.[mod];
       if (wu?.length) {
@@ -609,13 +539,6 @@ async function submitChangePassword() {
 
 // ── LOGOUT ────────────────────────────────────────────────────────
 function logout() {
-  if (typeof PUSH !== 'undefined' && PUSH.isSupported()) {
-    PUSH.unsubscribe().catch(() => {});
-  }
-  // Clear last-page so next session starts fresh at root
-  if (APP.currentUser) {
-    Store.remove('ff_last_page_' + APP.currentUser.id);
-  }
   Store.clearSession();
   APP.currentUser  = null;
   APP.pageHistory  = [];
@@ -701,12 +624,11 @@ function renderOnboardingStep(step) {
           <div style="font-family:var(--font-display);font-size:34px;color:var(--g5);line-height:1.1;margin-bottom:8px">Pick Your Modules</div>
           <div style="font-size:14px;color:var(--text2);margin-bottom:24px;line-height:1.5">Choose the activities you want to do. You can always change these later.</div>
           ${[
-            { id:'cardio',       emoji:'🏠', name:'Home Cardio',       sub:'No equipment needed' },
-            { id:'gym',          emoji:'🏋️', name:'Gym Workouts',      sub:'Weights & machines' },
-            { id:'yoga',         emoji:'🧘', name:'Yoga',              sub:'Mind & body balance' },
-            { id:'stretching',   emoji:'🤸', name:'Stretching',        sub:'Flexibility & recovery' },
-            { id:'running',      emoji:'🏃', name:'Running & Walking', sub:'GPS tracking + plans' },
-            { id:'calisthenics', emoji:'🤸‍♂️', name:'Calisthenics',      sub:'Skills, strength, no gym' },
+            { id:'cardio',     emoji:'🏠', name:'Home Cardio',      sub:'No equipment needed' },
+            { id:'gym',        emoji:'🏋️', name:'Gym Workouts',     sub:'Weights & machines' },
+            { id:'yoga',       emoji:'🧘', name:'Yoga',             sub:'Mind & body balance' },
+            { id:'stretching', emoji:'🤸', name:'Stretching',       sub:'Flexibility & recovery' },
+            { id:'running',    emoji:'🏃', name:'Running & Walking',sub:'GPS tracking + plans' },
           ].map(m => `
             <div onclick="toggleOnboardModule('${m.id}',this)"
               id="mod-${m.id}"
@@ -734,7 +656,7 @@ function renderOnboardingStep(step) {
     container.innerHTML = `
       <div style="background:linear-gradient(135deg,var(--g1),var(--bg));min-height:100vh;padding:48px 24px 32px;display:flex;flex-direction:column">
         <div style="flex:1">
-          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px">Step 3 of 3</div>
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px">Step 3 of 4</div>
           <div style="height:4px;background:var(--bg3);border-radius:2px;margin-bottom:32px">
             <div style="width:75%;height:100%;background:var(--g4);border-radius:2px"></div>
           </div>
@@ -952,7 +874,7 @@ function completeOnboarding() {
 
   // Save preferred module order based on selections
   if (_onboardData.modules.length > 0 && typeof saveModuleOrder === 'function') {
-    const ALL = ['cardio','gym','yoga','stretching','running','calisthenics'];
+    const ALL = ['cardio','gym','yoga','stretching','running'];
     const ordered = [
       ..._onboardData.modules,
       ...ALL.filter(m => !_onboardData.modules.includes(m)),
