@@ -242,11 +242,12 @@ function renderContentHome() {
   const container = document.getElementById('content-links-list');
   const connected = !!Store.getSheetsConfig().webAppUrl;
   const modules   = [
-    { id: 'cardio',     name: 'Home Cardio',    emoji: '🏠',  hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
-    { id: 'gym',        name: 'Gym Workouts',   emoji: '🏋️',  hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
-    { id: 'yoga',       name: 'Yoga',           emoji: '🧘',  hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
-    { id: 'stretching', name: 'Stretching',     emoji: '🤸',  hasSections: ['exercises','hydration','diet'] },
-    { id: 'running',    name: 'Running',        emoji: '🏃',  hasSections: ['warmup','cooldown','hydration','diet'] },
+    { id: 'cardio',        name: 'Home Cardio',    emoji: '🏠',    hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
+    { id: 'gym',           name: 'Gym Workouts',   emoji: '🏋️',   hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
+    { id: 'yoga',          name: 'Yoga',           emoji: '🧘',    hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
+    { id: 'stretching',    name: 'Stretching',     emoji: '🤸',    hasSections: ['exercises','hydration','diet'] },
+    { id: 'running',       name: 'Running',        emoji: '🏃',    hasSections: ['warmup','cooldown','hydration','diet'] },
+    { id: 'calisthenics',  name: 'Calisthenics',   emoji: '🤸‍♂️', hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
   ];
 
   container.innerHTML = `
@@ -304,16 +305,16 @@ function openModuleEditor(moduleId) {
 
 function renderModuleEditor() {
   const info = {
-    cardio:    { name: 'Home Cardio',  emoji: '🏠' },
-    gym:       { name: 'Gym Workouts', emoji: '🏋️' },
-    yoga:      { name: 'Yoga',         emoji: '🧘' },
-    stretching:{ name: 'Stretching',   emoji: '🤸' },
-    running:   { name: 'Running',      emoji: '🏃' },
+    cardio:       { name: 'Home Cardio',   emoji: '🏠' },
+    gym:          { name: 'Gym Workouts',  emoji: '🏋️' },
+    yoga:         { name: 'Yoga',          emoji: '🧘' },
+    stretching:   { name: 'Stretching',    emoji: '🤸' },
+    running:      { name: 'Running',       emoji: '🏃' },
+    calisthenics: { name: 'Calisthenics',  emoji: '🤸‍♂️' },
   }[AdminEdit.module] || { name: AdminEdit.module, emoji: '💪' };
 
   document.getElementById('editor-module-title').textContent = info.emoji + ' ' + info.name;
 
-  // Sections vary per module
   const allSections = [
     { id: 'exercises', label: '💪 Exercises' },
     { id: 'warmup',    label: '🔥 Warm-Up' },
@@ -322,14 +323,13 @@ function renderModuleEditor() {
     { id: 'diet',      label: '🥗 Diet' },
     { id: 'plans',     label: '🗓 Plans' },
   ];
-  // stretching = no warmup/cooldown
-  // running = no main exercises, but has plans
   const excludeMap = {
-    stretching: ['warmup','cooldown','plans'],
-    running:    ['exercises'],
-    cardio:     ['plans'],
-    gym:        ['plans'],
-    yoga:       ['plans'],
+    stretching:   ['warmup','cooldown','plans'],
+    running:      ['exercises'],
+    cardio:       ['plans'],
+    gym:          ['plans'],
+    yoga:         ['plans'],
+    calisthenics: ['plans'],
   };
   const excluded = excludeMap[AdminEdit.module] || ['plans'];
   const sections = allSections.filter(s => !excluded.includes(s.id));
@@ -338,7 +338,6 @@ function renderModuleEditor() {
     <button class="tab-btn ${AdminEdit.section === s.id ? 'active' : ''}"
       onclick="switchEditorSection('${s.id}', this)">${s.label}</button>`).join('');
 
-  // Reset save button to default handler
   _resetSaveBtn();
   renderEditorSection();
 }
@@ -367,6 +366,9 @@ function renderEditorSection() {
   if (!body) return;
   body.classList.add('admin-edit-mode');
   const { section, module: moduleId } = AdminEdit;
+  if (moduleId === 'calisthenics' && section === 'exercises') {
+    renderCalisthenicsEditor(body); return;
+  }
   if      (section === 'exercises')  renderExerciseEditor(moduleId, body);
   else if (section === 'warmup')     renderWarmCoolEditor(moduleId, 'warmup', body);
   else if (section === 'cooldown')   renderWarmCoolEditor(moduleId, 'cooldown', body);
@@ -518,18 +520,7 @@ function activateEditing(container) {
 // ════════════════════════════════════════════════════════════════
 function renderExerciseEditor(moduleId, body) {
   const days = getWeekDays();
-
-  // DEBUG: show raw data state so we can see what's available
-  const rawDays = APP_DATA.modules[moduleId]?.days;
-  const saved   = Store.getContent('exercises_' + moduleId);
   body.innerHTML = `
-    <div style="background:#1a3a1a;border:1px solid #4a7;padding:10px 14px;margin:0 16px 12px;border-radius:8px;font-size:11px;font-family:monospace;color:#8f8;line-height:1.6">
-      <strong>DEBUG — moduleId:</strong> ${moduleId}<br>
-      <strong>APP_DATA.days keys:</strong> ${rawDays ? Object.keys(rawDays).join(', ') : 'null/undefined'}<br>
-      <strong>APP_DATA.days.days:</strong> ${rawDays?.days ? Object.keys(rawDays.days).join(', ') : 'not present'}<br>
-      <strong>Monday exercises:</strong> ${JSON.stringify(rawDays?.Monday || rawDays?.days?.Monday || []).substring(0,80)}<br>
-      <strong>Sheets cached:</strong> ${saved ? JSON.stringify(Object.keys(saved)).substring(0,80) : 'null'}
-    </div>
     <div style="font-size:13px;color:var(--text2);padding:0 16px 12px;line-height:1.5">
       ✏️ <strong>Tap any field</strong> to edit. Applies to all users after saving.
     </div>
@@ -537,14 +528,9 @@ function renderExerciseEditor(moduleId, body) {
       // Always show APP_DATA (data.js ground truth) for admin editor.
       // Sheets-saved version is only used if it has MORE exercises than APP_DATA
       // (meaning admin manually added exercises via the panel).
-      const appDefault = (() => {
-        let d = APP_DATA.modules[moduleId]?.days;
-        if (d && d.days) d = d.days;
-        return d?.[day] || [];
-      })();
+      const appDefault = APP_DATA.modules[moduleId]?.days?.[day] || [];
       const saved      = Store.getContent('exercises_' + moduleId);
-      const savedDays  = (saved?.days?.days) ? saved.days.days : saved?.days;
-      const savedDay   = savedDays?.[day] || [];
+      const savedDay   = saved?.days?.[day] || [];
       const exercises  = savedDay.length > appDefault.length ? savedDay : appDefault;
       return `
         <div style="margin-bottom:8px">
@@ -1206,8 +1192,8 @@ async function testSheetsConnection() {
 }
 
 // ── MODULE HELPERS (shared with dashboard) ────────────────────────
-function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🤸', running: '🏃' }[mod] || '💪'; }
-function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running' }[mod] || mod; }
+function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🤸', running: '🏃', calisthenics: '🤸‍♂️' }[mod] || '💪'; }
+function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics' }[mod] || mod; }
 
 // ── QUOTES TAB (inline in Admin Panel, not editor page) ───────────
 
@@ -1475,4 +1461,139 @@ async function saveAnnouncement(active) {
   status.textContent = active ? '✅ Banner published!' : '🔇 Banner unpublished.';
   showToast(active ? 'Announcement published! 📣' : 'Announcement removed.', 'success');
   renderAdminAnnounce();
+}
+
+// ════════════════════════════════════════════════════════════════
+// CALISTHENICS EXERCISE EDITOR
+// ════════════════════════════════════════════════════════════════
+function renderCalisthenicsEditor(body) {
+  const caliLevels = APP_DATA.modules?.calisthenics?.levels || {};
+  const activeLevel = AdminEdit._caliLevel || 1;
+  const days = getWeekDays();
+
+  body.innerHTML = `
+    <div style="font-size:13px;color:var(--text2);padding:0 16px 12px;line-height:1.5">
+      ✏️ Edit exercises per level and day. Applies to all users after saving.
+    </div>
+    <div style="padding:0 16px 12px">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:8px;font-weight:700;text-transform:uppercase;letter-spacing:.06em">Level</div>
+      <div style="display:flex;gap:8px">
+        ${[1,2,3].map(l => `
+          <button onclick="selectAdminCaliLevel(${l})"
+            style="flex:1;padding:10px;border-radius:12px;border:2px solid ${activeLevel===l?'var(--g4)':'var(--border)'};
+              background:${activeLevel===l?'rgba(46,125,70,0.2)':'var(--surface)'};cursor:pointer;font-size:13px;font-weight:700;
+              color:${activeLevel===l?'var(--g5)':'var(--text2)'}">
+            L${l} ${caliLevels[l]?.name||''}
+          </button>`).join('')}
+      </div>
+    </div>
+    ${days.map(day => {
+      const appDefault = caliLevels[activeLevel]?.days?.[day] || [];
+      const saved = Store.getContent('exercises_calisthenics_l' + activeLevel);
+      const savedDay = saved?.days?.[day] || [];
+      const exercises = savedDay.length > appDefault.length ? savedDay : appDefault;
+      return `
+        <div style="margin-bottom:8px">
+          <div style="padding:10px 16px;background:rgba(46,125,70,0.15);font-weight:700;font-size:14px;
+            display:flex;justify-content:space-between;align-items:center">
+            <span>📅 ${day}</span>
+            <span style="font-size:12px;color:var(--text3)">${exercises.length} exercises</span>
+          </div>
+          <div data-day="${day}" data-calilevel="${activeLevel}" style="padding:0 16px">
+            ${exercises.map((ex,i) => _caliExCard(ex,i,day)).join('')}
+            <button class="add-exercise-btn" onclick="addCaliExercise('${day}')">+ Add Exercise</button>
+          </div>
+        </div>`;
+    }).join('')}`;
+  activateEditing(body);
+
+  // Override save for calisthenics
+  const btn = document.getElementById('editor-save-btn');
+  if (btn) {
+    btn.textContent = '💾 Save Calisthenics';
+    btn.onclick = saveCalisthenicsEditorChanges;
+  }
+}
+
+function selectAdminCaliLevel(level) {
+  AdminEdit._caliLevel = level;
+  renderEditorSection();
+}
+
+function _caliExCard(ex, idx, day) {
+  return `
+    <div class="exercise-card ex-row" data-idx="${idx}" style="margin:10px 0;position:relative">
+      <button class="delete-ex-btn" onclick="this.closest('.ex-row').remove();markDirty()" title="Delete">✕</button>
+      <div class="exercise-body">
+        <div style="margin-bottom:8px">
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Exercise Name</div>
+          <div class="exercise-name editable" data-field="name" contenteditable="true">${ex.name||''}</div>
+        </div>
+        <div style="display:flex;gap:12px;margin-bottom:10px">
+          <div style="flex:1">
+            <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Sets</div>
+            <div class="editable" data-field="sets" contenteditable="true" style="font-weight:600">${ex.sets||3}</div>
+          </div>
+          <div style="flex:2">
+            <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Reps / Duration</div>
+            <div class="editable" data-field="reps" contenteditable="true" style="font-weight:600">${ex.reps||''}</div>
+          </div>
+        </div>
+        <div style="margin-bottom:8px">
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Description</div>
+          <div class="editable-block editable" data-field="desc" contenteditable="true" style="font-size:13px;color:var(--text2);line-height:1.6">${ex.desc||''}</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Demo Link</div>
+          <div class="editable" data-field="demo" contenteditable="true" style="font-size:12px;color:var(--g5);word-break:break-all">${ex.demo||''}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function addCaliExercise(day) {
+  const container = document.querySelector(`[data-day="${day}"]`);
+  if (!container) return;
+  const addBtn = container.querySelector('.add-exercise-btn');
+  const div    = document.createElement('div');
+  div.innerHTML = _caliExCard({ name:'New Exercise', sets:3, reps:'10 reps', desc:'Enter description.', demo:'' }, 999, day);
+  const card = div.firstElementChild;
+  activateEditing(card);
+  container.insertBefore(card, addBtn);
+  markDirty();
+  card.querySelector('[data-field="name"]')?.focus();
+}
+
+async function saveCalisthenicsEditorChanges() {
+  const btn = document.getElementById('editor-save-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    const level = AdminEdit._caliLevel || 1;
+    const days  = getWeekDays();
+    const result = { days: {} };
+    days.forEach(day => {
+      const dayEl = document.querySelector(`[data-day="${day}"]`);
+      if (!dayEl) {
+        result.days[day] = APP_DATA.modules.calisthenics?.levels?.[level]?.days?.[day] || [];
+        return;
+      }
+      result.days[day] = Array.from(dayEl.querySelectorAll('.ex-row')).map(row => ({
+        name:  _text(row, 'name'),
+        sets:  parseInt(_text(row, 'sets')) || 3,
+        reps:  _text(row, 'reps'),
+        desc:  _text(row, 'desc'),
+        demo:  _text(row, 'demo'),
+        image: '',
+      }));
+    });
+    const key = 'exercises_calisthenics_l' + level;
+    Store.setContent(key, result);
+    await Sheets.post('saveContent', { key, value: result });
+    AdminEdit.isDirty = false;
+    showToast('Calisthenics Level ' + level + ' saved! ✅', 'success');
+    if (btn) { btn.disabled = false; btn.textContent = '✅ Saved!'; setTimeout(()=>{ if(btn) btn.textContent='💾 Save Calisthenics'; },3000); }
+  } catch(e) {
+    showToast('Save failed: ' + e.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Save Calisthenics'; }
+  }
 }
