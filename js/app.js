@@ -1,7 +1,5 @@
 // ── APP STATE ────────────────────────────────────────────────────
-// DATA_VERSION: bump this whenever data.js exercises/plans are updated
-// This triggers auto-seed to Sheets on next admin login
-const DATA_VERSION = '2026-04-29-v4';
+// DATA_VERSION is defined in data.js
 
 window.APP = {
   currentUser:      null,
