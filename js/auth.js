@@ -284,8 +284,13 @@ function _applyToAppData(key, value) {
       renderAnnouncementBanner();
     }
     const exMatch = key.match(/^exercises_(.+)$/);
-    if (exMatch && value?.days && APP_DATA.modules[exMatch[1]]) {
-      APP_DATA.modules[exMatch[1]].days = value.days;
+    if (exMatch) {
+      const mod = exMatch[1];
+      if (mod === 'calisthenics' && value?.levels && APP_DATA.modules?.calisthenics) {
+        APP_DATA.modules.calisthenics.levels = value.levels;
+      } else if (value?.days && APP_DATA.modules?.[mod]) {
+        APP_DATA.modules[mod].days = value.days;
+      }
     }
     const wuMatch = key.match(/^warmup_(.+)$/);
     if (wuMatch && Array.isArray(value)) {
@@ -325,6 +330,21 @@ async function _autoSeedIfVersionChanged(user) {
 
     // Seed exercises for each module
     modules.forEach(mod => {
+      // Calisthenics uses 'levels' structure, not 'days'
+      if (mod === 'calisthenics') {
+        const levels = APP_DATA.modules?.calisthenics?.levels;
+        if (levels && Object.keys(levels).length > 0) {
+          seedPromises.push(
+            Sheets.post('saveContent', { key: 'exercises_calisthenics', value: { levels } })
+              .then(() => {
+                Store.setContent('exercises_calisthenics', { levels });
+                console.log('[FitFlow] Seeded exercises_calisthenics');
+              })
+              .catch(e => console.warn('[FitFlow] Seed failed for exercises_calisthenics', e.message))
+          );
+        }
+        return;
+      }
       const days = APP_DATA.modules?.[mod]?.days;
       if (days && Object.keys(days).length > 0) {
         seedPromises.push(
