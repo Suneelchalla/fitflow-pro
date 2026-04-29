@@ -53,7 +53,6 @@ window.APP_DATA = {
       emoji: "🏠",
       color: "grad-cardio",
       days: {
-      days: {
         Monday: [
           { name:"Warm-Up: Jumping Jacks", sets:1, reps:"2 min", desc:"Stand upright, jump feet apart while raising arms overhead. Increases heart rate and warms joints. Month 1: 60 sec. Month 2: 90 sec. Month 3: 2 min.", image:"", demo:"https://www.youtube.com/results?search_query=jumping+jacks+warm+up+exercise" },
           { name:"Warm-Up: Arm Circles", sets:1, reps:"30 sec each", desc:"Full arm circles forward then backward. Loosens shoulder joints before chest work. Month 1: small circles. Month 2-3: full large circles.", image:"", demo:"https://www.youtube.com/results?search_query=arm+circles+shoulder+warm+up" },
@@ -124,7 +123,6 @@ window.APP_DATA = {
       name: "Gym Workouts",
       emoji: "🏋️",
       color: "grad-gym",
-      days: {
       days: {
         Monday: [
           { name:"Warm-Up: Treadmill + Mobility", sets:1, reps:"5-8 min", desc:"5 min light treadmill jog then chest mobility - arm circles, band pull-aparts, shoulder rolls. Prepares chest and shoulder joints for heavy pressing.", image:"", demo:"https://www.youtube.com/results?search_query=chest+day+warm+up+gym+mobility" },
