@@ -1106,3 +1106,6 @@ window.APP_DATA = {
 window.DEFAULT_USERS = [
   { id:"u_admin", name:"Admin User",  email:"admin@fitflow.com", password:"admin123", tempPassword:"", isFirstLogin:false, role:"ADMIN", status:"ACTIVE", createdDate:"2025-01-01" },
 ];
+
+// Keep a deep-frozen backup so Sheets sync can never wipe default exercises
+window.APP_DATA_DEFAULT = JSON.parse(JSON.stringify(window.APP_DATA));
