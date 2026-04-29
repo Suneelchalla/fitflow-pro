@@ -70,26 +70,18 @@ function renderDashboardStats() {
 
 // ── MODULE ORDER STORAGE ─────────────────────────────────────────
 const ALL_MODULES = [
-  { id: 'cardio',       name: 'Home Cardio',      emoji: '🏠',   color: 'grad-cardio',  sub: '8-9 exercises · 6 days' },
-  { id: 'gym',          name: 'Gym Workouts',      emoji: '🏋️',  color: 'grad-gym',     sub: '8 exercises · 6 days' },
-  { id: 'yoga',         name: 'Yoga',              emoji: '🧘',   color: 'grad-yoga',    sub: '8-12 poses · 6 days' },
-  { id: 'running',      name: 'Running & Walking', emoji: '🏃',   color: 'grad-running', sub: 'GPS tracker + plans' },
-  { id: 'stretching',   name: 'Stretching',        emoji: '🤸',   color: 'grad-stretch', sub: '6 stretches · 6 days' },
-  { id: 'calisthenics', name: 'Calisthenics',      emoji: '🤸‍♂️', color: 'grad-cali',   sub: '3 levels · Skills · 21-Day' },
+  { id: 'cardio',     name: 'Home Cardio',      emoji: '🏠', color: 'grad-cardio',  sub: '8-9 exercises · 6 days' },
+  { id: 'gym',        name: 'Gym Workouts',      emoji: '🏋️', color: 'grad-gym',     sub: '8 exercises · 6 days' },
+  { id: 'yoga',       name: 'Yoga',              emoji: '🧘', color: 'grad-yoga',    sub: '8-12 poses · 6 days' },
+  { id: 'running',    name: 'Running & Walking', emoji: '🏃', color: 'grad-running', sub: 'GPS tracker + plans' },
+  { id: 'stretching', name: 'Stretching',        emoji: '🤸', color: 'grad-stretch', sub: '6 stretches · 6 days' },
 ];
 
 function getModuleOrder(userId) {
   const saved = Store.get('ff_module_order_' + userId);
-  if (saved && Array.isArray(saved) && saved.length > 0) {
-    // Build ordered list from saved IDs, filtering out any that no longer exist
-    const ordered = saved.map(id => ALL_MODULES.find(m => m.id === id)).filter(Boolean);
-    // Append any new modules not in the saved order (e.g. calisthenics added after user saved)
-    const missing = ALL_MODULES.filter(m => !saved.includes(m.id));
-    if (missing.length) {
-      // Save the merged order so it persists
-      saveModuleOrder(userId, [...ordered, ...missing]);
-    }
-    return [...ordered, ...missing];
+  if (saved && Array.isArray(saved) && saved.length === ALL_MODULES.length) {
+    // Return modules in saved order
+    return saved.map(id => ALL_MODULES.find(m => m.id === id)).filter(Boolean);
   }
   return [...ALL_MODULES];
 }
@@ -120,7 +112,7 @@ function renderDashboardTiles() {
         onclick="openModule('${m.id}')"
         ontouchstart="tileTouchStart(event,this)"
         ontouchmove="tileTouchMove(event,this)"
-        ontouchend="tileTouchEnd(event,this)" style="will-change:transform;-webkit-user-select:none;user-select:none;touch-action:none;">
+        ontouchend="tileTouchEnd(event,this)">
         <div>
           <div class="module-emoji">${m.emoji}</div>
           <div class="module-name">${m.name}</div>
@@ -144,23 +136,20 @@ function renderDashboardTiles() {
 let _dragSrc = null;
 
 function initTileDragDrop() {
-  const grid = document.getElementById('module-grid');
+  const grid  = document.getElementById('module-grid');
   if (!grid) return;
 
   grid.querySelectorAll('.module-card').forEach(card => {
     card.addEventListener('dragstart', e => {
       _dragSrc = card;
-      card.style.opacity   = '0.4';
-      card.style.transform = 'scale(0.96)';
+      card.style.opacity = '0.5';
+      card.style.transform = 'scale(0.95)';
       e.dataTransfer.effectAllowed = 'move';
     });
-    card.addEventListener('dragend', () => {
-      card.style.opacity   = '';
+    card.addEventListener('dragend', e => {
+      card.style.opacity = '';
       card.style.transform = '';
-      grid.querySelectorAll('.module-card').forEach(c => {
-        c.classList.remove('drag-over');
-        c.style.transform = '';
-      });
+      grid.querySelectorAll('.module-card').forEach(c => c.classList.remove('drag-over'));
     });
     card.addEventListener('dragover', e => {
       e.preventDefault();
@@ -204,190 +193,80 @@ function _persistOrder() {
   showToast('Order saved! ✅', 'success');
 }
 
-// ── SMOOTH TOUCH DRAG & DROP (Apple-style) ───────────────────────
-// Approach:
-//  • Long-press (200ms) activates drag with haptic + scale pop
-//  • Clone tracks finger via requestAnimationFrame — no jank
-//  • Other cards smoothly translate out of the way via CSS transitions
-//    as the dragged card crosses their midpoints (live reorder)
-//  • On drop: clone springs back to its new slot, then disappears
-//  • Zero layout thrash — transforms only, never touches width/height
-
-const _drag = {
-  active:    false,
-  card:      null,
-  clone:     null,
-  timer:     null,
-  raf:       null,
-  // Finger position (updated every touchmove)
-  fx: 0, fy: 0,
-  // Clone's pinned offset from finger
-  ox: 0, oy: 0,
-  // Current live order of card elements
-  order:     [],
-  // Index of dragged card in order array
-  dragIdx:   -1,
-};
+// ── MOBILE TOUCH DRAG & DROP ──────────────────────────────────────
+let _touch = { active: false, card: null, clone: null, startX: 0, startY: 0, lastOver: null };
 
 function tileTouchStart(e, card) {
-  clearTimeout(_drag.timer);
-  const t = e.touches[0];
-  _drag.fx = t.clientX;
-  _drag.fy = t.clientY;
+  // Only activate on long press (300ms) to not conflict with tap-to-open
+  _touch.timer = setTimeout(() => {
+    _touch.active = true;
+    _touch.card   = card;
+    _touch.startX = e.touches[0].clientX;
+    _touch.startY = e.touches[0].clientY;
 
-  _drag.timer = setTimeout(() => {
-    _activateDrag(card, _drag.fx, _drag.fy);
-  }, 200);
-}
-
-function _activateDrag(card, fx, fy) {
-  const grid  = document.getElementById('module-grid');
-  if (!grid) return;
-
-  const rect  = card.getBoundingClientRect();
-
-  // Build current live order from DOM
-  _drag.order   = [...grid.querySelectorAll('.module-card')];
-  _drag.dragIdx = _drag.order.indexOf(card);
-  _drag.card    = card;
-  _drag.active  = true;
-
-  // Finger offset from card top-left
-  _drag.ox = fx - rect.left;
-  _drag.oy = fy - rect.top;
-
-  // Create clone — pixel-perfect copy positioned over original
-  const clone = card.cloneNode(true);
-  clone.style.cssText = `
-    position:fixed;
-    z-index:9999;
-    pointer-events:none;
-    width:${rect.width}px;
-    height:${rect.height}px;
-    left:${rect.left}px;
-    top:${rect.top}px;
-    margin:0;
-    border-radius:16px;
-    transform:scale(1.06);
-    transform-origin:center center;
-    box-shadow:0 20px 60px rgba(0,0,0,0.55), 0 8px 20px rgba(0,0,0,0.3);
-    transition:transform 0.18s cubic-bezier(0.34,1.56,0.64,1);
-    will-change:left,top;
-    opacity:0.96;
-  `;
-  document.body.appendChild(clone);
-  _drag.clone = clone;
-
-  // Ghost the original card
-  card.style.cssText += ';opacity:0;pointer-events:none;';
-
-  // All other cards get smooth transition for displacement
-  _drag.order.forEach((c, i) => {
-    if (i !== _drag.dragIdx) {
-      c.style.transition = 'transform 0.22s cubic-bezier(0.25,0.46,0.45,0.94)';
-    }
-  });
-
-  // Haptic
-  navigator.vibrate && navigator.vibrate([12]);
-
-  // Start RAF loop
-  _drag.raf = requestAnimationFrame(_dragFrame);
-}
-
-function _dragFrame() {
-  if (!_drag.active || !_drag.clone) return;
-
-  // Move clone — direct assignment is smooth because RAF throttles it to 60fps
-  _drag.clone.style.left = (_drag.fx - _drag.ox) + 'px';
-  _drag.clone.style.top  = (_drag.fy - _drag.oy) + 'px';
-
-  // Find which slot the finger centre is over
-  const fingerCX = _drag.fx;
-  const fingerCY = _drag.fy;
-
-  _drag.clone.style.display = 'none';
-  const el = document.elementFromPoint(fingerCX, fingerCY);
-  _drag.clone.style.display = '';
-
-  const over = el?.closest('.module-card');
-
-  if (over && over !== _drag.card) {
-    const grid  = document.getElementById('module-grid');
-    const cards = [...grid.querySelectorAll('.module-card')];
-    const overIdx = cards.indexOf(over);
-
-    if (overIdx !== -1 && overIdx !== _drag.dragIdx) {
-      // Live-reorder: insert dragged card before or after target
-      if (overIdx < _drag.dragIdx) {
-        grid.insertBefore(_drag.card, over);
-      } else {
-        grid.insertBefore(_drag.card, over.nextSibling);
-      }
-      // Update order and dragIdx
-      _drag.order   = [...grid.querySelectorAll('.module-card')];
-      _drag.dragIdx = _drag.order.indexOf(_drag.card);
-      // Light haptic on each slot change
-      navigator.vibrate && navigator.vibrate([8]);
-    }
-  }
-
-  _drag.raf = requestAnimationFrame(_dragFrame);
-}
-
-function tileTouchMove(e, card) {
-  clearTimeout(_drag.timer);
-  if (!_drag.active) return;
-  e.preventDefault();
-  const t = e.touches[0];
-  _drag.fx = t.clientX;
-  _drag.fy = t.clientY;
-}
-
-function tileTouchEnd(e, card) {
-  clearTimeout(_drag.timer);
-  cancelAnimationFrame(_drag.raf);
-
-  if (!_drag.active || !_drag.clone) {
-    // Was a tap, not a drag — let onclick fire naturally
-    _resetDrag();
-    return;
-  }
-
-  // Snap clone to final card position, then fade out
-  const finalRect = _drag.card.getBoundingClientRect();
-  _drag.clone.style.transition = 'left 0.28s cubic-bezier(0.25,0.46,0.45,0.94), top 0.28s cubic-bezier(0.25,0.46,0.45,0.94), transform 0.28s cubic-bezier(0.25,0.46,0.45,0.94), opacity 0.2s ease 0.15s';
-  _drag.clone.style.left      = finalRect.left + 'px';
-  _drag.clone.style.top       = finalRect.top  + 'px';
-  _drag.clone.style.transform = 'scale(1)';
-  _drag.clone.style.opacity   = '0';
-
-  // Restore original card after snap animation
-  setTimeout(() => {
-    if (_drag.card) {
-      _drag.card.style.opacity        = '';
-      _drag.card.style.pointerEvents  = '';
-    }
-    if (_drag.clone) { _drag.clone.remove(); }
-    // Remove transitions from all cards
-    document.querySelectorAll('.module-card').forEach(c => {
-      c.style.transition = '';
-    });
-    _persistOrder();
-    _resetDrag();
+    // Create floating clone
+    const rect  = card.getBoundingClientRect();
+    const clone = card.cloneNode(true);
+    clone.style.cssText = `
+      position:fixed; z-index:9999; pointer-events:none; opacity:0.85;
+      width:${rect.width}px; height:${rect.height}px;
+      left:${rect.left}px; top:${rect.top}px;
+      transform:scale(1.05); transition:none;
+      border:2px solid var(--accent); border-radius:var(--radius-lg);
+      box-shadow:0 16px 48px rgba(0,0,0,0.6);
+    `;
+    document.body.appendChild(clone);
+    _touch.clone   = clone;
+    card.style.opacity = '0.3';
+    navigator.vibrate && navigator.vibrate(50); // haptic feedback
   }, 300);
 }
 
-function _resetDrag() {
-  _drag.active  = false;
-  _drag.card    = null;
-  _drag.clone   = null;
-  _drag.timer   = null;
-  _drag.raf     = null;
-  _drag.order   = [];
-  _drag.dragIdx = -1;
+function tileTouchMove(e, card) {
+  clearTimeout(_touch.timer);
+  if (!_touch.active || !_touch.clone) return;
+  e.preventDefault();
+
+  const touch = e.touches[0];
+  const dx    = touch.clientX - _touch.startX;
+  const dy    = touch.clientY - _touch.startY;
+  const rect  = _touch.card.getBoundingClientRect();
+
+  // Move clone with finger
+  _touch.clone.style.left = (rect.left + dx) + 'px';
+  _touch.clone.style.top  = (rect.top  + dy) + 'px';
+
+  // Find card under finger
+  _touch.clone.style.display = 'none';
+  const el = document.elementFromPoint(touch.clientX, touch.clientY);
+  _touch.clone.style.display = '';
+
+  const over = el?.closest('.module-card');
+  if (over && over !== _touch.card) {
+    if (over !== _touch.lastOver) {
+      document.querySelectorAll('.module-card').forEach(c => c.classList.remove('drag-over'));
+      over.classList.add('drag-over');
+      _touch.lastOver = over;
+    }
+  }
 }
 
+function tileTouchEnd(e, card) {
+  clearTimeout(_touch.timer);
+  if (!_touch.active) return;
+
+  // Clean up clone
+  if (_touch.clone) { _touch.clone.remove(); _touch.clone = null; }
+  card.style.opacity = '';
+  document.querySelectorAll('.module-card').forEach(c => c.classList.remove('drag-over'));
+
+  // Drop on target
+  if (_touch.lastOver && _touch.lastOver !== card) {
+    _swapTiles(card, _touch.lastOver);
+  }
+
+  _touch = { active: false, card: null, clone: null, startX: 0, startY: 0, lastOver: null };
+}
 
 function refreshDashboard() {
   renderDashboardStats();
@@ -425,11 +304,6 @@ function openModule(moduleId) {
   if (moduleId === 'running') {
     showPage('page-running');
     initRunningPage();
-    return;
-  }
-  if (moduleId === 'calisthenics') {
-    showPage('page-calisthenics');
-    renderCalisthenicsPage();
     return;
   }
   showPage('page-module');
@@ -980,8 +854,8 @@ function renderGlobalHistory() {
     : '<div class="empty-state"><div class="empty-icon">📋</div><p>No activity yet. Start working out!</p></div>';
 }
 
-function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🤸', running: '🏃', calisthenics: '🤸‍♂️', custom: '✏️' }[mod] || '💪'; }
-function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics', custom: 'Custom Workout' }[mod] || mod; }
+function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🤸', running: '🏃' }[mod] || '💪'; }
+function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running' }[mod] || mod; }
 
 // ════════════════════════════════════════════════════════════════
 // USER PROFILE PAGE
@@ -1330,439 +1204,4 @@ function openWeeklyReport() {
       if (typeof renderWeeklyReport === 'function') renderWeeklyReport();
     }, 300);
   }
-}
-
-// ════════════════════════════════════════════════════════════════
-// CALISTHENICS MODULE
-// ════════════════════════════════════════════════════════════════
-
-function renderCalisthenicsPage() {
-  switchCaliTab('workout', document.querySelector('.cali-tab-btn'));
-}
-
-function switchCaliTab(tab, btn) {
-  document.querySelectorAll('.cali-tab-btn').forEach(b => b.classList.remove('active'));
-  if (btn) btn.classList.add('active');
-  ['workout','skills','challenge','progress'].forEach(t => {
-    const el = document.getElementById('cali-tab-' + t);
-    if (el) el.style.display = t === tab ? 'block' : 'none';
-  });
-  if (tab === 'workout')   renderCaliWorkout();
-  if (tab === 'skills')    renderCaliSkills();
-  if (tab === 'challenge') renderCaliChallenge();
-  if (tab === 'progress')  renderCaliProgress();
-}
-
-function setCaliLevel(level) {
-  const user = APP.currentUser;
-  Store.set('ff_cali_level_' + user.id, level);
-  APP.caliLevel = level;
-  // Persist to Sheets so level survives device switches
-  Sheets.post('saveCaliProgress', { userId: user.id, key: 'level', value: level }).catch(() => {});
-  ['beginner','intermediate','advanced'].forEach(l => {
-    const btn = document.getElementById('cali-lvl-' + l);
-    if (!btn) return;
-    const isActive = l === level;
-    btn.style.border = isActive ? '2px solid var(--g4)' : '1.5px solid var(--border)';
-    btn.style.background = isActive ? 'rgba(46,125,70,0.15)' : 'var(--surface)';
-    btn.style.color = isActive ? 'var(--g5)' : 'var(--text2)';
-  });
-  renderCaliWorkout();
-}
-
-function renderCaliWorkout() {
-  const user  = APP.currentUser;
-  const level = Store.get('ff_cali_level_' + user.id) || 'beginner';
-  APP.caliLevel = level;
-
-  // Sync level selector buttons
-  setCaliLevel(level);
-
-  const data = APP_DATA.modules?.calisthenics;
-  if (!data || !data.levels) {
-    document.getElementById('cali-workout-content').innerHTML = '<div class="empty-state"><p>Calisthenics data loading…</p></div>';
-    return;
-  }
-
-  const levelData = data.levels[level];
-  if (!levelData) return;
-
-  const today    = todayStr();
-  const dayLabel = dayName();
-  const monday   = getMonday();
-  const logs     = Store.getModuleDayLogs(user.id, 'calisthenics');
-  const todayLog = logs.find(l => l.day === dayLabel && l.date === today);
-  const weekDone = [...new Set(logs.filter(l => l.date >= monday).map(l => l.day))].length;
-
-  const daysOrder = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-  const todayExercises = levelData.days[dayLabel] || levelData.days['Monday'];
-
-  document.getElementById('cali-workout-content').innerHTML = `
-    <!-- Today card -->
-    <div class="card" style="margin-bottom:16px;background:linear-gradient(135deg,rgba(15,52,96,0.4),rgba(26,26,46,0.4))">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-        <div>
-          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">Today — ${dayLabel}</div>
-          <div style="font-weight:700;font-size:16px;margin-top:2px">${levelData.label}</div>
-        </div>
-        <div style="text-align:right">
-          <span class="badge ${todayLog ? 'badge-green' : 'badge-yellow'}">${todayLog ? '✓ Done' : 'Start'}</span>
-          <div style="font-size:12px;color:var(--text3);margin-top:4px">${weekDone}/6 this week</div>
-        </div>
-      </div>
-      ${todayLog ? `<div style="font-size:13px;color:var(--g5)">✅ Great work today! Come back tomorrow.</div>` : `
-      <div style="font-size:13px;color:var(--text2);margin-bottom:12px">${todayExercises?.length || 8} exercises · Tap below to start</div>
-      <button class="btn btn-primary btn-full" onclick="startCaliWorkout('${dayLabel}','${level}')">
-        🤸‍♂️ Start ${dayLabel}'s Workout
-      </button>`}
-    </div>
-
-    <!-- Weekly grid -->
-    <div class="card card-sm" style="margin-bottom:16px">
-      <div class="section-title" style="margin-bottom:10px">This Week</div>
-      <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px">
-        ${daysOrder.map(d => {
-          const done = logs.some(l => l.day === d && l.date >= monday);
-          const isToday = d === dayLabel;
-          return `<div style="aspect-ratio:1;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:13px;
-            background:${done ? 'var(--g3)' : 'rgba(229,57,53,0.15)'};
-            border:${isToday ? '2px solid var(--accent)' : 'none'};
-            color:${done ? '#fff' : '#ef9a9a'}" title="${d}">
-            ${done ? '✓' : d[0]}
-          </div>`;
-        }).join('')}
-      </div>
-    </div>
-
-    <!-- All days list -->
-    <div class="section-title" style="margin-bottom:10px">Full Schedule</div>
-    ${daysOrder.map(d => {
-      const exercises = levelData.days[d] || [];
-      const done = logs.some(l => l.day === d && l.date >= monday);
-      const isToday = d === dayLabel;
-      return `
-        <div class="card card-sm" style="margin-bottom:8px;cursor:pointer;${isToday ? 'border-color:var(--accent)' : ''}"
-          onclick="startCaliWorkout('${d}','${level}')">
-          <div style="display:flex;align-items:center;gap:12px">
-            <div style="width:36px;height:36px;border-radius:10px;background:${done ? 'var(--g3)' : 'var(--bg3)'};
-              display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0">
-              ${done ? '✓' : '🤸‍♂️'}
-            </div>
-            <div style="flex:1">
-              <div style="font-weight:700;font-size:14px">${d}${isToday ? ' <span style="color:var(--accent);font-size:11px">← Today</span>' : ''}</div>
-              <div style="font-size:12px;color:var(--text3)">${exercises.length} exercises</div>
-            </div>
-            <span style="color:var(--text3)">›</span>
-          </div>
-        </div>`;
-    }).join('')}
-  `;
-}
-
-function startCaliWorkout(dayLabel, level) {
-  const lvlData = APP_DATA.modules?.calisthenics?.levels?.[level];
-  if (!lvlData) return;
-
-  // Temporarily surface this level's days as .days on the calisthenics module
-  // so the existing renderExercises / completeDay / updateCompleteBtn flow
-  // all work without any changes — they read APP_DATA.modules[mod].days[day]
-  APP_DATA.modules.calisthenics.days = lvlData.days;
-
-  APP.currentModule = 'calisthenics';
-  APP.currentDay    = dayLabel;
-
-  document.getElementById('module-title').textContent        = 'Calisthenics';
-  document.getElementById('module-emoji-header').textContent = '🤸‍♂️';
-
-  // Build day tab strip
-  const days = getWeekDays();
-  const user = APP.currentUser;
-  const logs = Store.getModuleDayLogs(user.id, 'calisthenics');
-  const todayDate = todayStr();
-  const todayDay  = dayName();
-
-  document.getElementById('day-tab-strip').innerHTML = days.map(d => {
-    const isActive = d === dayLabel;
-    const done     = logs.some(l => l.day === d && l.date === todayDate);
-    return `<button class="tab-btn ${isActive ? 'active' : ''}" onclick="selectDay('${d}',this)">${d.slice(0,3)} ${done ? '✓' : ''}</button>`;
-  }).join('');
-
-  // Reset inner tabs to Workout
-  document.querySelectorAll('.module-inner-tab').forEach(t => t.classList.remove('active'));
-  document.querySelector('.module-inner-tab')?.classList.add('active');
-  document.querySelectorAll('.module-tab-content').forEach(el => el.classList.remove('active'));
-  document.getElementById('module-workout-tab')?.classList.add('active');
-
-  renderExercises('calisthenics', dayLabel);
-  updateCompleteBtn();
-  showPage('page-module');
-}
-
-function markCaliDone(dayLabel, level) {
-  const user = APP.currentUser;
-  const log  = { userId: user.id, email: user.email, module: 'calisthenics', day: dayLabel, date: todayStr() };
-  const added = Store.addLog(log);
-  if (added) {
-    Sheets.post('logCompletion', log).catch(() => {});
-    showToast('Calisthenics logged! 🤸‍♂️', 'success');
-    goBack();
-    setTimeout(() => renderCaliWorkout(), 200);
-  }
-}
-
-function renderCaliSkills() {
-  const user = APP.currentUser;
-  const activeSkill = Store.get('ff_cali_skill_' + user.id);
-  const skills = window.CALI_SKILLS;
-  if (!skills) { document.getElementById('cali-skills-content').innerHTML = '<p style="color:var(--text3);padding:20px;text-align:center">Skill data loading…</p>'; return; }
-
-  const skillKeys = Object.keys(skills);
-
-  document.getElementById('cali-skills-content').innerHTML = `
-    <div class="card card-sm" style="margin-bottom:16px;background:rgba(240,192,64,0.08);border-color:rgba(240,192,64,0.25)">
-      <div style="font-size:13px;color:var(--accent);line-height:1.6">
-        💡 Pick <strong>1 skill</strong> to focus on. Spreading across multiple skills slows progress significantly.
-      </div>
-    </div>
-
-    ${skillKeys.map(key => {
-      const skill = skills[key];
-      const stepsDone = skill.steps.filter((s, i) => Store.get('ff_cali_skill_step_' + user.id + '_' + key + '_' + i)).length;
-      const pct = Math.round(stepsDone / skill.steps.length * 100);
-      const isActive = activeSkill === key;
-      return `
-        <div class="card card-sm" style="margin-bottom:10px;${isActive ? 'border-color:var(--g4);background:rgba(46,125,70,0.08)' : ''}">
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
-            <span style="font-size:28px">${skill.emoji}</span>
-            <div style="flex:1">
-              <div style="font-weight:700;font-size:15px">${skill.name}</div>
-              <div style="font-size:12px;color:var(--text3)">Equipment: ${skill.equipment} · ${skill.steps.length} steps</div>
-            </div>
-            ${isActive ? '<span class="badge badge-green">Active</span>' : ''}
-          </div>
-          <div class="progress-bar" style="margin-bottom:8px">
-            <div class="progress-fill" style="width:${pct}%"></div>
-          </div>
-          <div style="font-size:12px;color:var(--text3);margin-bottom:10px">${stepsDone}/${skill.steps.length} steps complete · ${pct}%</div>
-          <button class="btn ${isActive ? 'btn-ghost' : 'btn-primary'} btn-sm" onclick="openSkillTree('${key}')">
-            ${isActive ? '📋 View Progress' : '🎯 Start This Skill'}
-          </button>
-        </div>`;
-    }).join('')}
-  `;
-}
-
-function openSkillTree(skillKey) {
-  const user  = APP.currentUser;
-  const skill = window.CALI_SKILLS?.[skillKey];
-  if (!skill) return;
-  Store.set('ff_cali_skill_' + user.id, skillKey);
-  Sheets.post('saveCaliProgress', { userId: user.id, key: 'skill', value: skillKey }).catch(() => {});
-
-  document.getElementById('cali-skills-content').innerHTML = `
-    <button onclick="renderCaliSkills()" style="background:none;border:none;color:var(--g5);font-size:14px;font-weight:700;cursor:pointer;margin-bottom:16px;padding:0">← All Skills</button>
-    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px">
-      <span style="font-size:40px">${skill.emoji}</span>
-      <div>
-        <div style="font-family:var(--font-display);font-size:24px;color:var(--g5)">${skill.name}</div>
-        <div style="font-size:13px;color:var(--text3)">${skill.steps.length} progressions · ${skill.equipment}</div>
-      </div>
-    </div>
-    ${skill.steps.map((step, i) => {
-      const done = !!Store.get('ff_cali_skill_step_' + user.id + '_' + skillKey + '_' + i);
-      const prevDone = i === 0 || !!Store.get('ff_cali_skill_step_' + user.id + '_' + skillKey + '_' + (i-1));
-      const isActive = !done && prevDone;
-      return `
-        <div class="skill-step ${done ? 'done' : isActive ? 'active-step' : ''}" onclick="toggleSkillStep('${skillKey}',${i})">
-          <div style="width:32px;height:32px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;
-            background:${done ? 'var(--g4)' : isActive ? 'var(--accent)' : 'var(--bg3)'};
-            color:${done || isActive ? '#fff' : 'var(--text3)'}">
-            ${done ? '✓' : step.step}
-          </div>
-          <div style="flex:1">
-            <div style="font-weight:700;font-size:14px;${done ? 'text-decoration:line-through;color:var(--text3)' : ''}">${step.name}</div>
-            <div style="font-size:12px;color:var(--text3);margin-top:2px">${step.desc.substring(0,80)}…</div>
-            <div style="font-size:11px;color:var(--text3);margin-top:4px">${step.sets} sets · ${step.hold || step.reps}</div>
-          </div>
-          ${isActive ? '<span style="font-size:18px">→</span>' : ''}
-        </div>`;
-    }).join('')}
-  `;
-}
-
-function toggleSkillStep(skillKey, stepIndex) {
-  const user = APP.currentUser;
-  const key  = 'ff_cali_skill_step_' + user.id + '_' + skillKey + '_' + stepIndex;
-  const done = !!Store.get(key);
-  Store.set(key, !done);
-  // Persist to Sheets
-  Sheets.post('saveCaliProgress', { userId: user.id, key: 'skill_step_' + skillKey + '_' + stepIndex, value: !done }).catch(() => {});
-  openSkillTree(skillKey);
-  showToast(done ? 'Step unmarked' : '✅ Step complete!', done ? 'info' : 'success');
-}
-
-function renderCaliChallenge() {
-  const user  = APP.currentUser;
-  const days  = window.CALI_21DAY;
-  if (!days) return;
-  const startKey = 'ff_cali21_start_' + user.id;
-  let startDate  = Store.get(startKey);
-  const doneDays = Store.get('ff_cali21_done_' + user.id) || {};
-
-  const started = !!startDate;
-  const totalDone = Object.keys(doneDays).filter(k => doneDays[k]).length;
-  const today = todayStr();
-
-  document.getElementById('cali-challenge-content').innerHTML = `
-    ${!started ? `
-      <div class="card" style="text-align:center;padding:28px 20px;margin-bottom:16px;background:linear-gradient(135deg,rgba(15,52,96,0.3),rgba(26,26,46,0.3))">
-        <div style="font-size:56px;margin-bottom:12px">🏆</div>
-        <div style="font-family:var(--font-display);font-size:28px;color:var(--g5);margin-bottom:8px">21-Day Challenge</div>
-        <div style="font-size:14px;color:var(--text2);margin-bottom:20px;line-height:1.6">
-          A structured beginner-to-intermediate programme. One workout per day for 21 days — with Day 14 and Day 21 as benchmark tests to measure your progress.
-        </div>
-        <button class="btn btn-primary btn-full btn-lg" onclick="startCali21Day()">🚀 Start Challenge</button>
-      </div>` : `
-      <div class="card" style="text-align:center;padding:16px;margin-bottom:16px;background:linear-gradient(135deg,rgba(15,52,96,0.3),rgba(26,26,46,0.3))">
-        <div style="font-family:var(--font-display);font-size:32px;color:var(--g5)">${totalDone}/21</div>
-        <div style="font-size:13px;color:var(--text2)">Days complete · Started ${startDate}</div>
-        <div class="progress-bar" style="margin-top:10px"><div class="progress-fill" style="width:${Math.round(totalDone/21*100)}%"></div></div>
-      </div>`}
-    ${days.map((d, i) => {
-      const done = doneDays[i];
-      const dayDate = started ? (() => { const dt = new Date(startDate); dt.setDate(dt.getDate() + i); return dt.toISOString().split('T')[0]; })() : null;
-      const isToday = dayDate === today;
-      const isBenchmark = d.day === 14 || d.day === 21;
-      return `
-        <div class="cali-day-21 ${done ? 'done-day' : isToday ? 'today-day' : ''}" onclick="${started ? `openCali21Day(${i})` : 'showToast(\"Start the challenge first!\",\"error\")'}">
-          <div style="display:flex;align-items:center;gap:10px">
-            <div style="width:34px;height:34px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;
-              background:${done ? 'var(--g3)' : isBenchmark ? 'rgba(240,192,64,0.2)' : 'var(--bg3)'};
-              color:${done ? '#fff' : isBenchmark ? 'var(--accent)' : 'var(--text2)'}">
-              ${done ? '✓' : d.day}
-            </div>
-            <div style="flex:1">
-              <div style="font-weight:700;font-size:13px">${d.title}${isToday ? ' <span style="color:var(--accent);font-size:11px">← Today</span>' : ''}</div>
-              <div style="font-size:11px;color:var(--text3)">${d.exercises.length} exercises${dayDate ? ' · ' + dayDate : ''}</div>
-            </div>
-            ${isBenchmark ? '<span style="font-size:14px">🏅</span>' : ''}
-          </div>
-        </div>`;
-    }).join('')}
-    ${started ? `<button class="btn btn-ghost btn-sm" style="margin-top:12px;color:#ef9a9a" onclick="resetCali21Day()">Reset Challenge</button>` : ''}
-  `;
-}
-
-function startCali21Day() {
-  const user = APP.currentUser;
-  Store.set('ff_cali21_start_' + user.id, todayStr());
-  Store.set('ff_cali21_done_'  + user.id, {});
-  Sheets.post('saveCaliProgress', { userId: user.id, key: '21day_start', value: todayStr() }).catch(() => {});
-  Sheets.post('saveCaliProgress', { userId: user.id, key: '21day_done',  value: {} }).catch(() => {});
-  showToast('Challenge started! Day 1 begins now 🚀', 'success');
-  renderCaliChallenge();
-}
-
-function resetCali21Day() {
-  const user = APP.currentUser;
-  Store.remove('ff_cali21_start_' + user.id);
-  Store.remove('ff_cali21_done_'  + user.id);
-  showToast('Challenge reset', 'info');
-  renderCaliChallenge();
-}
-
-function openCali21Day(dayIndex) {
-  const user    = APP.currentUser;
-  const dayData = window.CALI_21DAY?.[dayIndex];
-  if (!dayData) return;
-  const done = (Store.get('ff_cali21_done_' + user.id) || {})[dayIndex];
-
-  document.getElementById('cali-challenge-content').innerHTML = `
-    <button onclick="renderCaliChallenge()" style="background:none;border:none;color:var(--g5);font-size:14px;font-weight:700;cursor:pointer;margin-bottom:16px;padding:0">← Back to Challenge</button>
-    <div class="card" style="margin-bottom:16px;background:linear-gradient(135deg,rgba(15,52,96,0.3),rgba(26,26,46,0.3))">
-      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;margin-bottom:4px">Day ${dayData.day} of 21</div>
-      <div style="font-family:var(--font-display);font-size:24px;color:var(--g5)">${dayData.title}</div>
-    </div>
-    ${dayData.exercises.map(ex => `
-      <div class="card card-sm" style="margin-bottom:8px">
-        <div style="font-weight:700;font-size:14px">${ex.name}</div>
-        <div style="font-size:13px;color:var(--text2)">${ex.sets} sets × ${ex.reps}</div>
-      </div>`).join('')}
-    ${done ? `<div style="text-align:center;padding:16px;color:var(--g5);font-weight:700">✅ Day ${dayData.day} Complete!</div>` : `
-    <button class="btn btn-primary btn-full" style="margin-top:8px" onclick="markCali21DayDone(${dayIndex})">
-      ✅ Complete Day ${dayData.day}
-    </button>`}
-  `;
-}
-
-function markCali21DayDone(dayIndex) {
-  const user = APP.currentUser;
-  const done = Store.get('ff_cali21_done_' + user.id) || {};
-  done[dayIndex] = true;
-  Store.set('ff_cali21_done_' + user.id, done);
-  Sheets.post('saveCaliProgress', { userId: user.id, key: '21day_done', value: done }).catch(() => {});
-  const log = { userId: user.id, email: user.email, module: 'calisthenics', day: '21-Day-' + (dayIndex + 1), date: todayStr() };
-  Store.addLog(log);
-  Sheets.post('logCompletion', log).catch(() => {});
-  showToast('Day ' + (dayIndex + 1) + ' done! 🏆', 'success');
-  renderCaliChallenge();
-}
-
-function renderCaliProgress() {
-  const user  = APP.currentUser;
-  const logs  = Store.getModuleDayLogs(user.id, 'calisthenics');
-  const level = Store.get('ff_cali_level_' + user.id) || 'beginner';
-  const monday = getMonday();
-  const streak = (() => {
-    const dates = [...new Set(logs.map(l => l.date))].sort().reverse();
-    if (!dates.length) return 0;
-    let s = 0, d = new Date();
-    for (let i = 0; i < 60; i++) {
-      const dd = d.toISOString().split('T')[0];
-      if (dates.includes(dd)) { s++; d.setDate(d.getDate()-1); }
-      else if (i > 0) break;
-      else { d.setDate(d.getDate()-1); if (!dates.includes(d.toISOString().split('T')[0])) break; }
-    }
-    return s;
-  })();
-  const weekCount  = logs.filter(l => l.date >= monday).length;
-  const totalCount = logs.length;
-  const doneDays   = Store.get('ff_cali21_done_' + user.id) || {};
-  const challenge21 = Object.keys(doneDays).filter(k => doneDays[k]).length;
-  const activeSkill = Store.get('ff_cali_skill_' + user.id);
-  const skill = activeSkill ? window.CALI_SKILLS?.[activeSkill] : null;
-  const skillStepsDone = skill ? skill.steps.filter((s, i) => Store.get('ff_cali_skill_step_' + user.id + '_' + activeSkill + '_' + i)).length : 0;
-
-  const levelLabels = { beginner: '🐣 Beginner', intermediate: '💪 Intermediate', advanced: '🔥 Advanced' };
-
-  document.getElementById('cali-progress-content').innerHTML = `
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-      <div class="stat-card"><div style="font-size:18px">🔥</div><div style="font-family:var(--font-display);font-size:32px;color:var(--g5)">${streak}</div><div style="font-size:12px;color:var(--text3)">Day Streak</div></div>
-      <div class="stat-card"><div style="font-size:18px">📅</div><div style="font-family:var(--font-display);font-size:32px;color:var(--g5)">${weekCount}</div><div style="font-size:12px;color:var(--text3)">This Week</div></div>
-      <div class="stat-card"><div style="font-size:18px">💪</div><div style="font-family:var(--font-display);font-size:32px;color:var(--g5)">${totalCount}</div><div style="font-size:12px;color:var(--text3)">Total Sessions</div></div>
-      <div class="stat-card"><div style="font-size:18px">🏆</div><div style="font-family:var(--font-display);font-size:32px;color:var(--g5)">${challenge21}/21</div><div style="font-size:12px;color:var(--text3)">21-Day Days</div></div>
-    </div>
-
-    <div class="card card-sm" style="margin-bottom:12px">
-      <div style="font-size:12px;color:var(--text3);margin-bottom:6px">Current Level</div>
-      <div style="font-weight:700;font-size:16px">${levelLabels[level]}</div>
-      ${level !== 'advanced' ? `<button class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="setCaliLevel('${level === 'beginner' ? 'intermediate' : 'advanced'}')">Level up →</button>` : '<div style="font-size:12px;color:var(--g5);margin-top:6px">🔥 You\'re at the highest level!</div>'}
-    </div>
-
-    ${skill ? `
-    <div class="card card-sm" style="margin-bottom:12px">
-      <div style="font-size:12px;color:var(--text3);margin-bottom:6px">Active Skill Goal</div>
-      <div style="display:flex;align-items:center;gap:10px">
-        <span style="font-size:24px">${skill.emoji}</span>
-        <div style="flex:1">
-          <div style="font-weight:700">${skill.name}</div>
-          <div style="font-size:12px;color:var(--text3)">${skillStepsDone}/${skill.steps.length} steps complete</div>
-        </div>
-      </div>
-      <div class="progress-bar" style="margin-top:8px"><div class="progress-fill" style="width:${Math.round(skillStepsDone/skill.steps.length*100)}%"></div></div>
-    </div>` : `
-    <div class="card card-sm" style="margin-bottom:12px;text-align:center;padding:16px">
-      <div style="font-size:13px;color:var(--text3)">No skill goal set. Go to the Skills tab to pick one!</div>
-    </div>`}
-  `;
 }
