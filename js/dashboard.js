@@ -970,6 +970,16 @@ function toggleNotificationSetting() {
 
 // ── CUSTOM WORKOUTS & WEEKLY REPORT RELAY ────────────────────────
 // These ensure the pages work even if their scripts load after the click
+function openMyPlanPage() {
+  // Relay to running.js — ensures My Plan tab always works
+  showPage('page-my-plan', false);
+  if (typeof renderMyPlan === 'function') {
+    renderMyPlan();
+  } else {
+    setTimeout(() => { if (typeof renderMyPlan === 'function') renderMyPlan(); }, 300);
+  }
+}
+
 function openCustomWorkouts() {
   showPage('page-custom-workouts');
   // Try immediately, then retry after scripts load
