@@ -144,6 +144,11 @@ function showPage(id, addToHistory = true) {
 }
 
 function goBack() {
+  // Never go back if no user session — stay on login
+  if (!APP.currentUser) return;
+  // Never go back from root pages
+  if (ROOT_PAGES.includes(APP.currentPage)) return;
+
   if (APP.pageHistory.length > 0) {
     const prev = APP.pageHistory.pop();
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -168,22 +173,31 @@ function _syncNav(pageId) {
   else if (pageId === 'page-admin')          setActiveNav('admin');
 }
 
-window.addEventListener('popstate', () => {
-  if (ROOT_PAGES.slice(0, 3).includes(APP.currentPage)) {
+window.addEventListener('popstate', e => {
+  // Only handle real navigation events, not browser chrome show/hide
+  if (!e.state?.page) return;
+  if (ROOT_PAGES.includes(APP.currentPage)) {
     window.history.pushState({ page: APP.currentPage }, '', '#' + APP.currentPage);
     return;
   }
   goBack();
 });
 
-// Swipe-left → back
+// Swipe-left → back (strict: must be clearly horizontal, not a scroll)
 (function () {
   let sx = 0, sy = 0;
-  document.addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+  document.addEventListener('touchstart', e => {
+    sx = e.touches[0].clientX;
+    sy = e.touches[0].clientY;
+  }, { passive: true });
   document.addEventListener('touchend', e => {
     const dx = e.changedTouches[0].clientX - sx;
     const dy = Math.abs(e.changedTouches[0].clientY - sy);
-    if (dx < -70 && dy < 80 && !ROOT_PAGES.includes(APP.currentPage)) goBack();
+    // Much stricter: horizontal swipe must be > 80px, vertical drift < 40px
+    // AND horizontal movement must be at least 2x the vertical movement
+    if (dx < -80 && dy < 40 && Math.abs(dx) > dy * 2 && !ROOT_PAGES.includes(APP.currentPage)) {
+      goBack();
+    }
   }, { passive: true });
 })();
 
