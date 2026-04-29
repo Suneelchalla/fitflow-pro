@@ -19,6 +19,225 @@
 </head>
 <body>
 
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- ANIMATED SPLASH SCREEN                                          -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="splash-screen" style="
+  position:fixed;inset:0;z-index:99999;
+  background:#071510;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  transition:opacity 0.6s ease, transform 0.6s ease;
+">
+  <style>
+    #splash-screen.fade-out { opacity:0; transform:scale(1.05); pointer-events:none; }
+
+    @keyframes splash-ring-spin {
+      from { transform:rotate(0deg); }
+      to   { transform:rotate(360deg); }
+    }
+    @keyframes splash-ring-spin-rev {
+      from { transform:rotate(0deg); }
+      to   { transform:rotate(-360deg); }
+    }
+    @keyframes splash-pulse {
+      0%,100% { transform:scale(1); opacity:0.15; }
+      50%      { transform:scale(1.15); opacity:0.05; }
+    }
+    @keyframes splash-bolt {
+      0%,100% { filter:drop-shadow(0 0 6px #4caf50) drop-shadow(0 0 12px #2e7d46); }
+      50%      { filter:drop-shadow(0 0 16px #7ed9a0) drop-shadow(0 0 32px #43a05a); }
+    }
+    @keyframes splash-title-in {
+      from { opacity:0; transform:translateY(20px) letterSpacing:0.2em; }
+      to   { opacity:1; transform:translateY(0); }
+    }
+    @keyframes splash-sub-in {
+      from { opacity:0; transform:translateY(10px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+    @keyframes splash-tagline-in {
+      from { opacity:0; }
+      to   { opacity:0.6; }
+    }
+    @keyframes splash-bar-fill {
+      from { width:0%; }
+      to   { width:100%; }
+    }
+    @keyframes splash-bar-glow {
+      0%,100% { box-shadow:0 0 8px #4caf50; }
+      50%      { box-shadow:0 0 20px #7ed9a0, 0 0 40px #43a05a; }
+    }
+    @keyframes splash-particle {
+      0%   { transform:translate(0,0) scale(1); opacity:0.8; }
+      100% { transform:translate(var(--px),var(--py)) scale(0); opacity:0; }
+    }
+    .splash-particle {
+      position:absolute;
+      width:4px;height:4px;
+      border-radius:50%;
+      background:#4caf50;
+      animation:splash-particle 1.5s ease-out forwards;
+    }
+  </style>
+
+  <!-- Particles background -->
+  <div id="splash-particles" style="position:absolute;inset:0;overflow:hidden;pointer-events:none"></div>
+
+  <!-- Main logo container -->
+  <div style="position:relative;width:160px;height:160px;margin-bottom:32px">
+
+    <!-- Outer pulse ring -->
+    <div style="
+      position:absolute;inset:-20px;
+      border-radius:50%;
+      background:radial-gradient(circle,rgba(76,175,80,0.15) 0%,transparent 70%);
+      animation:splash-pulse 2.5s ease-in-out infinite;
+    "></div>
+
+    <!-- Spinning ring 1 -->
+    <div style="
+      position:absolute;inset:-8px;
+      border-radius:50%;
+      border:1.5px solid transparent;
+      border-top-color:#4caf50;
+      border-right-color:#2e7d46;
+      animation:splash-ring-spin 3s linear infinite;
+    "></div>
+
+    <!-- Spinning ring 2 (reverse) -->
+    <div style="
+      position:absolute;inset:-16px;
+      border-radius:50%;
+      border:1px solid transparent;
+      border-bottom-color:#43a05a;
+      border-left-color:#1a5c32;
+      animation:splash-ring-spin-rev 4s linear infinite;
+    "></div>
+
+    <!-- Dashed orbit ring -->
+    <div style="
+      position:absolute;inset:-4px;
+      border-radius:50%;
+      border:1px dashed rgba(76,175,80,0.3);
+      animation:splash-ring-spin 8s linear infinite;
+    "></div>
+
+    <!-- Main circle -->
+    <div style="
+      position:absolute;inset:0;
+      border-radius:50%;
+      background:linear-gradient(135deg,#1a4a28,#0d2a16);
+      border:2px solid rgba(76,175,80,0.3);
+      display:flex;align-items:center;justify-content:center;
+    ">
+      <!-- Lightning bolt SVG -->
+      <svg width="70" height="70" viewBox="0 0 80 80" style="animation:splash-bolt 2s ease-in-out infinite">
+        <path d="M46 10 L28 42 L40 42 L32 70 L54 36 L41 36 Z"
+          fill="#4caf50"
+          stroke="rgba(126,217,160,0.4)"
+          stroke-width="1"/>
+        <path d="M46 10 L28 42 L40 42 L32 70 L54 36 L41 36 Z"
+          fill="none"
+          stroke="rgba(255,255,255,0.15)"
+          stroke-width="0.5"/>
+      </svg>
+    </div>
+  </div>
+
+  <!-- App name -->
+  <div style="
+    font-family:var(--font-display,sans-serif);
+    font-size:48px;
+    font-weight:700;
+    color:#7ed9a0;
+    letter-spacing:0.08em;
+    line-height:1;
+    animation:splash-title-in 0.6s ease forwards;
+    animation-delay:0.3s;
+    opacity:0;
+  ">FITFLOW</div>
+
+  <!-- PRO badge -->
+  <div style="
+    font-family:var(--font-display,sans-serif);
+    font-size:14px;
+    font-weight:700;
+    color:#fff;
+    letter-spacing:0.3em;
+    background:linear-gradient(135deg,#2e7d46,#1a5c32);
+    padding:3px 14px;
+    border-radius:20px;
+    margin-top:6px;
+    border:1px solid rgba(76,175,80,0.4);
+    animation:splash-sub-in 0.6s ease forwards;
+    animation-delay:0.5s;
+    opacity:0;
+  ">PRO</div>
+
+  <!-- Tagline -->
+  <div style="
+    font-size:13px;
+    color:rgba(255,255,255,0.5);
+    margin-top:12px;
+    letter-spacing:0.05em;
+    animation:splash-tagline-in 0.8s ease forwards;
+    animation-delay:0.8s;
+    opacity:0;
+  ">Your all-in-one fitness companion</div>
+
+  <!-- Progress bar -->
+  <div style="
+    position:absolute;bottom:60px;left:50%;transform:translateX(-50%);
+    width:140px;height:3px;
+    background:rgba(76,175,80,0.15);
+    border-radius:2px;overflow:hidden;
+  ">
+    <div style="
+      height:100%;
+      background:linear-gradient(90deg,#2e7d46,#7ed9a0,#2e7d46);
+      border-radius:2px;
+      animation:splash-bar-fill 1.8s ease forwards, splash-bar-glow 1.8s ease;
+    "></div>
+  </div>
+
+  <!-- Version -->
+  <div style="
+    position:absolute;bottom:32px;
+    font-size:11px;color:rgba(255,255,255,0.2);
+    letter-spacing:0.1em;
+  ">v2.0</div>
+</div>
+
+<script>
+// Particles burst
+(function() {
+  var container = document.getElementById('splash-particles');
+  for (var i = 0; i < 20; i++) {
+    var p = document.createElement('div');
+    p.className = 'splash-particle';
+    var angle = (i / 20) * 360;
+    var dist = 80 + Math.random() * 120;
+    var px = Math.cos(angle * Math.PI/180) * dist + 'px';
+    var py = Math.sin(angle * Math.PI/180) * dist + 'px';
+    p.style.cssText = 'left:50%;top:40%;--px:'+px+';--py:'+py+';animation-delay:'+(Math.random()*0.5)+'s;background:'+(Math.random()>0.5?'#4caf50':'#7ed9a0');
+    container.appendChild(p);
+  }
+})();
+
+// Auto-hide after 2.2s
+window.addEventListener('DOMContentLoaded', function() {
+  setTimeout(function() {
+    var splash = document.getElementById('splash-screen');
+    if (splash) {
+      splash.classList.add('fade-out');
+      setTimeout(function() { 
+        if (splash && splash.parentNode) splash.parentNode.removeChild(splash); 
+      }, 700);
+    }
+  }, 2200);
+});
+</script>
+
 <div class="bg-mesh"></div>
 <div id="toast"></div>
 
