@@ -181,13 +181,45 @@ window.addEventListener('popstate', () => {
 
 // Swipe-left → back
 (function () {
-  let sx = 0, sy = 0;
-  document.addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+  let sx = 0, sy = 0, _swipeTarget = null;
+
+  document.addEventListener('touchstart', e => {
+    sx = e.touches[0].clientX;
+    sy = e.touches[0].clientY;
+    _swipeTarget = e.target;
+  }, { passive: true });
+
   document.addEventListener('touchend', e => {
     const dx = e.changedTouches[0].clientX - sx;
     const dy = Math.abs(e.changedTouches[0].clientY - sy);
-    if (dx < -70 && dy < 80 && !ROOT_PAGES.includes(APP.currentPage)) goBack();
+    if (dx < -70 && dy < 80 && !ROOT_PAGES.includes(APP.currentPage)) {
+      // Don't trigger back if the swipe started inside a horizontally scrollable element
+      // (tab strips, horizontal scroll containers)
+      if (_isHorizontallyScrollable(_swipeTarget)) return;
+      goBack();
+    }
   }, { passive: true });
+
+  function _isHorizontallyScrollable(el) {
+    // Walk up the DOM from the touch target
+    // If any ancestor scrolls horizontally and has overflow content, this is a scroll gesture
+    while (el && el !== document.body) {
+      const style = window.getComputedStyle(el);
+      const overflowX = style.overflowX;
+      if (overflowX === 'auto' || overflowX === 'scroll') {
+        if (el.scrollWidth > el.clientWidth) return true;
+      }
+      // Also catch elements with tab-strip or explicitly scrollable class/role
+      if (el.classList && (
+        el.classList.contains('tab-strip') ||
+        el.classList.contains('day-strip') ||
+        el.classList.contains('run-tabs') ||
+        el.getAttribute('data-scroll') === 'x'
+      )) return true;
+      el = el.parentElement;
+    }
+    return false;
+  }
 })();
 
 // ── CUSTOM PULL-TO-REFRESH ────────────────────────────────────────
@@ -352,8 +384,6 @@ document.addEventListener('DOMContentLoaded', () => {
     ]));
   }
 
-  window.history.replaceState({ page: 'page-login' }, '', '#page-login');
-
   document.querySelectorAll('.modal-overlay').forEach(mo => {
     mo.addEventListener('click', e => { if (e.target === mo) mo.classList.remove('open'); });
   });
@@ -382,7 +412,6 @@ document.addEventListener('DOMContentLoaded', () => {
     APP.currentUser = session;
 
     // Restore to correct page INSTANTLY before any rendering
-    // This prevents the login page flash on pull-down / reload
     const targetPage = session.role === 'ADMIN'
       ? 'page-admin'
       : Store.get('ff_quote_' + session.id) === todayStr()
@@ -393,6 +422,10 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     const targetEl = document.getElementById(targetPage);
     if (targetEl) { targetEl.classList.add('active'); APP.currentPage = targetPage; }
+
+    // Set URL hash to match — must happen AFTER setting APP.currentPage
+    // so any popstate that fires sees the correct page
+    window.history.replaceState({ page: targetPage }, '', '#' + targetPage);
 
     // Then render content
     syncContentFromSheets();
@@ -411,6 +444,7 @@ document.addEventListener('DOMContentLoaded', () => {
       initPushNotifications();
     }
   } else {
+    window.history.replaceState({ page: 'page-login' }, '', '#page-login');
     showPage('page-login', false);
   }
 });
