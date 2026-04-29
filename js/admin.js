@@ -293,13 +293,26 @@ function openModuleEditor(moduleId) {
   AdminEdit.section = 'exercises';
   AdminEdit.isDirty = false;
 
-  // Always clear stale localStorage cache for this module so APP_DATA shows fresh
-  Store.remove('ff_content_exercises_' + moduleId);
-  Store.remove('ff_content_warmup_'    + moduleId);
-  Store.remove('ff_content_cooldown_'  + moduleId);
-
   showPage('page-admin-editor');
   renderModuleEditor();
+
+  // Fetch latest content from Sheets in background so editor shows real data
+  // Don't clear cache first — show what we have immediately, then refresh
+  Sheets.get('getContent', { key: 'exercises_' + moduleId }).then(res => {
+    if (res?.success && res.content) {
+      Store.setContent('exercises_' + moduleId, res.content);
+    }
+    Sheets.get('getContent', { key: 'warmup_' + moduleId }).then(r => {
+      if (r?.success && r.content) Store.setContent('warmup_' + moduleId, r.content);
+    });
+    Sheets.get('getContent', { key: 'cooldown_' + moduleId }).then(r => {
+      if (r?.success && r.content) Store.setContent('cooldown_' + moduleId, r.content);
+    });
+    // Re-render with fresh data if still on same module
+    if (AdminEdit.module === moduleId && !AdminEdit.isDirty) {
+      renderEditorSection();
+    }
+  }).catch(() => {});
 }
 
 function renderModuleEditor() {
@@ -415,7 +428,10 @@ async function _collectAndSave() {
       const dayEl = document.querySelector(`[data-day="${day}"]`);
       if (!dayEl) {
         // Day not in DOM — always use APP_DATA as the ground truth
-        result.days[day] = APP_DATA.modules[moduleId]?.days?.[day] || [];
+        // Day not in DOM — use APP_DATA, unwrapping double-nested structure if present
+        let appDays = APP_DATA.modules[moduleId]?.days;
+        if (appDays && appDays.days) appDays = appDays.days;
+        result.days[day] = appDays?.[day] || [];
         return;
       }
       result.days[day] = Array.from(dayEl.querySelectorAll('.ex-row')).map(row => {
@@ -518,18 +534,26 @@ function activateEditing(container) {
 // ════════════════════════════════════════════════════════════════
 function renderExerciseEditor(moduleId, body) {
   const days = getWeekDays();
+
   body.innerHTML = `
     <div style="font-size:13px;color:var(--text2);padding:0 16px 12px;line-height:1.5">
-      ✏️ <strong>Tap any field</strong> to edit. Applies to all users after saving.
+      ✏️ <strong>Tap any field</strong> to edit. Changes apply to all users after saving.
     </div>
     ${days.map(day => {
-      // Always show APP_DATA (data.js ground truth) for admin editor.
-      // Sheets-saved version is only used if it has MORE exercises than APP_DATA
-      // (meaning admin manually added exercises via the panel).
-      const appDefault = APP_DATA.modules[moduleId]?.days?.[day] || [];
-      const saved      = Store.getContent('exercises_' + moduleId);
-      const savedDay   = saved?.days?.[day] || [];
-      const exercises  = savedDay.length > appDefault.length ? savedDay : appDefault;
+      // Get APP_DATA exercises — handle both correct and double-nested structure
+      let appDays = APP_DATA.modules[moduleId]?.days;
+      if (appDays && appDays.days) appDays = appDays.days; // unwrap if double-nested
+      const appDefault = appDays?.[day] || [];
+
+      // Get Sheets-saved exercises — handle double-nested structure too
+      const saved = Store.getContent('exercises_' + moduleId);
+      let savedDays = saved?.days;
+      if (savedDays && savedDays.days) savedDays = savedDays.days; // unwrap if double-nested
+      const savedDay = savedDays?.[day] || [];
+
+      // Use whichever has more exercises (Sheets wins if admin added extra)
+      const exercises = savedDay.length > appDefault.length ? savedDay : appDefault;
+
       return `
         <div style="margin-bottom:8px">
           <div style="padding:10px 16px;background:rgba(46,125,70,0.15);font-weight:700;font-size:14px;
