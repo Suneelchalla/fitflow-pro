@@ -526,19 +526,19 @@ function clearActivePlan() {
 
 // Show / hide "My Plan" bottom nav tab based on whether user has registered a plan
 function _refreshMyPlanNav() {
-  const tab     = document.getElementById('nav-myplan');
-  const label   = document.getElementById('nav-myplan-label');
-  const runTab  = document.querySelector('.nav-item[data-nav="running"]');
+  const tab    = document.getElementById('nav-myplan');
+  const label  = document.getElementById('nav-myplan-label');
+  const runTab = document.querySelector('.nav-item[data-nav="running"]');
   if (!tab) return;
   const active = getActivePlan();
   if (active) {
     const plan = APP_DATA.running.plans[active.planKey];
     tab.style.display = '';
     if (label) label.textContent = plan ? active.planKey : 'My Plan';
-    if (runTab) runTab.style.display = 'none'; // hide Run tab when plan active
+    if (runTab) runTab.style.display = 'none';
   } else {
     tab.style.display = 'none';
-    if (runTab) runTab.style.display = ''; // show Run tab when no plan
+    if (runTab) runTab.style.display = '';
   }
 }
 
@@ -586,12 +586,6 @@ function showChangePlanSheet() {
 }
 
 // ── MY PLAN PAGE ──────────────────────────────────────────────────
-function openMyPlanPage() {
-  showPage('page-my-plan', false);
-  APP._myPlanViewWeek = null;
-  renderMyPlan();
-}
-
 function renderMyPlan() {
   const container = document.getElementById('myplan-content');
   const active    = getActivePlan();
