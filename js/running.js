@@ -180,10 +180,11 @@ function renderRunningTabs(tab) {
   document.querySelector(`.run-tab-btn[data-tab="${tab}"]`)?.classList.add('active');
   document.querySelectorAll('.run-tab-content').forEach(c => c.classList.remove('active'));
   document.getElementById('run-tab-' + tab)?.classList.add('active');
-  if (tab === 'plans')     renderTrainingPlans();
-  if (tab === 'history')   renderRunHistory();
-  if (tab === 'hydration') renderHydrationRunning();
-  if (tab === 'diet')      renderDietRunning();
+  if (tab === 'plans')        renderTrainingPlans();
+  if (tab === 'history')      renderRunHistory();
+  if (tab === 'achievements') renderAchievements();
+  if (tab === 'hydration')    renderHydrationRunning();
+  if (tab === 'diet')         renderDietRunning();
 }
 
 // ── GPS RUN TRACKER ───────────────────────────────────────────────
@@ -354,6 +355,9 @@ function saveRun() {
   Store.addRunLog(log);
   sheetsPost('logRun', log);
 
+  // Check and unlock achievements after every run
+  setTimeout(() => checkAndUnlockAchievements(user.id), 800);
+
   // Auto-complete the plan day this run was started from
   if (ctx) {
     const today = todayStr();
@@ -456,6 +460,7 @@ function _markPlanDayDone(planKey, week, day, distKm, durSecs) {
     };
     Store.addRunLog(log);
     sheetsPost('logRun', log);
+    setTimeout(() => checkAndUnlockAchievements(user.id), 800);
   }
 }
 function confirmMarkPlanDone(planKey, week, day, dist, dur) {
@@ -1011,6 +1016,100 @@ function changeWeek(delta) {
 }
 
 // ── RUN HISTORY ───────────────────────────────────────────────────
+function renderAchievements() {
+  const user     = APP.currentUser;
+  const unlocked = _getAchievements(user.id);
+  const stats    = _buildRunStats(user.id);
+  const container = document.getElementById('run-achievements-content');
+  if (!container) return;
+
+  const unlockedCount = Object.keys(unlocked).length;
+  const totalCount    = ACHIEVEMENTS.length;
+  const pct           = Math.round(unlockedCount / totalCount * 100);
+
+  // Group by category
+  const categories = [
+    { label: '👟 Runs Completed',    ids: ['first_run','runs_5','runs_10','runs_25','runs_50','runs_100'] },
+    { label: '📏 Total Distance',    ids: ['dist_1k','dist_5k','dist_10k','dist_21k','dist_42k','dist_100k','dist_500k'] },
+    { label: '🎯 Single Run',        ids: ['single_5k','single_10k','single_hm','single_fm'] },
+    { label: '⚡ Speed',             ids: ['pace_7','pace_6','pace_5','pace_4'] },
+    { label: '🔥 Streaks',          ids: ['streak_3','streak_7','streak_14','streak_30'] },
+    { label: '🏆 Plans Completed',   ids: ['plan_5k','plan_10k','plan_hm','plan_fm'] },
+    { label: '✨ Special',           ids: ['early_bird','night_runner','rain_runner'] },
+  ];
+
+  container.innerHTML = `
+    <!-- Stats header -->
+    <div style="padding:16px;background:linear-gradient(135deg,var(--g1),var(--g2));margin-bottom:16px;border-radius:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div>
+          <div style="font-family:var(--font-display);font-size:32px;color:var(--g5);line-height:1">${unlockedCount}</div>
+          <div style="font-size:12px;color:var(--text3)">of ${totalCount} badges unlocked</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:36px">🏅</div>
+          <div style="font-size:12px;color:var(--g5);font-weight:700">${pct}%</div>
+        </div>
+      </div>
+      <div style="height:6px;background:rgba(255,255,255,0.15);border-radius:3px;overflow:hidden">
+        <div style="width:${pct}%;height:100%;background:var(--accent);border-radius:3px;transition:width .6s"></div>
+      </div>
+    </div>
+
+    <!-- Current stats -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
+      <div class="stat-card"><div class="stat-val">${stats.totalRuns}</div><div class="stat-label">Runs</div></div>
+      <div class="stat-card"><div class="stat-val">${stats.totalKm.toFixed(1)}</div><div class="stat-label">Total km</div></div>
+      <div class="stat-card"><div class="stat-val">${stats.runStreak}🔥</div><div class="stat-label">Streak</div></div>
+    </div>
+
+    <!-- Badge categories -->
+    ${categories.map(cat => {
+      const catAchievements = ACHIEVEMENTS.filter(a => cat.ids.includes(a.id));
+      const catUnlocked = catAchievements.filter(a => unlocked[a.id]).length;
+      return `
+        <div style="margin-bottom:18px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div style="font-size:13px;font-weight:700;color:var(--text1)">${cat.label}</div>
+            <div style="font-size:11px;color:var(--text3)">${catUnlocked}/${catAchievements.length}</div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+            ${catAchievements.map(a => {
+              const isUnlocked = !!unlocked[a.id];
+              const unlockedAt = unlocked[a.id]?.unlockedAt;
+              const dateStr = unlockedAt ? new Date(unlockedAt).toLocaleDateString('en-IN',{day:'numeric',month:'short'}) : '';
+              return `
+                <div style="background:${isUnlocked ? 'rgba(46,125,70,0.15)' : 'var(--bg2)'};
+                  border:1px solid ${isUnlocked ? 'rgba(46,125,70,0.4)' : 'var(--border)'};
+                  border-radius:12px;padding:10px 8px;text-align:center;
+                  transition:all .2s;${isUnlocked ? '' : 'opacity:0.45'}">
+                  <div style="font-size:28px;margin-bottom:4px;${isUnlocked ? '' : 'filter:grayscale(1)'}">${a.emoji}</div>
+                  <div style="font-size:11px;font-weight:700;color:var(--text1);line-height:1.3;margin-bottom:2px">${a.name}</div>
+                  <div style="font-size:10px;color:var(--text3);line-height:1.3">${isUnlocked ? ('✓ ' + dateStr) : a.desc}</div>
+                </div>`;
+            }).join('')}
+          </div>
+        </div>`;
+    }).join('')}
+
+    <!-- Next badge to unlock -->
+    ${(() => {
+      const next = ACHIEVEMENTS.find(a => !unlocked[a.id]);
+      return next ? `
+        <div class="card" style="background:rgba(240,192,64,0.08);border-color:rgba(240,192,64,0.3);margin-bottom:16px">
+          <div style="font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Next to unlock</div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="font-size:32px">${next.emoji}</div>
+            <div>
+              <div style="font-weight:700;font-size:14px">${next.name}</div>
+              <div style="font-size:12px;color:var(--text3);margin-top:2px">${next.desc}</div>
+            </div>
+          </div>
+        </div>` : '<div style="text-align:center;padding:20px;font-size:24px">🎉 All badges unlocked!</div>';
+    })()}
+  `;
+}
+
 function renderRunHistory() {
   const user      = APP.currentUser;
   const logs      = Store.getUserRunLogs(user.id).sort((a, b) => b.date?.localeCompare(a.date)).slice(0, 20);
@@ -1104,8 +1203,143 @@ function renderDietRunning() {
 function _getPBs(userId) {
   return Store.get('ff_pbs_' + userId, { distance: 0, pace: 9999, duration: 0 });
 }
+
 function _savePBs(userId, pbs) {
   Store.set('ff_pbs_' + userId, pbs);
+}
+
+// ════════════════════════════════════════════════════════════════
+// ACHIEVEMENT BADGES SYSTEM
+// ════════════════════════════════════════════════════════════════
+const ACHIEVEMENTS = [
+  // ── First runs ──────────────────────────────────────────────
+  { id:'first_run',      emoji:'👟', name:'First Step',        desc:'Completed your very first run',             check: (s) => s.totalRuns >= 1 },
+  { id:'runs_5',         emoji:'🥾', name:'Getting Moving',    desc:'Completed 5 runs',                          check: (s) => s.totalRuns >= 5 },
+  { id:'runs_10',        emoji:'🏃', name:'10 Run Club',       desc:'Completed 10 runs',                         check: (s) => s.totalRuns >= 10 },
+  { id:'runs_25',        emoji:'🌟', name:'Consistent Runner', desc:'Completed 25 runs',                         check: (s) => s.totalRuns >= 25 },
+  { id:'runs_50',        emoji:'🔥', name:'50 Run Legend',     desc:'Completed 50 runs',                         check: (s) => s.totalRuns >= 50 },
+  { id:'runs_100',       emoji:'💯', name:'Century Runner',    desc:'Completed 100 runs',                        check: (s) => s.totalRuns >= 100 },
+  // ── Distance milestones ──────────────────────────────────────
+  { id:'dist_1k',        emoji:'🐣', name:'First Kilometre',   desc:'Ran your first kilometre',                  check: (s) => s.totalKm >= 1 },
+  { id:'dist_5k',        emoji:'🏅', name:'5K Runner',         desc:'Ran a total of 5km',                        check: (s) => s.totalKm >= 5 },
+  { id:'dist_10k',       emoji:'🥈', name:'10K Runner',        desc:'Ran a total of 10km',                       check: (s) => s.totalKm >= 10 },
+  { id:'dist_21k',       emoji:'🥇', name:'Half Marathoner',   desc:'Ran a total of 21km',                       check: (s) => s.totalKm >= 21 },
+  { id:'dist_42k',       emoji:'🏆', name:'Marathoner',        desc:'Ran a total of 42km',                       check: (s) => s.totalKm >= 42 },
+  { id:'dist_100k',      emoji:'🌍', name:'Century Club',      desc:'Ran a total of 100km',                      check: (s) => s.totalKm >= 100 },
+  { id:'dist_500k',      emoji:'🚀', name:'500km Legend',      desc:'Ran a total of 500km',                      check: (s) => s.totalKm >= 500 },
+  // ── Single run distance ──────────────────────────────────────
+  { id:'single_5k',      emoji:'🎯', name:'5K in One Go',      desc:'Ran 5km in a single run',                   check: (s) => s.bestDistance >= 5 },
+  { id:'single_10k',     emoji:'⚡', name:'10K in One Go',     desc:'Ran 10km in a single run',                  check: (s) => s.bestDistance >= 10 },
+  { id:'single_hm',      emoji:'🌈', name:'Half in One Go',    desc:'Ran 21km in a single run',                  check: (s) => s.bestDistance >= 21 },
+  { id:'single_fm',      emoji:'👑', name:'Full in One Go',    desc:'Ran 42km in a single run',                  check: (s) => s.bestDistance >= 42 },
+  // ── Pace milestones ─────────────────────────────────────────
+  { id:'pace_7',         emoji:'🐢', name:'Sub-7 Pace',        desc:'Ran at under 7 min/km',                     check: (s) => s.bestPace > 0 && s.bestPace < 7 },
+  { id:'pace_6',         emoji:'🦊', name:'Sub-6 Pace',        desc:'Ran at under 6 min/km',                     check: (s) => s.bestPace > 0 && s.bestPace < 6 },
+  { id:'pace_5',         emoji:'🐆', name:'Sub-5 Pace',        desc:'Ran at under 5 min/km',                     check: (s) => s.bestPace > 0 && s.bestPace < 5 },
+  { id:'pace_4',         emoji:'🦅', name:'Sub-4 Pace',        desc:'Ran at under 4 min/km — elite speed!',      check: (s) => s.bestPace > 0 && s.bestPace < 4 },
+  // ── Streak badges ────────────────────────────────────────────
+  { id:'streak_3',       emoji:'📅', name:'3-Day Streak',      desc:'Ran 3 days in a row',                       check: (s) => s.runStreak >= 3 },
+  { id:'streak_7',       emoji:'🗓️', name:'Week Warrior',      desc:'Ran 7 days in a row',                       check: (s) => s.runStreak >= 7 },
+  { id:'streak_14',      emoji:'💪', name:'Two Week Runner',   desc:'Ran 14 days in a row',                      check: (s) => s.runStreak >= 14 },
+  { id:'streak_30',      emoji:'🌙', name:'Month of Running',  desc:'Ran 30 days in a row',                      check: (s) => s.runStreak >= 30 },
+  // ── Plan completion badges ───────────────────────────────────
+  { id:'plan_5k',        emoji:'🎽', name:'5K Plan Complete',  desc:'Completed the full 5K training plan',       check: (s) => s.plansCompleted?.includes('5K') },
+  { id:'plan_10k',       emoji:'🎖️', name:'10K Plan Complete', desc:'Completed the full 10K training plan',      check: (s) => s.plansCompleted?.includes('10K') },
+  { id:'plan_hm',        emoji:'🏵️', name:'Half Marathon Pro', desc:'Completed the Half Marathon training plan', check: (s) => s.plansCompleted?.includes('HM') },
+  { id:'plan_fm',        emoji:'🏆', name:'Marathon Master',   desc:'Completed the Full Marathon training plan', check: (s) => s.plansCompleted?.includes('FM') },
+  // ── Special ─────────────────────────────────────────────────
+  { id:'early_bird',     emoji:'🌅', name:'Early Bird',        desc:'Logged a run before 7 AM',                  check: (s) => s.hasEarlyRun },
+  { id:'night_runner',   emoji:'🌃', name:'Night Runner',      desc:'Logged a run after 8 PM',                   check: (s) => s.hasNightRun },
+  { id:'rain_runner',    emoji:'☔', name:'All-Weather Runner', desc:'Ran on 10 different calendar days',         check: (s) => s.uniqueDays >= 10 },
+];
+
+function _getAchievements(userId) {
+  return Store.get('ff_achievements_' + userId, {});
+}
+
+function _saveAchievements(userId, achievements) {
+  Store.set('ff_achievements_' + userId, achievements);
+}
+
+function _buildRunStats(userId) {
+  const logs    = Store.getUserRunLogs(userId).sort((a,b) => (a.date||'').localeCompare(b.date||''));
+  const totalKm = logs.reduce((a,r) => a + (r.distance||0), 0);
+  const bestRun = [...logs].sort((a,b) => (b.distance||0)-(a.distance||0))[0];
+  const fastRun = logs.filter(r => (r.distance||0) >= 1).sort((a,b) => (a.pace||999)-(b.pace||999))[0];
+
+  // Run streak
+  const dates = [...new Set(logs.map(r => r.date))].sort().reverse();
+  let streak = 0;
+  let cur = new Date();
+  for (let i = 0; i < 90; i++) {
+    const d = cur.toISOString().split('T')[0];
+    if (dates.includes(d)) { streak++; cur.setDate(cur.getDate()-1); }
+    else if (i > 0) break;
+    else { cur.setDate(cur.getDate()-1); if (!dates.includes(cur.toISOString().split('T')[0])) break; }
+  }
+
+  // Plans completed
+  const planDays = APP_DATA.running?.plans || {};
+  const plansCompleted = [];
+  Object.entries(planDays).forEach(([key, plan]) => {
+    const totalDays = (plan.schedule||[]).filter(d => d.dist > 0).length;
+    if (totalDays === 0) return;
+    let done = 0;
+    (plan.schedule||[]).forEach(s => {
+      if (s.dist > 0) {
+        const k = `ff_pday_${userId}_${key}_w${s.week}_d${s.day}`;
+        if (Store.get(k)) done++;
+      }
+    });
+    if (done >= totalDays * 0.8) plansCompleted.push(key);
+  });
+
+  // Early/night runs
+  const runHours = logs.map(r => {
+    const ts = r.timestamp || '';
+    if (ts) { const d = new Date(ts); return d.getHours(); }
+    return -1;
+  }).filter(h => h >= 0);
+
+  return {
+    totalRuns:      logs.length,
+    totalKm,
+    bestDistance:   bestRun?.distance || 0,
+    bestPace:       fastRun?.pace || 9999,
+    runStreak:      streak,
+    plansCompleted,
+    hasEarlyRun:    runHours.some(h => h < 7),
+    hasNightRun:    runHours.some(h => h >= 20),
+    uniqueDays:     dates.length,
+  };
+}
+
+function checkAndUnlockAchievements(userId) {
+  const stats        = _buildRunStats(userId);
+  const unlocked     = _getAchievements(userId);
+  const newUnlocks   = [];
+
+  ACHIEVEMENTS.forEach(a => {
+    if (!unlocked[a.id]) {
+      try {
+        if (a.check(stats)) {
+          unlocked[a.id] = { unlockedAt: new Date().toISOString() };
+          newUnlocks.push(a);
+        }
+      } catch(e) {}
+    }
+  });
+
+  if (newUnlocks.length) {
+    _saveAchievements(userId, unlocked);
+    // Show toast for each new badge
+    newUnlocks.forEach((a, i) => {
+      setTimeout(() => {
+        showToast(`${a.emoji} Achievement unlocked: ${a.name}!`, 'success');
+      }, i * 1800);
+    });
+  }
+  return newUnlocks;
 }
 
 function _renderRunPBBadges(distance, elapsed) {
