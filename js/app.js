@@ -1,7 +1,7 @@
 // ── APP STATE ────────────────────────────────────────────────────
 // DATA_VERSION: bump this whenever data.js exercises/plans are updated
 // This triggers auto-seed to Sheets on next admin login
-const DATA_VERSION = '2026-04-29-v4';
+const DATA_VERSION = '2026-04-29-v5';
 
 window.APP = {
   currentUser:      null,
@@ -19,6 +19,9 @@ window.APP = {
   editingContent:   null,
   _planRunCtx:      null,
   _myPlanViewWeek:  null,
+  caliLevel:        'beginner',
+  caliSkill:        null,
+  cali21Day:        false,
 };
 
 // ── STORAGE ───────────────────────────────────────────────────────
