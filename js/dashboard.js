@@ -1271,7 +1271,18 @@ function renderCaliWorkout() {
   const level  = APP.currentCaliLevel;
   const levels = (window.APP_DATA_DEFAULT||window.APP_DATA).modules?.calisthenics?.levels || {};
   const lvlData = levels[level];
-  if (!lvlData) return;
+  if (!lvlData) {
+    container.innerHTML = `
+      <div style="padding:24px;text-align:center">
+        <div style="font-size:48px;margin-bottom:12px">⚠️</div>
+        <div style="font-weight:700;margin-bottom:8px">Calisthenics data not loaded</div>
+        <div style="font-size:13px;color:var(--text3);margin-bottom:16px">Your browser has cached an old version. Please clear cache and reload.</div>
+        <button class="btn btn-primary" onclick="caches.keys().then(k=>k.forEach(n=>caches.delete(n)));navigator.serviceWorker.getRegistrations().then(r=>r.forEach(reg=>reg.unregister()));location.reload(true)">
+          🔄 Clear Cache & Reload
+        </button>
+      </div>`;
+    return;
+  }
 
   const days = getWeekDays();
   const today = dayName();
