@@ -292,6 +292,12 @@ function openModuleEditor(moduleId) {
   AdminEdit.module  = moduleId;
   AdminEdit.section = 'exercises';
   AdminEdit.isDirty = false;
+
+  // Always clear stale localStorage cache for this module so APP_DATA shows fresh
+  Store.remove('ff_content_exercises_' + moduleId);
+  Store.remove('ff_content_warmup_'    + moduleId);
+  Store.remove('ff_content_cooldown_'  + moduleId);
+
   showPage('page-admin-editor');
   renderModuleEditor();
 }
