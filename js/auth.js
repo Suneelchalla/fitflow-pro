@@ -289,7 +289,7 @@ async function _autoSeedIfVersionChanged(user) {
     if (storedVersion === currentVersion) return;
 
     // Clear stale localStorage exercise/warmup/cooldown cache before seeding
-    ['cardio','gym','yoga','stretching','running'].forEach(mod => {
+    ['cardio','gym','yoga','stretching','running','calisthenics'].forEach(mod => {
       Store.remove('ff_content_exercises_' + mod);
       Store.remove('ff_content_warmup_' + mod);
       Store.remove('ff_content_cooldown_' + mod);
@@ -298,7 +298,7 @@ async function _autoSeedIfVersionChanged(user) {
     // Version mismatch — push all module data to Sheets
     console.log('[FitFlow] Data version changed to', currentVersion, '— seeding Sheets...');
 
-    const modules = ['cardio', 'gym', 'yoga', 'stretching'];
+    const modules = ['cardio', 'gym', 'yoga', 'stretching', 'calisthenics'];
     const seedPromises = [];
 
     // Seed exercises for each module
@@ -317,7 +317,7 @@ async function _autoSeedIfVersionChanged(user) {
     });
 
     // Seed warmups
-    const warmupMods = ['cardio','gym','yoga','running','stretching'];
+    const warmupMods = ['cardio','gym','yoga','running','stretching','calisthenics'];
     warmupMods.forEach(mod => {
       const wu = APP_DATA.warmups?.[mod];
       if (wu?.length) {
@@ -624,11 +624,12 @@ function renderOnboardingStep(step) {
           <div style="font-family:var(--font-display);font-size:34px;color:var(--g5);line-height:1.1;margin-bottom:8px">Pick Your Modules</div>
           <div style="font-size:14px;color:var(--text2);margin-bottom:24px;line-height:1.5">Choose the activities you want to do. You can always change these later.</div>
           ${[
-            { id:'cardio',     emoji:'🏠', name:'Home Cardio',      sub:'No equipment needed' },
-            { id:'gym',        emoji:'🏋️', name:'Gym Workouts',     sub:'Weights & machines' },
-            { id:'yoga',       emoji:'🧘', name:'Yoga',             sub:'Mind & body balance' },
-            { id:'stretching', emoji:'🤸', name:'Stretching',       sub:'Flexibility & recovery' },
-            { id:'running',    emoji:'🏃', name:'Running & Walking',sub:'GPS tracking + plans' },
+            { id:'cardio',       emoji:'🏠', name:'Home Cardio',       sub:'No equipment needed' },
+            { id:'gym',          emoji:'🏋️', name:'Gym Workouts',      sub:'Weights & machines' },
+            { id:'yoga',         emoji:'🧘', name:'Yoga',              sub:'Mind & body balance' },
+            { id:'stretching',   emoji:'🤸', name:'Stretching',        sub:'Flexibility & recovery' },
+            { id:'running',      emoji:'🏃', name:'Running & Walking', sub:'GPS tracking + plans' },
+            { id:'calisthenics', emoji:'🤸‍♂️', name:'Calisthenics',      sub:'Skills, strength, no gym' },
           ].map(m => `
             <div onclick="toggleOnboardModule('${m.id}',this)"
               id="mod-${m.id}"
@@ -874,7 +875,7 @@ function completeOnboarding() {
 
   // Save preferred module order based on selections
   if (_onboardData.modules.length > 0 && typeof saveModuleOrder === 'function') {
-    const ALL = ['cardio','gym','yoga','stretching','running'];
+    const ALL = ['cardio','gym','yoga','stretching','running','calisthenics'];
     const ordered = [
       ..._onboardData.modules,
       ...ALL.filter(m => !_onboardData.modules.includes(m)),
