@@ -431,6 +431,14 @@ async function _collectAndSave() {
   const { module: moduleId, section } = AdminEdit;
 
   if (section === 'exercises') {
+    // Calisthenics uses levels structure — use dedicated extractor
+    if (moduleId === 'calisthenics') {
+      const result = _extractCaliEdits();
+      Store.setContent('exercises_calisthenics', result);
+      if (APP_DATA.modules.calisthenics) APP_DATA.modules.calisthenics.levels = result.levels;
+      await Sheets.post('saveContent', { key: 'exercises_calisthenics', value: result });
+      return;
+    }
     const days   = getWeekDays();
     const result = { days: {} };
     days.forEach(day => {
@@ -539,6 +547,10 @@ function activateEditing(container) {
 // EXERCISE EDITOR
 // ════════════════════════════════════════════════════════════════
 function renderExerciseEditor(moduleId, body) {
+  // Calisthenics uses levels (beginner/intermediate/advanced), not days directly
+  if (moduleId === 'calisthenics') {
+    return renderCaliExerciseEditor(body);
+  }
   const days = getWeekDays();
   body.innerHTML = `
     <div style="font-size:13px;color:var(--text2);padding:0 16px 12px;line-height:1.5">
@@ -567,6 +579,113 @@ function renderExerciseEditor(moduleId, body) {
     }).join('')}`;
   activateEditing(body);
 }
+
+function renderCaliExerciseEditor(body) {
+  const levelKeys   = ['beginner', 'intermediate', 'advanced'];
+  const levelLabels = { beginner:'🐣 Beginner', intermediate:'💪 Intermediate', advanced:'🔥 Advanced' };
+  const days = getWeekDays();
+
+  body.innerHTML = `
+    <div style="font-size:13px;color:var(--text2);padding:0 16px 12px;line-height:1.5">
+      ✏️ <strong>Tap any field</strong> to edit. Calisthenics has 3 levels — each has its own exercises per day.
+    </div>
+    ${levelKeys.map(lvl => {
+      const lvlData = APP_DATA.modules?.calisthenics?.levels?.[lvl];
+      const saved   = Store.getContent('exercises_calisthenics');
+      return `
+        <div style="margin-bottom:16px">
+          <div style="padding:10px 16px;background:rgba(15,52,96,0.25);font-weight:700;font-size:15px;border-radius:8px 8px 0 0">
+            ${levelLabels[lvl]}
+          </div>
+          ${days.map(day => {
+            const appDefault = lvlData?.days?.[day] || [];
+            const savedDay   = saved?.levels?.[lvl]?.days?.[day] || [];
+            const exercises  = savedDay.length > appDefault.length ? savedDay : appDefault;
+            return `
+              <div style="margin-bottom:4px">
+                <div style="padding:8px 16px;background:rgba(46,125,70,0.12);font-weight:600;font-size:13px;
+                  display:flex;justify-content:space-between">
+                  <span>📅 ${day}</span>
+                  <span style="font-size:11px;color:var(--text3)">${exercises.length} exercises</span>
+                </div>
+                <div data-level="${lvl}" data-day="${day}" style="padding:0 16px">
+                  ${exercises.map((ex, i) => _caliExerciseCard(ex, i)).join('')}
+                  <button class="add-exercise-btn" onclick="addCaliExercise('${lvl}','${day}')">+ Add Exercise</button>
+                </div>
+              </div>`;
+          }).join('')}
+        </div>`;
+    }).join('')}`;
+  activateEditing(body);
+}
+
+function _caliExerciseCard(ex, idx) {
+  return `
+    <div class="exercise-card ex-row" data-idx="${idx}" style="margin:10px 0;position:relative">
+      <button class="delete-ex-btn" onclick="this.closest('.ex-row').remove();markDirty()" title="Delete">✕</button>
+      <div class="exercise-body" style="padding-left:0">
+        <div style="margin-bottom:8px">
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Exercise Name</div>
+          <div class="exercise-name editable" data-field="name" contenteditable="true">${ex.name || ''}</div>
+        </div>
+        <div style="display:flex;gap:12px;margin-bottom:10px">
+          <div style="flex:1">
+            <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Sets</div>
+            <div class="editable" data-field="sets" contenteditable="true" style="font-weight:600">${ex.sets || 3}</div>
+          </div>
+          <div style="flex:2">
+            <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Reps / Duration</div>
+            <div class="editable" data-field="reps" contenteditable="true" style="font-weight:600">${ex.reps || ''}</div>
+          </div>
+        </div>
+        <div style="margin-bottom:10px">
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Description</div>
+          <div class="editable-block editable" data-field="desc" contenteditable="true"
+            style="font-size:13px;color:var(--text2);line-height:1.6">${ex.desc || ''}</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Demo Link (YouTube URL)</div>
+          <div class="editable" data-field="demo" contenteditable="true"
+            style="font-size:12px;color:var(--text3);word-break:break-all">${ex.demo || ''}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function addCaliExercise(level, day) {
+  const container = document.querySelector(`[data-level="${level}"][data-day="${day}"]`);
+  if (!container) return;
+  const addBtn = container.querySelector('.add-exercise-btn');
+  const idx    = container.querySelectorAll('.ex-row').length;
+  const div    = document.createElement('div');
+  div.innerHTML = _caliExerciseCard({ name:'', sets:3, reps:'', desc:'', demo:'' }, idx);
+  container.insertBefore(div.firstElementChild, addBtn);
+  activateEditing(container);
+  markDirty();
+}
+
+function _extractCaliEdits() {
+  const levelKeys = ['beginner', 'intermediate', 'advanced'];
+  const days = getWeekDays();
+  const levels = {};
+  levelKeys.forEach(lvl => {
+    levels[lvl] = { days: {} };
+    days.forEach(day => {
+      const container = document.querySelector(`[data-level="${lvl}"][data-day="${day}"]`);
+      if (!container) { levels[lvl].days[day] = []; return; }
+      levels[lvl].days[day] = Array.from(container.querySelectorAll('.ex-row')).map(row => ({
+        name:  _text(row, 'name'),
+        sets:  parseInt(_text(row, 'sets')) || 3,
+        reps:  _text(row, 'reps'),
+        desc:  _text(row, 'desc'),
+        demo:  _text(row, 'demo'),
+        image: '',
+      }));
+    });
+  });
+  return { levels };
+}
+
 
 function _exerciseCard(ex, idx, day) {
   const mod = AdminEdit.module;
