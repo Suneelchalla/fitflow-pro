@@ -1237,6 +1237,8 @@ function setCaliLevel(level) {
   const user = APP.currentUser;
   Store.set('ff_cali_level_' + user.id, level);
   APP.caliLevel = level;
+  // Persist to Sheets so level survives device switches
+  Sheets.post('saveCaliProgress', { userId: user.id, key: 'level', value: level }).catch(() => {});
   ['beginner','intermediate','advanced'].forEach(l => {
     const btn = document.getElementById('cali-lvl-' + l);
     if (!btn) return;
@@ -1427,6 +1429,7 @@ function openSkillTree(skillKey) {
   const skill = window.CALI_SKILLS?.[skillKey];
   if (!skill) return;
   Store.set('ff_cali_skill_' + user.id, skillKey);
+  Sheets.post('saveCaliProgress', { userId: user.id, key: 'skill', value: skillKey }).catch(() => {});
 
   document.getElementById('cali-skills-content').innerHTML = `
     <button onclick="renderCaliSkills()" style="background:none;border:none;color:var(--g5);font-size:14px;font-weight:700;cursor:pointer;margin-bottom:16px;padding:0">← All Skills</button>
@@ -1464,6 +1467,8 @@ function toggleSkillStep(skillKey, stepIndex) {
   const key  = 'ff_cali_skill_step_' + user.id + '_' + skillKey + '_' + stepIndex;
   const done = !!Store.get(key);
   Store.set(key, !done);
+  // Persist to Sheets
+  Sheets.post('saveCaliProgress', { userId: user.id, key: 'skill_step_' + skillKey + '_' + stepIndex, value: !done }).catch(() => {});
   openSkillTree(skillKey);
   showToast(done ? 'Step unmarked' : '✅ Step complete!', done ? 'info' : 'success');
 }
@@ -1524,6 +1529,8 @@ function startCali21Day() {
   const user = APP.currentUser;
   Store.set('ff_cali21_start_' + user.id, todayStr());
   Store.set('ff_cali21_done_'  + user.id, {});
+  Sheets.post('saveCaliProgress', { userId: user.id, key: '21day_start', value: todayStr() }).catch(() => {});
+  Sheets.post('saveCaliProgress', { userId: user.id, key: '21day_done',  value: {} }).catch(() => {});
   showToast('Challenge started! Day 1 begins now 🚀', 'success');
   renderCaliChallenge();
 }
@@ -1565,6 +1572,7 @@ function markCali21DayDone(dayIndex) {
   const done = Store.get('ff_cali21_done_' + user.id) || {};
   done[dayIndex] = true;
   Store.set('ff_cali21_done_' + user.id, done);
+  Sheets.post('saveCaliProgress', { userId: user.id, key: '21day_done', value: done }).catch(() => {});
   const log = { userId: user.id, email: user.email, module: 'calisthenics', day: '21-Day-' + (dayIndex + 1), date: todayStr() };
   Store.addLog(log);
   Sheets.post('logCompletion', log).catch(() => {});
