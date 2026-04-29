@@ -530,7 +530,7 @@ function clearActivePlan() {
 }
 
 function confirmUnregisterPlan(planKey) {
-  const plan = APP_DATA.running.plans[planKey];
+  const plan = (window.APP_DATA_DEFAULT||window.APP_DATA).running.plans[planKey];
   if (!confirm(`Unregister from the ${planKey} plan?\n\nYour completed sessions and run logs are saved and will not be deleted. You can re-register anytime.`)) return;
   clearActivePlan();
   showToast(`Unregistered from ${planKey} plan. Your progress is saved.`, 'info');
@@ -546,7 +546,7 @@ function _refreshMyPlanNav() {
   if (!tab) return;
   const active = getActivePlan();
   if (active) {
-    const plan = APP_DATA.running.plans[active.planKey];
+    const plan = (window.APP_DATA_DEFAULT||window.APP_DATA).running.plans[active.planKey];
     tab.style.display = '';
     if (label) label.textContent = plan ? active.planKey : 'My Plan';
     if (runTab) runTab.style.display = 'none';
@@ -583,7 +583,7 @@ function registerPlan(planKey) {
 
 // Show the choose-plan bottom sheet (from My Plan tab header)
 function showChangePlanSheet() {
-  const plans     = APP_DATA.running.plans;
+  const plans     = (window.APP_DATA_DEFAULT||window.APP_DATA).running.plans;
   const active    = getActivePlan();
   const container = document.getElementById('choose-plan-list');
   container.innerHTML = Object.entries(plans).map(([key, plan]) => {
@@ -621,7 +621,7 @@ function renderMyPlan() {
   const titleEl = document.getElementById('myplan-title');
 
   // Validate active plan — if planKey doesn't exist in APP_DATA, clear it
-  if (active && (!APP_DATA.running.plans[active.planKey] || !active.registeredAt)) {
+  if (active && (!(window.APP_DATA_DEFAULT||window.APP_DATA).running.plans[active.planKey] || !active.registeredAt)) {
     clearActivePlan();
     showToast('Your previous plan was reset — please register again.', 'info');
     renderMyPlan();
@@ -631,7 +631,7 @@ function renderMyPlan() {
   if (!active) {
     // No plan registered — show picker inline
     if (titleEl) titleEl.textContent = '🎯 Choose a Plan';
-    const plans = APP_DATA.running.plans;
+    const plans = (window.APP_DATA_DEFAULT||window.APP_DATA).running.plans;
     container.innerHTML = `
       <div class="card" style="text-align:center;padding:28px 20px;background:linear-gradient(135deg,var(--bg2),var(--surface));margin-bottom:20px">
         <div style="font-size:48px;margin-bottom:12px">🏃</div>
@@ -661,7 +661,7 @@ function renderMyPlan() {
     return;
   }
 
-  const plan      = APP_DATA.running.plans[active.planKey];
+  const plan      = (window.APP_DATA_DEFAULT||window.APP_DATA).running.plans[active.planKey];
   if (!plan) { clearActivePlan(); renderMyPlan(); return; }
 
   // Calculate current week based on registration date
@@ -890,7 +890,7 @@ function renderMyPlan() {
 function changeMyPlanWeek(delta) {
   const active = getActivePlan();
   if (!active) return;
-  const plan   = APP_DATA.running.plans[active.planKey];
+  const plan   = (window.APP_DATA_DEFAULT||window.APP_DATA).running.plans[active.planKey];
   APP._myPlanViewWeek = Math.max(1, Math.min(plan.weeks, (APP._myPlanViewWeek || 1) + delta));
   renderMyPlan();
 }
@@ -924,7 +924,7 @@ function switchMyPlanInfoTab(tab) {
 }
 
 function renderTrainingPlans() {
-  const plans     = APP_DATA.running.plans;
+  const plans     = (window.APP_DATA_DEFAULT||window.APP_DATA).running.plans;
   const active    = getActivePlan();
   const container = document.getElementById('training-plans-list');
   container.innerHTML = `
@@ -972,7 +972,7 @@ function selectPlan(key) {
 }
 
 function renderPlanDetail(key) {
-  const plan      = APP_DATA.running.plans[key];
+  const plan      = (window.APP_DATA_DEFAULT||window.APP_DATA).running.plans[key];
   const container = document.getElementById('plan-detail');
   container.style.display = 'block';
   const weekSessions = plan.schedule.filter(s => s.week === APP.selectedPlanWeek);
@@ -1010,7 +1010,7 @@ function renderPlanDetail(key) {
 }
 
 function changeWeek(delta) {
-  const plan = APP_DATA.running.plans[APP.selectedPlan];
+  const plan = (window.APP_DATA_DEFAULT||window.APP_DATA).running.plans[APP.selectedPlan];
   APP.selectedPlanWeek = Math.max(1, Math.min(plan.weeks, APP.selectedPlanWeek + delta));
   renderPlanDetail(APP.selectedPlan);
 }
@@ -1279,7 +1279,7 @@ function _buildRunStats(userId) {
   }
 
   // Plans completed
-  const planDays = APP_DATA.running?.plans || {};
+  const planDays = (window.APP_DATA_DEFAULT||window.APP_DATA).running?.plans || {};
   const plansCompleted = [];
   Object.entries(planDays).forEach(([key, plan]) => {
     const totalDays = (plan.schedule||[]).filter(d => d.dist > 0).length;
@@ -1428,7 +1428,7 @@ function _renderRunRouteMap(coords) {
 // PLAN COMPLETION CERTIFICATE
 // ════════════════════════════════════════════════════════════════
 function checkPlanCompletion(planKey, week) {
-  const plan   = APP_DATA.running.plans[planKey];
+  const plan   = (window.APP_DATA_DEFAULT||window.APP_DATA).running.plans[planKey];
   if (!plan || week < plan.weeks) return;
   const active = getActivePlan();
   if (!active || active.planKey !== planKey) return;
@@ -1447,7 +1447,7 @@ function checkPlanCompletion(planKey, week) {
 }
 
 function showPlanCertificate(planKey) {
-  const plan = APP_DATA.running.plans[planKey];
+  const plan = (window.APP_DATA_DEFAULT||window.APP_DATA).running.plans[planKey];
   const user = APP.currentUser;
   document.getElementById('plan-complete-content').innerHTML = `
     <div style="padding:20px 8px">
@@ -1471,7 +1471,7 @@ function showPlanCertificate(planKey) {
 function sharePlanCertificate() {
   const active = getActivePlan();
   if (!active) return;
-  const plan = APP_DATA.running.plans[active.planKey];
+  const plan = (window.APP_DATA_DEFAULT||window.APP_DATA).running.plans[active.planKey];
   const text = `🏆 I just completed the ${active.planKey} (${plan.weeks}-week) training plan on FitFlow Pro! 💪 #FitFlowPro #Running #${active.planKey}`;
   if (navigator.share) {
     navigator.share({ title: 'FitFlow Pro — Plan Complete!', text }).catch(()=>{});
