@@ -389,28 +389,59 @@ function renderExercises(moduleId, day) {
   const container = document.getElementById('exercises-list');
   if (!container) return;
 
+  // Hold-based modules (yoga + stretching) — one checkbox per pose/stretch, no set repetitions
+  const isHoldBased = moduleId === 'yoga' || moduleId === 'stretching';
+
   container.innerHTML = allExercises.map((ex, i) => {
     let hdr = '';
     if (ex._section !== prevSection) {
       prevSection = ex._section;
       if (ex._section === 'warmup')   hdr = secHeader('Warm-Up', 'rgba(30,136,229,0.35)', '🔥');
-      if (ex._section === 'main')     hdr = secHeader('Main Workout', 'rgba(46,125,70,0.4)', '💪');
-      if (ex._section === 'cooldown') hdr = secHeader('Cool-Down & Stretches', 'rgba(103,58,183,0.35)', '🧘');
+      if (ex._section === 'main')     hdr = secHeader(moduleId==='yoga' ? 'Practice Sequence' : moduleId==='stretching' ? 'Stretch Sequence' : 'Main Workout', moduleId==='yoga' ? 'rgba(103,58,183,0.4)' : moduleId==='stretching' ? 'rgba(103,58,183,0.25)' : 'rgba(46,125,70,0.4)', moduleId==='yoga' ? '🧘' : moduleId==='stretching' ? '🤸' : '💪');
+      if (ex._section === 'cooldown') hdr = secHeader(isHoldBased ? 'Closing Practice' : 'Cool-Down & Stretches', 'rgba(103,58,183,0.35)', isHoldBased ? '✨' : '🧘');
     }
 
     const checked = sessionData[i] || [];
-    const allDone = checked.length >= (parseInt(ex.sets) || 1);
-    const thumb   = ex.image
-      ? `<img src="${ex.image}" alt="${ex.name}" loading="lazy" onerror="this.style.display='none'">`
-      : `<div style="font-size:48px;color:var(--text3);display:flex;align-items:center;justify-content:center;height:100%">💪</div>`;
+    // For yoga: one checkbox per pose (hold it once = done), not multiple sets
+    const totalChecks = isHoldBased ? 1 : (parseInt(ex.sets) || 1);
+    const allDone = checked.length >= totalChecks;
 
-    const setsHtml = Array.from({ length: parseInt(ex.sets) || 1 }, (_, s) => {
-      const isDone = checked.includes(s);
-      return `<div class="set-check ${isDone ? 'checked' : ''}" onclick="toggleSet('${moduleId}','${day}',${i},${s})">
-        <div class="check-box">${isDone ? '✓' : ''}</div>
-        <span class="check-label">Set ${s + 1} — ${ex.reps || ''}</span>
-      </div>`;
-    }).join('');
+    // Thumbnail: use pose emoji for yoga, image or generic for others
+    const thumb = isHoldBased && ex.image
+      ? `<div style="font-size:52px;display:flex;align-items:center;justify-content:center;height:100%">${ex.image}</div>`
+      : ex.image && !isHoldBased
+        ? `<img src="${ex.image}" alt="${ex.name}" loading="lazy" onerror="this.style.display='none'">`
+        : `<div style="font-size:48px;color:var(--text3);display:flex;align-items:center;justify-content:center;height:100%">${moduleId==='yoga' ? '🧘' : moduleId==='stretching' ? '🤸' : '💪'}</div>`;
+
+    // For yoga: single hold checkbox. For others: set-by-set checkboxes
+    const checksHtml = isHoldBased
+      ? `<div class="set-check ${checked.includes(0) ? 'checked' : ''}"
+           onclick="toggleSet('${moduleId}','${day}',${i},0)"
+           style="padding:12px 14px;border-radius:10px">
+           <div class="check-box">${checked.includes(0) ? '✓' : ''}</div>
+           <span class="check-label" style="font-size:13px">
+             ${ex.rounds && ex.rounds > 1 ? `${ex.rounds} rounds` : ''} ${ex.hold || ''}
+           </span>
+         </div>`
+      : Array.from({ length: parseInt(ex.sets) || 1 }, (_, s) => {
+          const isDone = checked.includes(s);
+          return `<div class="set-check ${isDone ? 'checked' : ''}" onclick="toggleSet('${moduleId}','${day}',${i},${s})">
+            <div class="check-box">${isDone ? '✓' : ''}</div>
+            <span class="check-label">Set ${s + 1} — ${ex.reps || ''}</span>
+          </div>`;
+        }).join('');
+
+    // Meta line differs for yoga vs others
+    const metaHtml = isHoldBased
+      ? `<div class="exercise-meta">
+           ${ex.rounds && ex.rounds > 1 ? `<span>🔄 ${ex.rounds} rounds</span>` : ''}
+           <span>⏱ ${ex.hold || ''}</span>
+           ${ex.month ? `<span style="opacity:0.6;font-size:10px">Month ${ex.month}</span>` : ''}
+         </div>`
+      : `<div class="exercise-meta">
+           <span>🔄 ${ex.sets || 1} sets</span>
+           <span>💪 ${ex.reps || ''}</span>
+         </div>`;
 
     return `${hdr}
       <div class="exercise-card ${allDone ? 'completed' : ''} animate-in animate-in-${Math.min(i % 5 + 1, 5)}" id="exc-card-${i}">
@@ -420,13 +451,10 @@ function renderExercises(moduleId, day) {
             <div class="exercise-name">${i + 1}. ${ex.name || ''}</div>
             ${allDone ? '<span class="badge badge-green">✓ Done</span>' : ''}
           </div>
-          <div class="exercise-meta">
-            <span>🔄 ${ex.sets || 1} sets</span>
-            <span>💪 ${ex.reps || ''}</span>
-          </div>
+          ${metaHtml}
           <div class="exercise-desc">${ex.desc || ''}</div>
           ${ex.demo ? `<a href="${ex.demo}" target="_blank" rel="noopener" class="demo-link">▶ Watch Demo</a>` : ''}
-          <div class="sets-grid">${setsHtml}</div>
+          <div class="sets-grid">${checksHtml}</div>
         </div>
       </div>`;
   }).join('');
@@ -462,9 +490,16 @@ function updateCompleteBtn() {
 
   if (!all.length) return;
 
-  const totalSets     = all.reduce((a, e) => a + (parseInt(e.sets) || 1), 0);
-  const doneSets      = Object.values(sessionData).flat().length;
-  const allDone       = all.every((ex, i) => (sessionData[i] || []).length >= (parseInt(ex.sets) || 1));
+  const isHoldBased    = mod === 'yoga' || mod === 'stretching';
+  const totalSets = isHoldBased
+    ? all.length
+    : all.reduce((a, e) => a + (parseInt(e.sets) || 1), 0);
+  const doneSets  = isHoldBased
+    ? all.filter((_, i) => (sessionData[i] || []).length >= 1).length
+    : Object.values(sessionData).flat().length;
+  const allDone   = isHoldBased
+    ? all.every((_, i) => (sessionData[i] || []).length >= 1)
+    : all.every((ex, i) => (sessionData[i] || []).length >= (parseInt(ex.sets) || 1));
   const alreadyLogged = Store.getModuleDayLogs(user.id, mod).some(l => l.day === day && l.date === todayStr());
 
   const btn = document.getElementById('complete-day-btn');
