@@ -560,11 +560,11 @@ document.addEventListener('DOMContentLoaded', () => {
 // ════════════════════════════════════════════════════════════════
 const ONBOARDING_STEPS = 3;
 let _onboardStep = 1;
-let _onboardData = { goal: '', modules: [] };
+let _onboardData = { goal: '', modules: [], age: '', weight: '', height: '', gender: '', fitnessLevel: '' };
 
 function startOnboarding() {
   _onboardStep = 1;
-  _onboardData = { goal: '', modules: [] };
+  _onboardData = { goal: '', modules: [], age: '', weight: '', height: '', gender: '', fitnessLevel: '' };
   renderOnboardingStep(1);
   showPage('page-onboarding', false);
 }
@@ -644,7 +644,7 @@ function renderOnboardingStep(step) {
         </div>
         <div style="display:flex;gap:10px;margin-top:20px">
           <button class="btn btn-ghost btn-full" onclick="goOnboardStep(1)">← Back</button>
-          <button id="ob-next-2" class="btn btn-primary btn-full btn-lg" style="opacity:0.4" disabled onclick="goOnboardStep(3)">Continue →</button>
+          <button id="ob-next-2" class="btn btn-primary btn-full btn-lg" style="opacity:0.4" disabled onclick="goOnboardStep(2.5)">Continue →</button>
         </div>
       </div>`;
     // Re-select previously chosen modules
@@ -652,8 +652,108 @@ function renderOnboardingStep(step) {
       const el = document.getElementById('mod-'+id);
       if (el) _applyModuleSelect(el, id, true);
     });
+  } else if (step === 2.5) {
+    container.innerHTML = `
+      <div style="background:linear-gradient(135deg,var(--g1),var(--bg));min-height:100vh;padding:48px 24px 32px;display:flex;flex-direction:column">
+        <div style="flex:1">
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px">Step 3 of 4</div>
+          <div style="height:4px;background:var(--bg3);border-radius:2px;margin-bottom:32px">
+            <div style="width:75%;height:100%;background:var(--g4);border-radius:2px"></div>
+          </div>
+          <div style="font-size:40px;margin-bottom:12px">📊</div>
+          <div style="font-family:var(--font-display);font-size:34px;color:var(--g5);line-height:1.1;margin-bottom:8px">Your Body Stats</div>
+          <div style="font-size:14px;color:var(--text2);margin-bottom:24px;line-height:1.5">
+            Used to personalise your heart rate zones, calorie estimates and workout intensity. Stored only on your device.
+          </div>
+
+          <!-- Age -->
+          <div style="margin-bottom:16px">
+            <div style="font-size:13px;font-weight:700;margin-bottom:8px">Age <span style="color:var(--text3);font-weight:400">(required for heart rate zones)</span></div>
+            <div style="display:flex;align-items:center;gap:12px">
+              <input type="range" id="ob-age" min="16" max="75" value="${_onboardData.age || 25}" step="1"
+                oninput="document.getElementById('ob-age-val').textContent=this.value;_onboardData.age=+this.value;_checkOb25()"
+                style="flex:1">
+              <div style="min-width:48px;text-align:center">
+                <div id="ob-age-val" style="font-size:24px;font-weight:500;color:var(--g5)">${_onboardData.age || 25}</div>
+                <div style="font-size:11px;color:var(--text3)">years</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Gender -->
+          <div style="margin-bottom:16px">
+            <div style="font-size:13px;font-weight:700;margin-bottom:8px">Biological sex <span style="color:var(--text3);font-weight:400">(for calorie calculation)</span></div>
+            <div style="display:flex;gap:10px">
+              ${[['male','Male'],['female','Female'],['other','Prefer not to say']].map(([v,l]) => `
+                <div onclick="selectObGender('${v}',this)" id="ob-gender-${v}"
+                  style="flex:1;text-align:center;padding:10px 8px;border-radius:12px;border:2px solid var(--border);background:var(--surface);cursor:pointer;font-size:13px;font-weight:500;transition:all .2s">
+                  ${l}
+                </div>`).join('')}
+            </div>
+          </div>
+
+          <!-- Weight -->
+          <div style="margin-bottom:16px">
+            <div style="font-size:13px;font-weight:700;margin-bottom:8px">Current weight</div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <input type="number" id="ob-weight" placeholder="e.g. 70" min="30" max="200"
+                value="${_onboardData.weight || ''}"
+                oninput="_onboardData.weight=+this.value;_checkOb25()"
+                style="flex:1;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text1);font-size:16px">
+              <span style="font-size:14px;color:var(--text3);font-weight:500">kg</span>
+            </div>
+          </div>
+
+          <!-- Height -->
+          <div style="margin-bottom:16px">
+            <div style="font-size:13px;font-weight:700;margin-bottom:8px">Height</div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <input type="number" id="ob-height" placeholder="e.g. 170" min="100" max="250"
+                value="${_onboardData.height || ''}"
+                oninput="_onboardData.height=+this.value;_checkOb25()"
+                style="flex:1;padding:10px 14px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text1);font-size:16px">
+              <span style="font-size:14px;color:var(--text3);font-weight:500">cm</span>
+            </div>
+          </div>
+
+          <!-- Fitness level -->
+          <div style="margin-bottom:16px">
+            <div style="font-size:13px;font-weight:700;margin-bottom:8px">Current fitness level</div>
+            <div style="display:flex;flex-direction:column;gap:8px">
+              ${[
+                ['beginner',     '🐣 Beginner',     'New to exercise or returning after a long break'],
+                ['intermediate', '💪 Intermediate',  'Exercise 2–3 times a week regularly'],
+                ['advanced',     '🔥 Advanced',      'Train 4+ times a week, strong base fitness'],
+              ].map(([v,l,s]) => `
+                <div onclick="selectObFitness('${v}',this)" id="ob-fit-${v}"
+                  style="display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;border:2px solid var(--border);background:var(--surface);cursor:pointer;transition:all .2s">
+                  <div style="flex:1">
+                    <div style="font-weight:700;font-size:14px">${l}</div>
+                    <div style="font-size:12px;color:var(--text3)">${s}</div>
+                  </div>
+                </div>`).join('')}
+            </div>
+          </div>
+
+          <div style="font-size:11px;color:var(--text3);line-height:1.5;margin-top:4px">
+            🔒 All data stored locally on your device only. You can update it anytime in your profile.
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;margin-top:20px">
+          <button class="btn btn-ghost btn-full" onclick="goOnboardStep(2)">← Back</button>
+          <button id="ob-next-25" class="btn btn-primary btn-full btn-lg" style="opacity:0.4" disabled onclick="goOnboardStep(3)">Continue →</button>
+        </div>
+      </div>`;
+
+    // Restore selections if going back
+    if (_onboardData.gender) { const el = document.getElementById('ob-gender-'+_onboardData.gender); if (el) _applyObSelect(el, true); }
+    if (_onboardData.fitnessLevel) { const el = document.getElementById('ob-fit-'+_onboardData.fitnessLevel); if (el) _applyObSelect(el, true); }
+    _checkOb25();
+
   } else if (step === 3) {
     const goalLabels = { lose_weight:'Lose Weight 🔥',build_muscle:'Build Muscle 💪',improve_fitness:'Improve Fitness 🏃',flexibility:'Flexibility & Calm 🧘',run_race:'Train for a Race 🏅',general:'General Wellness ⚡' };
+    const mhr = _onboardData.age ? 220 - _onboardData.age : null;
+    const bmi = (_onboardData.weight && _onboardData.height) ? (_onboardData.weight / Math.pow(_onboardData.height/100, 2)).toFixed(1) : null;
     container.innerHTML = `
       <div style="background:linear-gradient(135deg,var(--g1),var(--bg));min-height:100vh;padding:48px 24px 32px;display:flex;flex-direction:column;text-align:center">
         <div style="flex:1;display:flex;flex-direction:column;justify-content:center">
@@ -665,10 +765,13 @@ function renderOnboardingStep(step) {
           <div class="card" style="text-align:left;margin-bottom:16px">
             <div class="info-row"><span class="lbl">Your Goal</span><span class="val">${goalLabels[_onboardData.goal]||_onboardData.goal}</span></div>
             <div class="info-row"><span class="lbl">Modules</span><span class="val">${_onboardData.modules.length} selected</span></div>
-            <div class="info-row" style="border:none"><span class="lbl">Daily Reminder</span><span class="val">6:00 AM 🔔</span></div>
+            ${_onboardData.age ? `<div class="info-row"><span class="lbl">Age</span><span class="val">${_onboardData.age} years</span></div>` : ''}
+            ${mhr ? `<div class="info-row"><span class="lbl">Max Heart Rate</span><span class="val">${mhr} bpm</span></div>` : ''}
+            ${bmi ? `<div class="info-row"><span class="lbl">BMI</span><span class="val">${bmi}</span></div>` : ''}
+            <div class="info-row" style="border:none"><span class="lbl">Fitness Level</span><span class="val">${_onboardData.fitnessLevel || 'Not set'}</span></div>
           </div>
           <div class="card card-sm" style="background:rgba(240,192,64,0.08);border-color:rgba(240,192,64,0.2)">
-            <div style="font-size:13px;color:var(--accent)">💡 You can customise everything later from your profile and module settings.</div>
+            <div style="font-size:13px;color:var(--accent)">💡 You can update your profile stats anytime from your profile page.</div>
           </div>
         </div>
         <button class="btn btn-accent btn-full btn-lg" style="margin-top:32px" onclick="completeOnboarding()">
@@ -676,6 +779,37 @@ function renderOnboardingStep(step) {
         </button>
       </div>`;
   }
+}
+
+function _applyObSelect(el, on) {
+  el.style.borderColor = on ? 'var(--g4)' : 'var(--border)';
+  el.style.background  = on ? 'rgba(46,125,70,0.12)' : 'var(--surface)';
+}
+
+function selectObGender(v, el) {
+  _onboardData.gender = v;
+  document.querySelectorAll('[id^="ob-gender-"]').forEach(e => _applyObSelect(e, false));
+  _applyObSelect(el, true);
+  _checkOb25();
+}
+
+function selectObFitness(v, el) {
+  _onboardData.fitnessLevel = v;
+  document.querySelectorAll('[id^="ob-fit-"]').forEach(e => _applyObSelect(e, false));
+  _applyObSelect(el, true);
+  _checkOb25();
+}
+
+function _checkOb25() {
+  // Age is required; weight/height/gender/fitness are optional but encouraged
+  const age = document.getElementById('ob-age');
+  const btn = document.getElementById('ob-next-25');
+  if (!btn) return;
+  // Age slider always has a value (default 25), so just check it's been set
+  if (!_onboardData.age) _onboardData.age = age ? +age.value : 25;
+  const ready = _onboardData.age > 0;
+  btn.disabled = !ready;
+  btn.style.opacity = ready ? '1' : '0.4';
 }
 
 function selectOnboardGoal(goalId, el) {
@@ -724,6 +858,19 @@ function completeOnboarding() {
   // Save goal + module prefs to localStorage
   const user = APP.currentUser;
   Store.set('ff_onboard_' + user.id, { goal: _onboardData.goal, modules: _onboardData.modules, date: todayStr() });
+
+  // Save body metrics profile
+  if (_onboardData.age || _onboardData.weight || _onboardData.height) {
+    const profile = {
+      age:          _onboardData.age          || null,
+      weight:       _onboardData.weight       || null,
+      height:       _onboardData.height       || null,
+      gender:       _onboardData.gender       || null,
+      fitnessLevel: _onboardData.fitnessLevel || null,
+      updatedAt:    new Date().toISOString(),
+    };
+    Store.set('ff_body_profile_' + user.id, profile);
+  }
 
   // Save preferred module order based on selections
   if (_onboardData.modules.length > 0 && typeof saveModuleOrder === 'function') {
