@@ -1,17 +1,17 @@
-const CACHE = 'fitflow-v7';
+const CACHE = 'fitflow-v8';
 const ASSETS = [
   './',
   './index.html',
   './css/style.css',
-  './js/data.js?v=7',
-  './js/app.js?v=7',
-  './js/auth.js?v=7',
-  './js/dashboard.js?v=7',
-  './js/running.js?v=7',
-  './js/admin.js?v=7',
-  './push.js?v=7',
-  './js/custom-workouts.js?v=7',
-  './js/weekly-report.js?v=7',
+  './js/data.js?v=8',
+  './js/app.js?v=8',
+  './js/auth.js?v=8',
+  './js/dashboard.js?v=8',
+  './js/running.js?v=8',
+  './js/admin.js?v=8',
+  './push.js?v=8',
+  './js/custom-workouts.js?v=8',
+  './js/weekly-report.js?v=8',
   './manifest.json',
   'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap'
 ];
