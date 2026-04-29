@@ -484,6 +484,7 @@ textarea.form-input { resize: vertical; min-height: 90px; line-height: 1.5; }
 .grad-yoga    { background: linear-gradient(135deg, #2d1a38, #4a0f4a); }
 .grad-running { background: linear-gradient(135deg, #382d1a, #4a3a0f); }
 .grad-stretch { background: linear-gradient(135deg, #1a3833, #0f4a3a); }
+.grad-cali    { background: linear-gradient(135deg, #3a1a1a, #5a2a0a); }
 
 /* ── SWITCHER ──────────────────────────────────────────────────── */
 .switcher {
