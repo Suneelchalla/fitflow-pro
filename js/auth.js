@@ -589,9 +589,12 @@ async function submitChangePassword() {
 
 // ── LOGOUT ────────────────────────────────────────────────────────
 function logout() {
-  // Unsubscribe from push before clearing session so _remove() still has the user
   if (typeof PUSH !== 'undefined' && PUSH.isSupported()) {
     PUSH.unsubscribe().catch(() => {});
+  }
+  // Clear last-page so next session starts fresh at root
+  if (APP.currentUser) {
+    Store.remove('ff_last_page_' + APP.currentUser.id);
   }
   Store.clearSession();
   APP.currentUser  = null;
