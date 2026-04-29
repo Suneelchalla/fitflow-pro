@@ -19,18 +19,39 @@ function renderAdminPanel() {
   if (firstBtn) switchAdminTab('users', firstBtn);
 }
 
-function renderAdminStats() {
-  const allLogs     = Store.getLogs();
-  const allRunLogs  = Store.getRunLogs();
-  const today       = todayStr();
-  const todayActive = [...new Set(allLogs.filter(l => l.date === today).map(l => l.userId))].length;
-  const stdLogs     = allLogs.filter(l => !l.module.startsWith('custom_'));
-  const cwLogs      = allLogs.filter(l => l.module.startsWith('custom_'));
+async function renderAdminStats() {
   const el = id => document.getElementById(id);
-  if (el('admin-stat-workouts')) el('admin-stat-workouts').textContent = stdLogs.length;
-  if (el('admin-stat-runs'))     el('admin-stat-runs').textContent     = allRunLogs.length;
-  if (el('admin-stat-today'))    el('admin-stat-today').textContent    = todayActive;
-  if (el('admin-stat-custom'))   el('admin-stat-custom').textContent   = cwLogs.length;
+  ['admin-stat-workouts','admin-stat-runs','admin-stat-today','admin-stat-custom'].forEach(id => {
+    if (el(id)) el(id).textContent = '…';
+  });
+  try {
+    const [logsRes, runLogsRes] = await Promise.all([
+      Sheets.get('getAllLogs'),
+      Sheets.get('getAllRunLogs'),
+    ]);
+    const allLogs    = (logsRes?.success && logsRes.logs)       ? logsRes.logs    : Store.getLogs();
+    const allRunLogs = (runLogsRes?.success && runLogsRes.logs) ? runLogsRes.logs : Store.getRunLogs();
+    const today      = todayStr();
+    const todayActive = [...new Set(allLogs.filter(l => l.date === today).map(l => l.userId))].length;
+    const stdLogs    = allLogs.filter(l => !l.module.startsWith('custom_'));
+    const cwLogs     = allLogs.filter(l => l.module.startsWith('custom_'));
+    if (el('admin-stat-workouts')) el('admin-stat-workouts').textContent = stdLogs.length;
+    if (el('admin-stat-runs'))     el('admin-stat-runs').textContent     = allRunLogs.length;
+    if (el('admin-stat-today'))    el('admin-stat-today').textContent    = todayActive;
+    if (el('admin-stat-custom'))   el('admin-stat-custom').textContent   = cwLogs.length;
+  } catch {
+    const allLogs    = Store.getLogs();
+    const allRunLogs = Store.getRunLogs();
+    const today      = todayStr();
+    const todayActive = [...new Set(allLogs.filter(l => l.date === today).map(l => l.userId))].length;
+    const stdLogs    = allLogs.filter(l => !l.module.startsWith('custom_'));
+    const cwLogs     = allLogs.filter(l => l.module.startsWith('custom_'));
+    const el2 = id => document.getElementById(id);
+    if (el2('admin-stat-workouts')) el2('admin-stat-workouts').textContent = stdLogs.length;
+    if (el2('admin-stat-runs'))     el2('admin-stat-runs').textContent     = allRunLogs.length;
+    if (el2('admin-stat-today'))    el2('admin-stat-today').textContent    = todayActive;
+    if (el2('admin-stat-custom'))   el2('admin-stat-custom').textContent   = cwLogs.length;
+  }
 }
 
 // ── ADMIN TABS ────────────────────────────────────────────────────
@@ -242,11 +263,12 @@ function renderContentHome() {
   const container = document.getElementById('content-links-list');
   const connected = !!Store.getSheetsConfig().webAppUrl;
   const modules   = [
-    { id: 'cardio',     name: 'Home Cardio',    emoji: '🏠',  hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
-    { id: 'gym',        name: 'Gym Workouts',   emoji: '🏋️',  hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
-    { id: 'yoga',       name: 'Yoga',           emoji: '🧘',  hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
-    { id: 'stretching', name: 'Stretching',     emoji: '🤸',  hasSections: ['exercises','hydration','diet'] },
-    { id: 'running',    name: 'Running',        emoji: '🏃',  hasSections: ['warmup','cooldown','hydration','diet'] },
+    { id: 'cardio',       name: 'Home Cardio',    emoji: '🏠',   hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
+    { id: 'gym',          name: 'Gym Workouts',   emoji: '🏋️',  hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
+    { id: 'yoga',         name: 'Yoga',           emoji: '🧘',   hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
+    { id: 'stretching',   name: 'Stretching',     emoji: '🤸',   hasSections: ['exercises','hydration','diet'] },
+    { id: 'running',      name: 'Running',        emoji: '🏃',   hasSections: ['warmup','cooldown','hydration','diet'] },
+    { id: 'calisthenics', name: 'Calisthenics',   emoji: '🤸‍♂️', hasSections: ['exercises','warmup','cooldown'] },
   ];
 
   container.innerHTML = `
@@ -1053,9 +1075,24 @@ function addQuoteRow() {
 // ════════════════════════════════════════════════════════════════
 // HISTORY
 // ════════════════════════════════════════════════════════════════
-function renderAllHistory() {
-  const allLogs = Store.getLogs().sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
-  const allRuns = Store.getRunLogs().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+async function renderAllHistory() {
+  const container = document.getElementById('all-history-list');
+  if (!container) return;
+  container.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text3)"><div class="loader" style="margin:0 auto 10px"></div>Loading…</div>`;
+
+  let allLogs = Store.getLogs();
+  let allRuns = Store.getRunLogs();
+  try {
+    const [logsRes, runsRes] = await Promise.all([
+      Sheets.get('getAllLogs'),
+      Sheets.get('getAllRunLogs'),
+    ]);
+    if (logsRes?.success && logsRes.logs?.length)  allLogs = logsRes.logs;
+    if (runsRes?.success  && runsRes.logs?.length)  allRuns = runsRes.logs;
+  } catch {}
+
+  allLogs = allLogs.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+  allRuns = allRuns.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
   const combined = [
     ...allLogs.map(l => ({ ...l, _type: l.module.startsWith('custom_') ? 'custom' : 'workout' })),
@@ -1190,8 +1227,8 @@ async function testSheetsConnection() {
 }
 
 // ── MODULE HELPERS (shared with dashboard) ────────────────────────
-function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🤸', running: '🏃' }[mod] || '💪'; }
-function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running' }[mod] || mod; }
+function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🤸', running: '🏃', calisthenics: '🤸‍♂️', custom: '✏️' }[mod] || '💪'; }
+function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics', custom: 'Custom Workout' }[mod] || mod; }
 
 // ── QUOTES TAB (inline in Admin Panel, not editor page) ───────────
 
