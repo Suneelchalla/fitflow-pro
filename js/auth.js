@@ -38,8 +38,7 @@ function initLogin() {
       openSetPasswordModal();
     } else {
       completeLogin(user);
-    }
-  });
+    }  });
 }
 
 // ── ATTEMPT LOGIN (Sheets → local fallback) ───────────────────────
@@ -96,39 +95,49 @@ async function attemptLogin(email, password) {
 
 // ── COMPLETE LOGIN ────────────────────────────────────────────────
 function completeLogin(user) {
-  APP.currentUser = user;
-  Store.saveSession(user);
+  try {
+    APP.currentUser = user;
+    Store.saveSession(user);
 
-  // Sync all admin-edited content from Sheets (non-blocking)
-  syncContentFromSheets();
+    // Sync all admin-edited content from Sheets (non-blocking)
+    syncContentFromSheets();
 
-  // Auto-seed exercises to Sheets if data version changed
-  _autoSeedIfVersionChanged(user);
+    // Auto-seed exercises to Sheets if data version changed
+    _autoSeedIfVersionChanged(user);
 
-  if (user.role === 'ADMIN') {
-    initDashboard();
-    showPage('page-admin');
-    renderAdminPanel();
-    return;
-  }
+    if (user.role === 'ADMIN') {
+      initDashboard();
+      showPage('page-admin');
+      renderAdminPanel();
+      return;
+    }
 
-  // Init push notifications for regular users (non-blocking)
-  if (typeof initPushNotifications === 'function') initPushNotifications();
-  // Show My Plan nav tab if user has a registered plan
-  if (typeof _refreshMyPlanNav === 'function') _refreshMyPlanNav();
+    // Init push notifications for regular users (non-blocking)
+    if (typeof initPushNotifications === 'function') initPushNotifications();
+    // Show My Plan nav tab if user has a registered plan
+    if (typeof _refreshMyPlanNav === 'function') _refreshMyPlanNav();
 
-  const lastQuote = Store.get('ff_quote_' + user.id);
-  const today     = todayStr();
+    const lastQuote = Store.get('ff_quote_' + user.id);
+    const today     = todayStr();
 
-  if (lastQuote === today) {
-    initDashboard();
-    showPage('page-dashboard');
-    setActiveNav('home');
-  } else {
-    Store.set('ff_quote_' + user.id, today);
-    initDashboard();
-    renderQuote();
-    showPage('page-quote');
+    if (lastQuote === today) {
+      initDashboard();
+      showPage('page-dashboard');
+      setActiveNav('home');
+    } else {
+      Store.set('ff_quote_' + user.id, today);
+      initDashboard();
+      renderQuote();
+      showPage('page-quote');
+    }
+  } catch (err) {
+    console.error('[FitFlow] completeLogin error:', err);
+    // Show error on login page so user knows what happened
+    const errEl = document.getElementById('login-error');
+    if (errEl) errEl.textContent = '⚠️ Login error: ' + err.message;
+    // Re-enable login button
+    const btn = document.getElementById('login-btn');
+    if (btn) { btn.disabled = false; btn.textContent = 'Sign In'; }
   }
 }
 
