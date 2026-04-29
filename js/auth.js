@@ -48,11 +48,11 @@ async function attemptLogin(email, password) {
 
   if (cfg.webAppUrl) {
     try {
-      // Convert password to char codes joined by dashes - survives URL encoding perfectly
-      // e.g. "Hema@123" → "72-101-109-97-64-49-50-51"
-      const pwCodes = Array.from(password).map(c => c.charCodeAt(0)).join('-');
-      const qs = new URLSearchParams({ action: 'login', email, pwcodes: pwCodes }).toString();
-      const r = await fetch(`${cfg.webAppUrl}?${qs}`);
+      const r = await fetch(cfg.webAppUrl, {
+        method:  'POST',
+        body:    JSON.stringify({ action: 'login', email, password }),
+        headers: { 'Content-Type': 'text/plain' },
+      });
       const res = await r.json();
       if (res && res.success !== undefined) return res;
     } catch (e) {
@@ -581,6 +581,10 @@ async function submitChangePassword() {
 
 // ── LOGOUT ────────────────────────────────────────────────────────
 function logout() {
+  // Unsubscribe from push before clearing session so _remove() still has the user
+  if (typeof PUSH !== 'undefined' && PUSH.isSupported()) {
+    PUSH.unsubscribe().catch(() => {});
+  }
   Store.clearSession();
   APP.currentUser  = null;
   APP.pageHistory  = [];
@@ -699,7 +703,7 @@ function renderOnboardingStep(step) {
     container.innerHTML = `
       <div style="background:linear-gradient(135deg,var(--g1),var(--bg));min-height:100vh;padding:48px 24px 32px;display:flex;flex-direction:column">
         <div style="flex:1">
-          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px">Step 3 of 4</div>
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px">Step 3 of 3</div>
           <div style="height:4px;background:var(--bg3);border-radius:2px;margin-bottom:32px">
             <div style="width:75%;height:100%;background:var(--g4);border-radius:2px"></div>
           </div>
