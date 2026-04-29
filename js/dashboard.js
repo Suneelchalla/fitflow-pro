@@ -866,12 +866,21 @@ function openProfilePage() {
   showPage('page-profile');
 }
 
+function getBodyProfile(userId) {
+  return Store.get('ff_body_profile_' + userId, {});
+}
+
+function saveBodyProfile(userId, profile) {
+  Store.set('ff_body_profile_' + userId, { ...profile, updatedAt: new Date().toISOString() });
+}
+
 function renderProfilePage() {
   const user    = APP.currentUser;
   const logs    = Store.getUserLogs(user.id);
   const runLogs = Store.getUserRunLogs(user.id);
   const streak  = calcStreak(user.id);
   const monday  = getMonday();
+  const body    = getBodyProfile(user.id);
 
   const totalKm      = runLogs.reduce((a,r)=>a+(r.distance||0),0);
   const totalRuns    = runLogs.length;
@@ -969,6 +978,41 @@ function renderProfilePage() {
           <div style="font-size:12px;color:var(--text3);text-align:center">${unlockedList.length} badges unlocked · <span style="color:var(--g5);cursor:pointer" onclick="openRunningModule()">See all →</span></div>
         </div>`;
     })()}
+    <div class="section-title" style="margin-bottom:10px">Body Stats</div>
+    <div class="card" style="margin-bottom:20px">
+      ${body.age ? `
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div style="background:var(--bg2);border-radius:10px;padding:10px;text-align:center">
+          <div style="font-family:var(--font-display);font-size:24px;color:var(--g5)">${body.age}</div>
+          <div style="font-size:11px;color:var(--text3)">Age</div>
+        </div>
+        ${(body.weight && body.height) ? `
+        <div style="background:var(--bg2);border-radius:10px;padding:10px;text-align:center">
+          <div style="font-family:var(--font-display);font-size:24px;color:var(--g5)">${(body.weight / Math.pow(body.height/100, 2)).toFixed(1)}</div>
+          <div style="font-size:11px;color:var(--text3)">BMI</div>
+        </div>` : ''}
+        ${body.age ? `
+        <div style="background:var(--bg2);border-radius:10px;padding:10px;text-align:center">
+          <div style="font-family:var(--font-display);font-size:24px;color:var(--g5)">${220 - body.age}</div>
+          <div style="font-size:11px;color:var(--text3)">Max HR (bpm)</div>
+        </div>` : ''}
+        <div style="background:var(--bg2);border-radius:10px;padding:10px;text-align:center">
+          <div style="font-family:var(--font-display);font-size:24px;color:var(--g5)">${body.weight || '—'}</div>
+          <div style="font-size:11px;color:var(--text3)">Weight (kg)</div>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:10px">
+        Zone 2 (easy run): ${Math.round((220 - body.age) * 0.6)}–${Math.round((220 - body.age) * 0.7)} bpm &nbsp;·&nbsp;
+        Tempo: ${Math.round((220 - body.age) * 0.7)}–${Math.round((220 - body.age) * 0.8)} bpm
+      </div>` : `
+      <div style="font-size:13px;color:var(--text3);text-align:center;padding:12px 0">
+        No body stats set. Tap below to add your age and metrics.
+      </div>`}
+      <button class="btn btn-ghost btn-full" onclick="openEditBodyStats()">
+        ✏️ ${body.age ? 'Update' : 'Add'} Body Stats
+      </button>
+    </div>
+
     <div class="section-title" style="margin-bottom:10px">Account</div>
     <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:24px">
       <button class="btn btn-ghost btn-full" style="text-align:left;justify-content:flex-start;gap:12px"
@@ -1007,6 +1051,89 @@ function toggleProfileMenu() {
       });
     }, 10);
   }
+}
+
+function openEditBodyStats() {
+  const user = APP.currentUser;
+  const body = getBodyProfile(user.id);
+
+  const overlay = document.createElement('div');
+  overlay.id = 'body-stats-modal';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:9999;display:flex;align-items:flex-end;justify-content:center';
+  overlay.innerHTML = `
+    <div style="background:var(--bg);border-radius:20px 20px 0 0;padding:24px;width:100%;max-width:480px;max-height:85vh;overflow-y:auto">
+      <div style="font-weight:700;font-size:18px;margin-bottom:4px">Body Stats</div>
+      <div style="font-size:13px;color:var(--text3);margin-bottom:20px">Used for heart rate zones and calorie estimates</div>
+
+      <div style="margin-bottom:16px">
+        <label style="font-size:13px;font-weight:700;display:block;margin-bottom:8px">Age: <span id="es-age-val">${body.age || 25}</span> years</label>
+        <input type="range" id="es-age" min="16" max="75" value="${body.age || 25}" step="1"
+          oninput="document.getElementById('es-age-val').textContent=this.value"
+          style="width:100%">
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px">
+        <div>
+          <label style="font-size:13px;font-weight:700;display:block;margin-bottom:6px">Weight (kg)</label>
+          <input type="number" id="es-weight" value="${body.weight || ''}" placeholder="e.g. 70" min="30" max="200"
+            style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text1);font-size:15px">
+        </div>
+        <div>
+          <label style="font-size:13px;font-weight:700;display:block;margin-bottom:6px">Height (cm)</label>
+          <input type="number" id="es-height" value="${body.height || ''}" placeholder="e.g. 170" min="100" max="250"
+            style="width:100%;padding:10px 12px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--text1);font-size:15px">
+        </div>
+      </div>
+
+      <div style="margin-bottom:16px">
+        <label style="font-size:13px;font-weight:700;display:block;margin-bottom:8px">Biological sex</label>
+        <div style="display:flex;gap:8px">
+          ${[['male','Male'],['female','Female'],['other','Other']].map(([v,l]) => `
+            <button id="es-gender-${v}" onclick="document.querySelectorAll('[id^=es-gender-]').forEach(b=>b.style.background='var(--surface)');this.style.background='var(--g3)'"
+              style="flex:1;padding:8px;border-radius:10px;border:1px solid var(--border);background:${body.gender===v?'var(--g3)':'var(--surface)'};color:var(--text1);cursor:pointer;font-size:13px;font-weight:500">
+              ${l}
+            </button>`).join('')}
+        </div>
+      </div>
+
+      <div style="margin-bottom:20px">
+        <label style="font-size:13px;font-weight:700;display:block;margin-bottom:8px">Fitness level</label>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          ${[['beginner','🐣 Beginner'],['intermediate','💪 Intermediate'],['advanced','🔥 Advanced']].map(([v,l]) => `
+            <button id="es-fit-${v}" onclick="document.querySelectorAll('[id^=es-fit-]').forEach(b=>b.style.background='var(--surface)');this.style.background='var(--g3)'"
+              style="padding:10px;border-radius:10px;border:1px solid var(--border);background:${body.fitnessLevel===v?'var(--g3)':'var(--surface)'};color:var(--text1);cursor:pointer;font-size:13px;font-weight:500;text-align:left">
+              ${l}
+            </button>`).join('')}
+        </div>
+      </div>
+
+      <div style="display:flex;gap:10px">
+        <button class="btn btn-ghost btn-full" onclick="document.getElementById('body-stats-modal').remove()">Cancel</button>
+        <button class="btn btn-primary btn-full" onclick="saveBodyStatsFromModal()">Save Stats</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
+function saveBodyStatsFromModal() {
+  const user   = APP.currentUser;
+  const age    = +document.getElementById('es-age')?.value || null;
+  const weight = +document.getElementById('es-weight')?.value || null;
+  const height = +document.getElementById('es-height')?.value || null;
+  const gender = ['male','female','other'].find(v => {
+    const el = document.getElementById('es-gender-'+v);
+    return el && el.style.background !== 'var(--surface)' && el.style.background !== '';
+  }) || null;
+  const fitnessLevel = ['beginner','intermediate','advanced'].find(v => {
+    const el = document.getElementById('es-fit-'+v);
+    return el && el.style.background !== 'var(--surface)' && el.style.background !== '';
+  }) || null;
+
+  saveBodyProfile(user.id, { age, weight, height, gender, fitnessLevel });
+  document.getElementById('body-stats-modal')?.remove();
+  showToast('Body stats saved! ✅', 'success');
+  renderProfilePage();
 }
 
 function openFeedbackModal() {
