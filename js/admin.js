@@ -113,11 +113,18 @@ function renderUsersList(users) {
         <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;flex-shrink:0">
           <span class="badge ${isActive ? 'badge-green' : 'badge-red'}" id="status-badge-${safeId}">${status}</span>
           ${!isAdmin
-            ? `<button class="btn btn-ghost btn-sm" id="toggle-btn-${safeId}"
-                style="${isActive ? 'color:#ef9a9a' : 'color:var(--g5)'}"
-                onclick="toggleStatus('${safeId}','${isActive ? 'INACTIVE' : 'ACTIVE'}','${safeId}')">
-                ${isActive ? '🚫 Disable' : '✅ Enable'}
-              </button>
+            ? `<div style="display:flex;align-items:center;gap:8px;margin-bottom:2px">
+                <span style="font-size:11px;color:var(--text3)">${isActive ? 'Active' : 'Inactive'}</span>
+                <div id="toggle-btn-${safeId}"
+                  onclick="toggleStatus('${safeId}','${isActive ? 'INACTIVE' : 'ACTIVE'}','${safeId}')"
+                  style="width:44px;height:24px;border-radius:12px;cursor:pointer;position:relative;
+                    background:${isActive ? 'var(--g4)' : 'rgba(255,255,255,0.15)'};
+                    transition:background 0.2s;flex-shrink:0">
+                  <div style="position:absolute;top:3px;left:${isActive ? '23px' : '3px'};
+                    width:18px;height:18px;border-radius:50%;background:white;
+                    transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.3)"></div>
+                </div>
+              </div>
               <button class="btn btn-ghost btn-sm" style="color:var(--accent)"
                 onclick="openAdminResetPassword('${safeId}','${(u.name||'').replace(/'/g,"\\'")}')">
                 🔑 Reset Pass
@@ -133,25 +140,27 @@ function renderUsersList(users) {
 }
 
 async function toggleStatus(userId, newStatus, safeId) {
-  const btn   = document.getElementById('toggle-btn-'   + safeId);
-  const badge = document.getElementById('status-badge-' + safeId);
-  if (btn)   { btn.disabled = true; btn.textContent = '…'; }
-  if (badge) { badge.textContent = '…'; }
+  const toggle = document.getElementById('toggle-btn-' + safeId);
+  const badge  = document.getElementById('status-badge-' + safeId);
+  if (toggle) toggle.style.opacity = '0.5';
 
   const res = await Sheets.post('updateUserStatus', { userId, status: newStatus });
   if (res?.success) {
     const active = newStatus === 'ACTIVE';
     if (badge) { badge.textContent = newStatus; badge.className = 'badge ' + (active ? 'badge-green' : 'badge-red'); }
-    if (btn) {
-      btn.disabled    = false;
-      btn.textContent = active ? '🚫 Disable' : '✅ Enable';
-      btn.style.color = active ? '#ef9a9a' : 'var(--g5)';
-      btn.setAttribute('onclick', `toggleStatus('${userId}','${active ? 'INACTIVE' : 'ACTIVE'}','${safeId}')`);
+    if (toggle) {
+      toggle.style.opacity = '1';
+      toggle.style.background = active ? 'var(--g4)' : 'rgba(255,255,255,0.15)';
+      const knob = toggle.querySelector('div');
+      if (knob) knob.style.left = active ? '23px' : '3px';
+      const label = toggle.previousElementSibling;
+      if (label) label.textContent = active ? 'Active' : 'Inactive';
+      toggle.setAttribute('onclick', "toggleStatus('" + userId + "','" + (active ? 'INACTIVE' : 'ACTIVE') + "','" + safeId + "')");
     }
-    showToast(`User ${active ? 'enabled ✅' : 'disabled 🚫'}.`, 'success');
+    showToast('User ' + (active ? 'enabled ✅' : 'disabled 🚫') + '.', 'success');
   } else {
-    if (btn)   { btn.disabled = false; btn.textContent = newStatus === 'ACTIVE' ? '✅ Enable' : '🚫 Disable'; }
-    if (badge) { badge.textContent = newStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'; }
+    if (toggle) toggle.style.opacity = '1';
+    if (badge)  { badge.textContent = newStatus === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE'; }
     showToast(res?.error || 'Failed to update status.', 'error');
   }
 }
@@ -305,14 +314,18 @@ function renderModuleEditor() {
     { id: 'cooldown',  label: '🧘 Cool-Down' },
     { id: 'hydration', label: '💧 Hydration' },
     { id: 'diet',      label: '🥗 Diet' },
+    { id: 'plans',     label: '🗓 Plans' },
   ];
-  // stretching = no warmup/cooldown (it IS the stretching activity)
-  // running = no main exercises (GPS-based, no fixed exercise list)
+  // stretching = no warmup/cooldown
+  // running = no main exercises, but has plans
   const excludeMap = {
-    stretching: ['warmup','cooldown'],
+    stretching: ['warmup','cooldown','plans'],
     running:    ['exercises'],
+    cardio:     ['plans'],
+    gym:        ['plans'],
+    yoga:       ['plans'],
   };
-  const excluded = excludeMap[AdminEdit.module] || [];
+  const excluded = excludeMap[AdminEdit.module] || ['plans'];
   const sections = allSections.filter(s => !excluded.includes(s.id));
 
   document.getElementById('editor-section-tabs').innerHTML = sections.map(s => `
@@ -353,6 +366,7 @@ function renderEditorSection() {
   else if (section === 'cooldown')   renderWarmCoolEditor(moduleId, 'cooldown', body);
   else if (section === 'hydration')  renderHydrationEditor(moduleId, body);
   else if (section === 'diet')       renderDietEditor(moduleId, body);
+  else if (section === 'plans')      renderRunningPlansEditor(body);
 }
 
 // ── DIRTY FLAG ────────────────────────────────────────────────────
@@ -394,9 +408,11 @@ async function _collectAndSave() {
     days.forEach(day => {
       const dayEl = document.querySelector(`[data-day="${day}"]`);
       if (!dayEl) {
-        // Day not in DOM — keep existing
+        // Day not in DOM — keep existing saved, then fall back to APP_DATA
         const existing = Store.getContent('exercises_' + moduleId);
-        result.days[day] = existing?.days?.[day] || APP_DATA.modules[moduleId]?.days?.[day] || [];
+        result.days[day] = existing?.days?.[day]?.length
+          ? existing.days[day]
+          : (APP_DATA.modules[moduleId]?.days?.[day] || []);
         return;
       }
       result.days[day] = Array.from(dayEl.querySelectorAll('.ex-row')).map(row => ({
@@ -489,9 +505,11 @@ function renderExerciseEditor(moduleId, body) {
       ✏️ <strong>Tap any field</strong> to edit. Applies to all users after saving.
     </div>
     ${days.map(day => {
-      // Merge: admin overrides first, then built-in default
-      const saved    = Store.getContent('exercises_' + moduleId);
-      const exercises = saved?.days?.[day] || APP_DATA.modules[moduleId]?.days?.[day] || [];
+      // Priority: Sheets-saved override → APP_DATA built-in default
+      const saved     = Store.getContent('exercises_' + moduleId);
+      const exercises = saved?.days?.[day]?.length
+        ? saved.days[day]
+        : (APP_DATA.modules[moduleId]?.days?.[day] || []);
       return `
         <div style="margin-bottom:8px">
           <div style="padding:10px 16px;background:rgba(46,125,70,0.15);font-weight:700;font-size:14px;
@@ -727,6 +745,126 @@ function addHydrationTip() {
 }
 
 // ════════════════════════════════════════════════════════════════
+// RUNNING PLANS EDITOR
+// ════════════════════════════════════════════════════════════════
+function renderRunningPlansEditor(body) {
+  const plans = APP_DATA.running?.plans || {};
+  const planKeys = Object.keys(plans);
+  const activePlan = body.dataset.activePlan || planKeys[0] || '5K';
+
+  body.innerHTML = `
+    <div style="font-size:13px;color:var(--text2);padding:0 16px 12px;line-height:1.5">
+      🗓 <strong>View running plans</strong>. Edit descriptions and distances per day/week.
+    </div>
+
+    <!-- Plan selector tabs -->
+    <div style="display:flex;gap:8px;padding:0 16px 14px;flex-wrap:wrap">
+      ${planKeys.map(k => `
+        <button onclick="selectAdminPlan('${k}')"
+          style="padding:6px 16px;border-radius:20px;font-size:13px;font-weight:700;cursor:pointer;border:2px solid ${plans[k].color};
+            background:${activePlan===k ? plans[k].color : 'transparent'};
+            color:${activePlan===k ? '#000' : plans[k].color}">
+          ${plans[k].emoji} ${k}
+        </button>`).join('')}
+    </div>
+
+    <!-- Plan info -->
+    <div style="padding:0 16px 12px">
+      <div style="background:rgba(255,255,255,0.05);border-radius:10px;padding:12px">
+        <div style="font-weight:700;font-size:15px;color:${plans[activePlan]?.color}">${plans[activePlan]?.emoji} ${activePlan} Plan</div>
+        <div style="font-size:12px;color:var(--text3);margin-top:3px">${plans[activePlan]?.weeks} weeks · ${(plans[activePlan]?.schedule||[]).length} daily sessions total</div>
+        <div style="font-size:12px;color:var(--text2);margin-top:4px">${plans[activePlan]?.desc}</div>
+      </div>
+    </div>
+
+    <!-- Schedule by week -->
+    <div id="admin-plan-schedule" style="padding:0 16px">
+      ${_renderAdminPlanWeeks(plans[activePlan], activePlan)}
+    </div>`;
+
+  body.dataset.activePlan = activePlan;
+
+  // Override save button
+  const saveBtn = document.getElementById('editor-save-btn');
+  if (saveBtn) {
+    saveBtn.textContent = '💾 Save Plan Changes';
+    saveBtn.onclick = saveRunningPlanChanges;
+  }
+}
+
+function selectAdminPlan(planKey) {
+  const body = document.getElementById('editor-body');
+  if (body) { body.dataset.activePlan = planKey; renderRunningPlansEditor(body); }
+}
+
+function _renderAdminPlanWeeks(plan, planKey) {
+  if (!plan?.schedule?.length) return '<div style="padding:20px;text-align:center;color:var(--text3)">No schedule data found.</div>';
+  const weeks = [...new Set(plan.schedule.map(s => s.week))].sort((a,b)=>a-b);
+  const DAY_NAMES = ['Day 1','Day 2','Day 3','Day 4','Day 5','Day 6','Day 7'];
+  return weeks.map(w => {
+    const days = plan.schedule.filter(s => s.week === w);
+    return `
+      <div style="margin-bottom:14px;border:1px solid rgba(255,255,255,0.1);border-radius:10px;overflow:hidden">
+        <div style="background:rgba(255,255,255,0.07);padding:10px 14px;font-weight:700;font-size:13px;color:var(--text2)">
+          Week ${w}
+        </div>
+        ${days.map(s => `
+          <div style="padding:10px 14px;border-top:1px solid rgba(255,255,255,0.05)"
+               data-plan="${planKey}" data-week="${s.week}" data-day="${s.day}">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+              <span style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase">${DAY_NAMES[s.day-1]}</span>
+              <span style="font-size:11px;color:${plan.color}">${s.dist > 0 ? s.dist+'km' : 'Rest'}</span>
+            </div>
+            <div contenteditable="true" data-field="type"
+              style="font-weight:700;font-size:14px;color:var(--text1);outline:none;border-bottom:1px solid transparent"
+              onfocus="this.style.borderBottomColor='var(--g4)';markDirty()"
+              onblur="this.style.borderBottomColor='transparent'"
+              >${s.type}</div>
+            <div contenteditable="true" data-field="desc"
+              style="font-size:12px;color:var(--text2);margin-top:3px;outline:none;border-bottom:1px solid transparent;line-height:1.5"
+              onfocus="this.style.borderBottomColor='var(--g4)';markDirty()"
+              onblur="this.style.borderBottomColor='transparent'"
+              >${s.desc}</div>
+          </div>`).join('')}
+      </div>`;
+  }).join('');
+}
+
+async function saveRunningPlanChanges() {
+  const body    = document.getElementById('editor-body');
+  const planKey = body?.dataset.activePlan;
+  const plan    = APP_DATA.running?.plans?.[planKey];
+  if (!plan) return;
+
+  // Collect edits from DOM
+  const rows = body.querySelectorAll('[data-plan][data-week][data-day]');
+  rows.forEach(row => {
+    const w    = parseInt(row.dataset.week);
+    const d    = parseInt(row.dataset.day);
+    const type = row.querySelector('[data-field="type"]')?.innerText.trim();
+    const desc = row.querySelector('[data-field="desc"]')?.innerText.trim();
+    const entry = plan.schedule.find(s => s.week === w && s.day === d);
+    if (entry) {
+      if (type) entry.type = type;
+      if (desc) entry.desc = desc;
+    }
+  });
+
+  // Save to Sheets
+  const btn = document.getElementById('editor-save-btn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Saving...'; }
+  try {
+    await Sheets.post('saveContent', { key: 'running_plan_' + planKey, value: plan });
+    Store.setContent('running_plan_' + planKey, plan);
+    AdminEdit.isDirty = false;
+    showToast(`${planKey} plan saved! ✅`, 'success');
+    if (btn) { btn.disabled = false; btn.textContent = '✅ Saved!'; setTimeout(() => { if(btn) btn.textContent='💾 Save Plan Changes'; }, 3000); }
+  } catch(e) {
+    showToast('Save failed: ' + e.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Save Plan Changes'; }
+  }
+}
+
 // DIET EDITOR
 // ════════════════════════════════════════════════════════════════
 function renderDietEditor(moduleId, body) {
