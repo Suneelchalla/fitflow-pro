@@ -120,7 +120,7 @@ function renderDashboardTiles() {
         onclick="openModule('${m.id}')"
         ontouchstart="tileTouchStart(event,this)"
         ontouchmove="tileTouchMove(event,this)"
-        ontouchend="tileTouchEnd(event,this)">
+        ontouchend="tileTouchEnd(event,this)" style="will-change:transform;-webkit-user-select:none;user-select:none;touch-action:none;">
         <div>
           <div class="module-emoji">${m.emoji}</div>
           <div class="module-name">${m.name}</div>
@@ -144,20 +144,23 @@ function renderDashboardTiles() {
 let _dragSrc = null;
 
 function initTileDragDrop() {
-  const grid  = document.getElementById('module-grid');
+  const grid = document.getElementById('module-grid');
   if (!grid) return;
 
   grid.querySelectorAll('.module-card').forEach(card => {
     card.addEventListener('dragstart', e => {
       _dragSrc = card;
-      card.style.opacity = '0.5';
-      card.style.transform = 'scale(0.95)';
+      card.style.opacity   = '0.4';
+      card.style.transform = 'scale(0.96)';
       e.dataTransfer.effectAllowed = 'move';
     });
-    card.addEventListener('dragend', e => {
-      card.style.opacity = '';
+    card.addEventListener('dragend', () => {
+      card.style.opacity   = '';
       card.style.transform = '';
-      grid.querySelectorAll('.module-card').forEach(c => c.classList.remove('drag-over'));
+      grid.querySelectorAll('.module-card').forEach(c => {
+        c.classList.remove('drag-over');
+        c.style.transform = '';
+      });
     });
     card.addEventListener('dragover', e => {
       e.preventDefault();
@@ -201,80 +204,190 @@ function _persistOrder() {
   showToast('Order saved! ✅', 'success');
 }
 
-// ── MOBILE TOUCH DRAG & DROP ──────────────────────────────────────
-let _touch = { active: false, card: null, clone: null, startX: 0, startY: 0, lastOver: null };
+// ── SMOOTH TOUCH DRAG & DROP (Apple-style) ───────────────────────
+// Approach:
+//  • Long-press (200ms) activates drag with haptic + scale pop
+//  • Clone tracks finger via requestAnimationFrame — no jank
+//  • Other cards smoothly translate out of the way via CSS transitions
+//    as the dragged card crosses their midpoints (live reorder)
+//  • On drop: clone springs back to its new slot, then disappears
+//  • Zero layout thrash — transforms only, never touches width/height
+
+const _drag = {
+  active:    false,
+  card:      null,
+  clone:     null,
+  timer:     null,
+  raf:       null,
+  // Finger position (updated every touchmove)
+  fx: 0, fy: 0,
+  // Clone's pinned offset from finger
+  ox: 0, oy: 0,
+  // Current live order of card elements
+  order:     [],
+  // Index of dragged card in order array
+  dragIdx:   -1,
+};
 
 function tileTouchStart(e, card) {
-  // Only activate on long press (300ms) to not conflict with tap-to-open
-  _touch.timer = setTimeout(() => {
-    _touch.active = true;
-    _touch.card   = card;
-    _touch.startX = e.touches[0].clientX;
-    _touch.startY = e.touches[0].clientY;
+  clearTimeout(_drag.timer);
+  const t = e.touches[0];
+  _drag.fx = t.clientX;
+  _drag.fy = t.clientY;
 
-    // Create floating clone
-    const rect  = card.getBoundingClientRect();
-    const clone = card.cloneNode(true);
-    clone.style.cssText = `
-      position:fixed; z-index:9999; pointer-events:none; opacity:0.85;
-      width:${rect.width}px; height:${rect.height}px;
-      left:${rect.left}px; top:${rect.top}px;
-      transform:scale(1.05); transition:none;
-      border:2px solid var(--accent); border-radius:var(--radius-lg);
-      box-shadow:0 16px 48px rgba(0,0,0,0.6);
-    `;
-    document.body.appendChild(clone);
-    _touch.clone   = clone;
-    card.style.opacity = '0.3';
-    navigator.vibrate && navigator.vibrate(50); // haptic feedback
-  }, 300);
+  _drag.timer = setTimeout(() => {
+    _activateDrag(card, _drag.fx, _drag.fy);
+  }, 200);
+}
+
+function _activateDrag(card, fx, fy) {
+  const grid  = document.getElementById('module-grid');
+  if (!grid) return;
+
+  const rect  = card.getBoundingClientRect();
+
+  // Build current live order from DOM
+  _drag.order   = [...grid.querySelectorAll('.module-card')];
+  _drag.dragIdx = _drag.order.indexOf(card);
+  _drag.card    = card;
+  _drag.active  = true;
+
+  // Finger offset from card top-left
+  _drag.ox = fx - rect.left;
+  _drag.oy = fy - rect.top;
+
+  // Create clone — pixel-perfect copy positioned over original
+  const clone = card.cloneNode(true);
+  clone.style.cssText = `
+    position:fixed;
+    z-index:9999;
+    pointer-events:none;
+    width:${rect.width}px;
+    height:${rect.height}px;
+    left:${rect.left}px;
+    top:${rect.top}px;
+    margin:0;
+    border-radius:16px;
+    transform:scale(1.06);
+    transform-origin:center center;
+    box-shadow:0 20px 60px rgba(0,0,0,0.55), 0 8px 20px rgba(0,0,0,0.3);
+    transition:transform 0.18s cubic-bezier(0.34,1.56,0.64,1);
+    will-change:left,top;
+    opacity:0.96;
+  `;
+  document.body.appendChild(clone);
+  _drag.clone = clone;
+
+  // Ghost the original card
+  card.style.cssText += ';opacity:0;pointer-events:none;';
+
+  // All other cards get smooth transition for displacement
+  _drag.order.forEach((c, i) => {
+    if (i !== _drag.dragIdx) {
+      c.style.transition = 'transform 0.22s cubic-bezier(0.25,0.46,0.45,0.94)';
+    }
+  });
+
+  // Haptic
+  navigator.vibrate && navigator.vibrate([12]);
+
+  // Start RAF loop
+  _drag.raf = requestAnimationFrame(_dragFrame);
+}
+
+function _dragFrame() {
+  if (!_drag.active || !_drag.clone) return;
+
+  // Move clone — direct assignment is smooth because RAF throttles it to 60fps
+  _drag.clone.style.left = (_drag.fx - _drag.ox) + 'px';
+  _drag.clone.style.top  = (_drag.fy - _drag.oy) + 'px';
+
+  // Find which slot the finger centre is over
+  const fingerCX = _drag.fx;
+  const fingerCY = _drag.fy;
+
+  _drag.clone.style.display = 'none';
+  const el = document.elementFromPoint(fingerCX, fingerCY);
+  _drag.clone.style.display = '';
+
+  const over = el?.closest('.module-card');
+
+  if (over && over !== _drag.card) {
+    const grid  = document.getElementById('module-grid');
+    const cards = [...grid.querySelectorAll('.module-card')];
+    const overIdx = cards.indexOf(over);
+
+    if (overIdx !== -1 && overIdx !== _drag.dragIdx) {
+      // Live-reorder: insert dragged card before or after target
+      if (overIdx < _drag.dragIdx) {
+        grid.insertBefore(_drag.card, over);
+      } else {
+        grid.insertBefore(_drag.card, over.nextSibling);
+      }
+      // Update order and dragIdx
+      _drag.order   = [...grid.querySelectorAll('.module-card')];
+      _drag.dragIdx = _drag.order.indexOf(_drag.card);
+      // Light haptic on each slot change
+      navigator.vibrate && navigator.vibrate([8]);
+    }
+  }
+
+  _drag.raf = requestAnimationFrame(_dragFrame);
 }
 
 function tileTouchMove(e, card) {
-  clearTimeout(_touch.timer);
-  if (!_touch.active || !_touch.clone) return;
+  clearTimeout(_drag.timer);
+  if (!_drag.active) return;
   e.preventDefault();
-
-  const touch = e.touches[0];
-  const dx    = touch.clientX - _touch.startX;
-  const dy    = touch.clientY - _touch.startY;
-  const rect  = _touch.card.getBoundingClientRect();
-
-  // Move clone with finger
-  _touch.clone.style.left = (rect.left + dx) + 'px';
-  _touch.clone.style.top  = (rect.top  + dy) + 'px';
-
-  // Find card under finger
-  _touch.clone.style.display = 'none';
-  const el = document.elementFromPoint(touch.clientX, touch.clientY);
-  _touch.clone.style.display = '';
-
-  const over = el?.closest('.module-card');
-  if (over && over !== _touch.card) {
-    if (over !== _touch.lastOver) {
-      document.querySelectorAll('.module-card').forEach(c => c.classList.remove('drag-over'));
-      over.classList.add('drag-over');
-      _touch.lastOver = over;
-    }
-  }
+  const t = e.touches[0];
+  _drag.fx = t.clientX;
+  _drag.fy = t.clientY;
 }
 
 function tileTouchEnd(e, card) {
-  clearTimeout(_touch.timer);
-  if (!_touch.active) return;
+  clearTimeout(_drag.timer);
+  cancelAnimationFrame(_drag.raf);
 
-  // Clean up clone
-  if (_touch.clone) { _touch.clone.remove(); _touch.clone = null; }
-  card.style.opacity = '';
-  document.querySelectorAll('.module-card').forEach(c => c.classList.remove('drag-over'));
-
-  // Drop on target
-  if (_touch.lastOver && _touch.lastOver !== card) {
-    _swapTiles(card, _touch.lastOver);
+  if (!_drag.active || !_drag.clone) {
+    // Was a tap, not a drag — let onclick fire naturally
+    _resetDrag();
+    return;
   }
 
-  _touch = { active: false, card: null, clone: null, startX: 0, startY: 0, lastOver: null };
+  // Snap clone to final card position, then fade out
+  const finalRect = _drag.card.getBoundingClientRect();
+  _drag.clone.style.transition = 'left 0.28s cubic-bezier(0.25,0.46,0.45,0.94), top 0.28s cubic-bezier(0.25,0.46,0.45,0.94), transform 0.28s cubic-bezier(0.25,0.46,0.45,0.94), opacity 0.2s ease 0.15s';
+  _drag.clone.style.left      = finalRect.left + 'px';
+  _drag.clone.style.top       = finalRect.top  + 'px';
+  _drag.clone.style.transform = 'scale(1)';
+  _drag.clone.style.opacity   = '0';
+
+  // Restore original card after snap animation
+  setTimeout(() => {
+    if (_drag.card) {
+      _drag.card.style.opacity        = '';
+      _drag.card.style.pointerEvents  = '';
+    }
+    if (_drag.clone) { _drag.clone.remove(); }
+    // Remove transitions from all cards
+    document.querySelectorAll('.module-card').forEach(c => {
+      c.style.transition = '';
+    });
+    _persistOrder();
+    _resetDrag();
+  }, 300);
 }
+
+function _resetDrag() {
+  _drag.active  = false;
+  _drag.card    = null;
+  _drag.clone   = null;
+  _drag.timer   = null;
+  _drag.raf     = null;
+  _drag.order   = [];
+  _drag.dragIdx = -1;
+}
+
 
 function refreshDashboard() {
   renderDashboardStats();
