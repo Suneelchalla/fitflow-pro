@@ -416,8 +416,9 @@ async function _collectAndSave() {
     days.forEach(day => {
       const dayEl = document.querySelector(`[data-day="${day}"]`);
       if (!dayEl) {
-        // Day not in DOM — always use APP_DATA as the ground truth
-        result.days[day] = APP_DATA.modules[moduleId]?.days?.[day] || [];
+        // Day not in DOM — always use APP_DATA_DEFAULT as the ground truth
+        const _D = window.APP_DATA_DEFAULT || window.APP_DATA;
+        result.days[day] = _D.modules?.[moduleId]?.days?.[day] || [];
         return;
       }
       result.days[day] = Array.from(dayEl.querySelectorAll('.ex-row')).map(row => {
@@ -525,12 +526,13 @@ function renderExerciseEditor(moduleId, body) {
       ✏️ <strong>Tap any field</strong> to edit. Applies to all users after saving.
     </div>
     ${days.map(day => {
-      // Always show APP_DATA (data.js ground truth) for admin editor.
-      // Sheets-saved version is only used if it has MORE exercises than APP_DATA
-      // (meaning admin manually added exercises via the panel).
-      const appDefault = APP_DATA.modules[moduleId]?.days?.[day] || [];
+      // Use APP_DATA_DEFAULT (immutable backup from data.js) as ground truth
+      // so Sheets sync can never wipe the default exercises
+      const defaults   = window.APP_DATA_DEFAULT || window.APP_DATA;
+      const appDefault = defaults.modules?.[moduleId]?.days?.[day] || [];
       const saved      = Store.getContent('exercises_' + moduleId);
       const savedDay   = saved?.days?.[day] || [];
+      // Only use Sheets saved version if admin explicitly added MORE exercises
       const exercises  = savedDay.length > appDefault.length ? savedDay : appDefault;
       return `
         <div style="margin-bottom:8px">
@@ -632,11 +634,11 @@ function addExercise(day) {
 // WARMUP / COOLDOWN EDITOR
 // ════════════════════════════════════════════════════════════════
 function renderWarmCoolEditor(moduleId, section, body) {
+  const _D = window.APP_DATA_DEFAULT || window.APP_DATA;
   const appDefault = section === 'warmup'
-    ? (APP_DATA.warmups?.[moduleId]   || APP_DATA.warmups?.cardio   || [])
-    : (APP_DATA.cooldowns?.[moduleId] || APP_DATA.cooldowns?.cardio || []);
+    ? (_D.warmups?.[moduleId]   || _D.warmups?.cardio   || [])
+    : (_D.cooldowns?.[moduleId] || _D.cooldowns?.cardio || []);
   const saved = Store.getContent(section + '_' + moduleId) || [];
-  // Use saved only if admin has added more items than APP_DATA default
   const data  = saved.length > appDefault.length ? saved : appDefault;
   const label = section === 'warmup' ? '🔥 Warm-Up' : '🧘 Cool-Down';
 
@@ -702,7 +704,8 @@ function addWarmCoolExercise() {
 // HYDRATION EDITOR
 // ════════════════════════════════════════════════════════════════
 function renderHydrationEditor(moduleId, body) {
-  const perModule = APP_DATA.hydration?.[moduleId] || APP_DATA.hydration?.default || {};
+  const _D = window.APP_DATA_DEFAULT || window.APP_DATA;
+  const perModule = _D.hydration?.[moduleId] || _D.hydration?.default || {};
   const data      = Store.getContent('hydration_' + moduleId) || perModule;
   const schedule = Array.isArray(data.schedule) ? data.schedule : [];
   const tips     = Array.isArray(data.tips)     ? data.tips     : [];
@@ -919,8 +922,9 @@ async function saveRunningPlanChanges() {
 // ════════════════════════════════════════════════════════════════
 function renderDietEditor(moduleId, body) {
   // All 5 modules now have their own diet plan
-  const modKey = APP_DATA.diet?.modules?.[moduleId] ? moduleId : 'cardio';
-  const data   = Store.getContent('diet_' + moduleId) || APP_DATA.diet?.modules?.[modKey] || { title: 'Diet Plan', meals: [] };
+  const _Dd = window.APP_DATA_DEFAULT || window.APP_DATA;
+  const modKey = _Dd.diet?.modules?.[moduleId] ? moduleId : 'cardio';
+  const data   = Store.getContent('diet_' + moduleId) || _Dd.diet?.modules?.[modKey] || { title: 'Diet Plan', meals: [] };
   const meals  = Array.isArray(data.meals) ? data.meals : [];
 
   body.innerHTML = `
@@ -1467,7 +1471,8 @@ async function saveAnnouncement(active) {
 // CALISTHENICS EXERCISE EDITOR
 // ════════════════════════════════════════════════════════════════
 function renderCalisthenicsEditor(body) {
-  const caliLevels = APP_DATA.modules?.calisthenics?.levels || {};
+  const _D = window.APP_DATA_DEFAULT || window.APP_DATA;
+  const caliLevels = _D.modules?.calisthenics?.levels || {};
   const activeLevel = AdminEdit._caliLevel || 1;
   const days = getWeekDays();
 
@@ -1574,7 +1579,7 @@ async function saveCalisthenicsEditorChanges() {
     days.forEach(day => {
       const dayEl = document.querySelector(`[data-day="${day}"]`);
       if (!dayEl) {
-        result.days[day] = APP_DATA.modules.calisthenics?.levels?.[level]?.days?.[day] || [];
+        result.days[day] = (window.APP_DATA_DEFAULT || window.APP_DATA).modules?.calisthenics?.levels?.[level]?.days?.[day] || [];
         return;
       }
       result.days[day] = Array.from(dayEl.querySelectorAll('.ex-row')).map(row => ({
