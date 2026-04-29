@@ -27,17 +27,28 @@ function initLogin() {
     btn.textContent = 'Sign In';
 
     if (!result.success) {
-      errEl.textContent = '⚠️ ' + result.error;
+      errEl.textContent = '⚠️ ' + (result.error || 'Login failed. Please try again.');
       passIn.value = '';
       return;
     }
 
     const user = result.user;
-    if (user.isFirstLogin) {
-      APP.pendingUser = user;
-      openSetPasswordModal();
-    } else {
-      completeLogin(user);
+    if (!user || !user.id) {
+      errEl.textContent = '⚠️ Login failed. Please try again.';
+      console.error('Login returned success but no user object:', result);
+      return;
+    }
+
+    try {
+      if (user.isFirstLogin) {
+        APP.pendingUser = user;
+        openSetPasswordModal();
+      } else {
+        completeLogin(user);
+      }
+    } catch (err) {
+      console.error('Login completion error:', err);
+      errEl.textContent = '⚠️ Something went wrong. Please refresh and try again.';
     }
   });
 }
@@ -54,13 +65,21 @@ async function attemptLogin(email, password) {
         headers: { 'Content-Type': 'text/plain' },
       });
       const res = await r.json();
-      if (res && res.success !== undefined) return res;
+      // Validate response has the expected shape
+      if (res && res.success === true && res.user && res.user.id) return res;
+      if (res && res.success === false) return res;
+      // If success:true but no user object, something is wrong with the backend response
+      if (res && res.success === true) {
+        console.error('Sheets login returned success but no user:', res);
+        return { success: false, error: 'Server error. Please try again.' };
+      }
     } catch (e) {
-      console.warn('Login error:', e);
+      console.warn('Login fetch error:', e);
+      // Fall through to local fallback
     }
   }
 
-  // Local fallback — admin only, when Sheets is unreachable
+  // Local fallback — admin only when Sheets is unreachable
   const local = JSON.parse(localStorage.getItem('ff_local_users') || '[]');
   const u     = local.find(u => u.email.toLowerCase() === email.toLowerCase());
 
@@ -93,6 +112,7 @@ async function attemptLogin(email, password) {
     },
   };
 }
+
 
 // ── COMPLETE LOGIN ────────────────────────────────────────────────
 function completeLogin(user) {
