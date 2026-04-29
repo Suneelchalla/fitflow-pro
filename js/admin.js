@@ -556,7 +556,7 @@ function _exerciseCard(ex, idx, day) {
   const isHoldBased = mod === 'yoga' || mod === 'stretching';
   const thumbContent = (isHoldBased && ex.image && ex.image.length <= 4)
     ? `<div style="font-size:48px;display:flex;align-items:center;justify-content:center;height:100%">${ex.image}</div>`
-    : `<div style="font-size:48px;color:var(--text3);display:flex;align-items:center;justify-content:center;height:100%">${isHoldBased ? (mod==='yoga' ? '🧘' : '🤸') : '💪'}</div>`;
+    : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:rgba(46,125,70,0.15)"><span style="font-size:32px;font-weight:700;color:#4caf50">${(ex.name||'?').charAt(0).toUpperCase()}</span></div>`;
 
   const metaFields = isHoldBased ? `
         <div style="display:flex;gap:12px;margin-bottom:10px">
