@@ -418,14 +418,29 @@ async function _collectAndSave() {
         result.days[day] = APP_DATA.modules[moduleId]?.days?.[day] || [];
         return;
       }
-      result.days[day] = Array.from(dayEl.querySelectorAll('.ex-row')).map(row => ({
-        name:  _text(row, 'name'),
-        sets:  parseInt(_text(row, 'sets')) || 3,
-        reps:  _text(row, 'reps'),
-        desc:  _text(row, 'desc'),
-        image: _text(row, 'image'),
-        demo:  _text(row, 'demo'),
-      }));
+      result.days[day] = Array.from(dayEl.querySelectorAll('.ex-row')).map(row => {
+        const isHoldBased = moduleId === 'yoga' || moduleId === 'stretching';
+        if (isHoldBased) {
+          const monthVal = _text(row, 'month');
+          return {
+            name:   _text(row, 'name'),
+            hold:   _text(row, 'hold'),
+            rounds: parseInt(_text(row, 'rounds')) || 1,
+            desc:   _text(row, 'desc'),
+            demo:   _text(row, 'demo'),
+            image:  _text(row, 'image'),
+            ...(monthVal ? { month: monthVal } : {}),
+          };
+        }
+        return {
+          name:  _text(row, 'name'),
+          sets:  parseInt(_text(row, 'sets')) || 3,
+          reps:  _text(row, 'reps'),
+          desc:  _text(row, 'desc'),
+          demo:  _text(row, 'demo'),
+          image: _text(row, 'image'),
+        };
+      });
     });
     Store.setContent('exercises_' + moduleId, result);
     if (APP_DATA.modules[moduleId]) APP_DATA.modules[moduleId].days = result.days;
@@ -532,17 +547,28 @@ function renderExerciseEditor(moduleId, body) {
 }
 
 function _exerciseCard(ex, idx, day) {
-  return `
-    <div class="exercise-card ex-row" data-idx="${idx}" style="margin:10px 0;position:relative">
-      <button class="delete-ex-btn" onclick="this.closest('.ex-row').remove();markDirty()" title="Delete">✕</button>
-      <div class="exercise-thumb">
-        <div style="font-size:48px;color:var(--text3);display:flex;align-items:center;justify-content:center;height:100%">💪</div>
-      </div>
-      <div class="exercise-body">
-        <div style="margin-bottom:8px">
-          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Exercise Name</div>
-          <div class="exercise-name editable" data-field="name" contenteditable="true">${ex.name || ''}</div>
-        </div>
+  const mod = AdminEdit.module;
+  const isHoldBased = mod === 'yoga' || mod === 'stretching';
+  const thumbContent = (isHoldBased && ex.image && ex.image.length <= 4)
+    ? `<div style="font-size:48px;display:flex;align-items:center;justify-content:center;height:100%">${ex.image}</div>`
+    : `<div style="font-size:48px;color:var(--text3);display:flex;align-items:center;justify-content:center;height:100%">${isHoldBased ? (mod==='yoga' ? '🧘' : '🤸') : '💪'}</div>`;
+
+  const metaFields = isHoldBased ? `
+        <div style="display:flex;gap:12px;margin-bottom:10px">
+          <div style="flex:2">
+            <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Hold Duration</div>
+            <div class="editable" data-field="hold" contenteditable="true" style="font-weight:600">${ex.hold || ''}</div>
+          </div>
+          <div style="flex:1">
+            <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Rounds</div>
+            <div class="editable" data-field="rounds" contenteditable="true" style="font-weight:600">${ex.rounds || 1}</div>
+          </div>
+          ${mod === 'yoga' ? `
+          <div style="flex:1">
+            <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Month</div>
+            <div class="editable" data-field="month" contenteditable="true" style="font-weight:600">${ex.month || '1-3'}</div>
+          </div>` : ''}
+        </div>` : `
         <div style="display:flex;gap:12px;margin-bottom:10px">
           <div style="flex:1">
             <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Sets</div>
@@ -552,7 +578,18 @@ function _exerciseCard(ex, idx, day) {
             <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Reps / Duration</div>
             <div class="editable" data-field="reps" contenteditable="true" style="font-weight:600">${ex.reps || ''}</div>
           </div>
+        </div>`;
+
+  return `
+    <div class="exercise-card ex-row" data-idx="${idx}" style="margin:10px 0;position:relative">
+      <button class="delete-ex-btn" onclick="this.closest('.ex-row').remove();markDirty()" title="Delete">✕</button>
+      <div class="exercise-thumb">${thumbContent}</div>
+      <div class="exercise-body">
+        <div style="margin-bottom:8px">
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">${isHoldBased ? (mod==='yoga' ? 'Pose Name (Sanskrit)' : 'Stretch Name') : 'Exercise Name'}</div>
+          <div class="exercise-name editable" data-field="name" contenteditable="true">${ex.name || ''}</div>
         </div>
+        ${metaFields}
         <div style="margin-bottom:10px">
           <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Description</div>
           <div class="editable-block editable" data-field="desc" contenteditable="true"
@@ -564,9 +601,9 @@ function _exerciseCard(ex, idx, day) {
             style="font-size:12px;color:var(--g5);word-break:break-all">${ex.demo || ''}</div>
         </div>
         <div>
-          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Image URL (optional)</div>
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">${isHoldBased ? 'Pose Emoji (e.g. 🧘)' : 'Image URL (optional)'}</div>
           <div class="editable" data-field="image" contenteditable="true"
-            style="font-size:12px;color:var(--text3);word-break:break-all">${ex.image || ''}</div>
+            style="font-size:${isHoldBased ? '28px' : '12px'};color:var(--text3);word-break:break-all">${ex.image || ''}</div>
         </div>
       </div>
     </div>`;
@@ -577,7 +614,11 @@ function addExercise(day) {
   if (!container) return;
   const addBtn = container.querySelector('.add-exercise-btn');
   const div    = document.createElement('div');
-  div.innerHTML = _exerciseCard({ name: 'New Exercise', sets: 3, reps: '10 reps', desc: 'Enter description.', demo: '', image: '' }, 999, day);
+  const isHoldBased = AdminEdit.module === 'yoga' || AdminEdit.module === 'stretching';
+  const newEx  = isHoldBased
+    ? { name: 'New Pose', hold: '30 sec', rounds: 1, desc: 'Enter description.', demo: '', image: AdminEdit.module === 'yoga' ? '🧘' : '🤸' }
+    : { name: 'New Exercise', sets: 3, reps: '10 reps', desc: 'Enter description.', demo: '', image: '' };
+  div.innerHTML = _exerciseCard(newEx, 999, day);
   const card = div.firstElementChild;
   activateEditing(card);
   container.insertBefore(card, addBtn);
