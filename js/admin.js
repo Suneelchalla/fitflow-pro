@@ -408,11 +408,8 @@ async function _collectAndSave() {
     days.forEach(day => {
       const dayEl = document.querySelector(`[data-day="${day}"]`);
       if (!dayEl) {
-        // Day not in DOM — keep existing saved, then fall back to APP_DATA
-        const existing = Store.getContent('exercises_' + moduleId);
-        result.days[day] = existing?.days?.[day]?.length
-          ? existing.days[day]
-          : (APP_DATA.modules[moduleId]?.days?.[day] || []);
+        // Day not in DOM — always use APP_DATA as the ground truth
+        result.days[day] = APP_DATA.modules[moduleId]?.days?.[day] || [];
         return;
       }
       result.days[day] = Array.from(dayEl.querySelectorAll('.ex-row')).map(row => ({
@@ -505,11 +502,13 @@ function renderExerciseEditor(moduleId, body) {
       ✏️ <strong>Tap any field</strong> to edit. Applies to all users after saving.
     </div>
     ${days.map(day => {
-      // Priority: Sheets-saved override → APP_DATA built-in default
-      const saved     = Store.getContent('exercises_' + moduleId);
-      const exercises = saved?.days?.[day]?.length
-        ? saved.days[day]
-        : (APP_DATA.modules[moduleId]?.days?.[day] || []);
+      // Always show APP_DATA (data.js ground truth) for admin editor.
+      // Sheets-saved version is only used if it has MORE exercises than APP_DATA
+      // (meaning admin manually added exercises via the panel).
+      const appDefault = APP_DATA.modules[moduleId]?.days?.[day] || [];
+      const saved      = Store.getContent('exercises_' + moduleId);
+      const savedDay   = saved?.days?.[day] || [];
+      const exercises  = savedDay.length > appDefault.length ? savedDay : appDefault;
       return `
         <div style="margin-bottom:8px">
           <div style="padding:10px 16px;background:rgba(46,125,70,0.15);font-weight:700;font-size:14px;
@@ -584,10 +583,12 @@ function addExercise(day) {
 // WARMUP / COOLDOWN EDITOR
 // ════════════════════════════════════════════════════════════════
 function renderWarmCoolEditor(moduleId, section, body) {
-  const fallback = section === 'warmup'
+  const appDefault = section === 'warmup'
     ? (APP_DATA.warmups?.[moduleId]   || APP_DATA.warmups?.cardio   || [])
     : (APP_DATA.cooldowns?.[moduleId] || APP_DATA.cooldowns?.cardio || []);
-  const data  = Store.getContent(section + '_' + moduleId) || fallback;
+  const saved = Store.getContent(section + '_' + moduleId) || [];
+  // Use saved only if admin has added more items than APP_DATA default
+  const data  = saved.length > appDefault.length ? saved : appDefault;
   const label = section === 'warmup' ? '🔥 Warm-Up' : '🧘 Cool-Down';
 
   body.innerHTML = `
