@@ -1347,33 +1347,41 @@ function renderCaliWorkout() {
 }
 
 function startCaliWorkout(dayLabel, level) {
-  const data = APP_DATA.modules?.calisthenics?.levels?.[level]?.days?.[dayLabel];
-  if (!data) return;
+  const lvlData = APP_DATA.modules?.calisthenics?.levels?.[level];
+  if (!lvlData) return;
 
-  const warmup   = APP_DATA.warmups?.calisthenics || [];
-  const cooldown = APP_DATA.cooldowns?.calisthenics || [];
-  const allEx    = [...warmup, ...data, ...cooldown];
+  // Temporarily surface this level's days as .days on the calisthenics module
+  // so the existing renderExercises / completeDay / updateCompleteBtn flow
+  // all work without any changes — they read APP_DATA.modules[mod].days[day]
+  APP_DATA.modules.calisthenics.days = lvlData.days;
 
   APP.currentModule = 'calisthenics';
   APP.currentDay    = dayLabel;
 
-  // Re-use the existing module page renderer
   document.getElementById('module-title').textContent        = 'Calisthenics';
   document.getElementById('module-emoji-header').textContent = '🤸‍♂️';
-  document.getElementById('module-day-label').textContent    = level.charAt(0).toUpperCase() + level.slice(1) + ' — ' + dayLabel;
-  document.getElementById('module-exercise-count').textContent = data.length + ' exercises';
 
-  const logs = Store.getModuleDayLogs(APP.currentUser.id, 'calisthenics');
-  const done = logs.some(l => l.day === dayLabel && l.date === todayStr());
+  // Build day tab strip
+  const days = getWeekDays();
+  const user = APP.currentUser;
+  const logs = Store.getModuleDayLogs(user.id, 'calisthenics');
+  const todayDate = todayStr();
+  const todayDay  = dayName();
 
-  const markBtn = document.getElementById('mark-done-btn');
-  if (markBtn) {
-    markBtn.textContent = done ? '✓ Marked Done' : '✅ Mark as Done';
-    markBtn.disabled    = done;
-    markBtn.onclick = () => markCaliDone(dayLabel, level);
-  }
+  document.getElementById('day-tab-strip').innerHTML = days.map(d => {
+    const isActive = d === dayLabel;
+    const done     = logs.some(l => l.day === d && l.date === todayDate);
+    return `<button class="tab-btn ${isActive ? 'active' : ''}" onclick="selectDay('${d}',this)">${d.slice(0,3)} ${done ? '✓' : ''}</button>`;
+  }).join('');
 
-  renderExerciseList(allEx);
+  // Reset inner tabs to Workout
+  document.querySelectorAll('.module-inner-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector('.module-inner-tab')?.classList.add('active');
+  document.querySelectorAll('.module-tab-content').forEach(el => el.classList.remove('active'));
+  document.getElementById('module-workout-tab')?.classList.add('active');
+
+  renderExercises('calisthenics', dayLabel);
+  updateCompleteBtn();
   showPage('page-module');
 }
 
