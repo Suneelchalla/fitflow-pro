@@ -282,15 +282,19 @@ function _applyToAppData(key, value) {
       renderAnnouncementBanner();
     }
     const exMatch = key.match(/^exercises_(.+)$/);
-    if (exMatch && value?.days && APP_DATA.modules[exMatch[1]]) {
-      APP_DATA.modules[exMatch[1]].days = value.days;
+    if (exMatch && value?.days) {
+      // Only apply if Sheets data has actual exercises (not empty)
+      const hasContent = Object.values(value.days).some(d => Array.isArray(d) && d.length > 0);
+      if (hasContent && APP_DATA.modules[exMatch[1]]) {
+        APP_DATA.modules[exMatch[1]].days = value.days;
+      }
     }
     const wuMatch = key.match(/^warmup_(.+)$/);
-    if (wuMatch && Array.isArray(value)) {
+    if (wuMatch && Array.isArray(value) && value.length > 0) {
       APP_DATA.warmups[wuMatch[1]] = value;
     }
     const cdMatch = key.match(/^cooldown_(.+)$/);
-    if (cdMatch && Array.isArray(value)) {
+    if (cdMatch && Array.isArray(value) && value.length > 0) {
       APP_DATA.cooldowns[cdMatch[1]] = value;
     }
   } catch { /* silently ignore */ }
@@ -309,7 +313,7 @@ async function _autoSeedIfVersionChanged(user) {
     if (storedVersion === currentVersion) return;
 
     // Clear stale localStorage exercise/warmup/cooldown cache before seeding
-    ['cardio','gym','yoga','stretching','running'].forEach(mod => {
+    ['cardio','gym','yoga','stretching','running','calisthenics'].forEach(mod => {
       Store.remove('ff_content_exercises_' + mod);
       Store.remove('ff_content_warmup_' + mod);
       Store.remove('ff_content_cooldown_' + mod);
@@ -336,8 +340,22 @@ async function _autoSeedIfVersionChanged(user) {
       }
     });
 
+    // Seed calisthenics levels separately
+    const caliLevels = APP_DATA.modules?.calisthenics?.levels || {};
+    [1,2,3].forEach(lvl => {
+      const days = caliLevels[lvl]?.days;
+      if (days) {
+        const key = 'exercises_calisthenics_l' + lvl;
+        seedPromises.push(
+          Sheets.post('saveContent', { key, value: { days } })
+            .then(() => Store.setContent(key, { days }))
+            .catch(() => {})
+        );
+      }
+    });
+
     // Seed warmups
-    const warmupMods = ['cardio','gym','yoga','running','stretching'];
+    const warmupMods = ['cardio','gym','yoga','running','stretching','calisthenics'];
     warmupMods.forEach(mod => {
       const wu = APP_DATA.warmups?.[mod];
       if (wu?.length) {
