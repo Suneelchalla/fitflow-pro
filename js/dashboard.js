@@ -325,7 +325,7 @@ function openRunningModule() {
 
 // ── MODULE PAGE ───────────────────────────────────────────────────
 function renderModulePage(moduleId) {
-  const mod = APP_DATA.modules[moduleId];
+  const mod = (window.APP_DATA_DEFAULT||window.APP_DATA).modules[moduleId];
   if (!mod) return;
 
   document.getElementById('module-title').textContent        = mod.name;
@@ -370,16 +370,16 @@ function selectDay(day, btn) {
 // ── RENDER EXERCISES ──────────────────────────────────────────────
 function renderExercises(moduleId, day) {
   if (!moduleId || !day) return;
-  const mod = APP_DATA.modules[moduleId];
+  const mod = (window.APP_DATA_DEFAULT||window.APP_DATA).modules[moduleId];
 
   // Check for admin-saved overrides first, then fall back to built-in data
   const exOverride    = Store.getContent('exercises_' + moduleId);
   const mainExercises = exOverride?.days?.[day] || mod?.days?.[day] || [];
 
-  const warmupKey   = APP_DATA.warmups?.[moduleId]   ? moduleId : 'cardio';
-  const cooldownKey = APP_DATA.cooldowns?.[moduleId] ? moduleId : 'cardio';
-  const warmups     = Store.getContent('warmup_'    + moduleId) || APP_DATA.warmups?.[warmupKey]    || [];
-  const cooldowns   = Store.getContent('cooldown_'  + moduleId) || APP_DATA.cooldowns?.[cooldownKey] || [];
+  const warmupKey   = (window.APP_DATA_DEFAULT||window.APP_DATA).warmups?.[moduleId]   ? moduleId : 'cardio';
+  const cooldownKey = (window.APP_DATA_DEFAULT||window.APP_DATA).cooldowns?.[moduleId] ? moduleId : 'cardio';
+  const warmups     = Store.getContent('warmup_'    + moduleId) || (window.APP_DATA_DEFAULT||window.APP_DATA).warmups?.[warmupKey]    || [];
+  const cooldowns   = Store.getContent('cooldown_'  + moduleId) || (window.APP_DATA_DEFAULT||window.APP_DATA).cooldowns?.[cooldownKey] || [];
 
   const allExercises = [
     ...warmups.map(e      => ({ ...e, _section: 'warmup' })),
@@ -496,9 +496,9 @@ function updateCompleteBtn() {
   const sessionData = Store.get(sessionKey, {});
 
   const exOverride    = Store.getContent('exercises_' + mod);
-  const mainExercises = exOverride?.days?.[day] || APP_DATA.modules[mod]?.days?.[day] || [];
-  const warmups       = Store.getContent('warmup_'   + mod) || APP_DATA.warmups?.[mod]   || APP_DATA.warmups?.cardio   || [];
-  const cooldowns     = Store.getContent('cooldown_' + mod) || APP_DATA.cooldowns?.[mod] || APP_DATA.cooldowns?.cardio || [];
+  const mainExercises = exOverride?.days?.[day] || (window.APP_DATA_DEFAULT||window.APP_DATA).modules[mod]?.days?.[day] || [];
+  const warmups       = Store.getContent('warmup_'   + mod) || (window.APP_DATA_DEFAULT||window.APP_DATA).warmups?.[mod]   || (window.APP_DATA_DEFAULT||window.APP_DATA).warmups?.cardio   || [];
+  const cooldowns     = Store.getContent('cooldown_' + mod) || (window.APP_DATA_DEFAULT||window.APP_DATA).cooldowns?.[mod] || (window.APP_DATA_DEFAULT||window.APP_DATA).cooldowns?.cardio || [];
   const all           = [...warmups, ...mainExercises, ...cooldowns];
 
   if (!all.length) return;
@@ -577,7 +577,7 @@ function renderHydrationTab(moduleId) {
 
   const override  = Store.getContent('hydration_' + moduleId);
   // Use per-module hydration plan — fall back to default if not found
-  const perModule = APP_DATA.hydration?.[moduleId] || APP_DATA.hydration?.default || {};
+  const perModule = (window.APP_DATA_DEFAULT||window.APP_DATA).hydration?.[moduleId] || (window.APP_DATA_DEFAULT||window.APP_DATA).hydration?.default || {};
   const data      = override || perModule;
 
   // Safe fallbacks for every field
@@ -658,8 +658,8 @@ function renderDietTab(moduleId) {
 
   const override = Store.getContent('diet_' + moduleId);
   // Use exact module key — all modules now have their own diet plan
-  const modKey   = APP_DATA.diet?.modules?.[moduleId] ? moduleId : 'cardio';
-  const data     = override || APP_DATA.diet?.modules?.[modKey] || { title: 'Diet Plan', meals: [] };
+  const modKey   = (window.APP_DATA_DEFAULT||window.APP_DATA).diet?.modules?.[moduleId] ? moduleId : 'cardio';
+  const data     = override || (window.APP_DATA_DEFAULT||window.APP_DATA).diet?.modules?.[modKey] || { title: 'Diet Plan', meals: [] };
 
   const meals    = Array.isArray(data.meals) ? data.meals : [];
   const totalCal = meals.reduce((a, m) => a + (parseInt(m.cal) || 0), 0);
@@ -1269,7 +1269,7 @@ function renderCaliWorkout() {
   if (!container) return;
   const user   = APP.currentUser;
   const level  = APP.currentCaliLevel;
-  const levels = APP_DATA.modules.calisthenics?.levels || {};
+  const levels = (window.APP_DATA_DEFAULT||window.APP_DATA).modules?.calisthenics?.levels || {};
   const lvlData = levels[level];
   if (!lvlData) return;
 
@@ -1336,14 +1336,14 @@ function renderCaliExercises() {
   const level   = APP.currentCaliLevel;
   const day     = APP.currentDay || dayName();
   const user    = APP.currentUser;
-  const levels  = APP_DATA.modules.calisthenics?.levels || {};
+  const levels  = (window.APP_DATA_DEFAULT||window.APP_DATA).modules?.calisthenics?.levels || {};
   const lvlDays = levels[level]?.days || {};
 
   const override = Store.getContent('exercises_calisthenics_l' + level);
   const exercises = override?.days?.[day] || lvlDays[day] || [];
 
-  const warmups   = APP_DATA.warmups?.calisthenics  || [];
-  const cooldowns = APP_DATA.cooldowns?.calisthenics || [];
+  const warmups   = (window.APP_DATA_DEFAULT||window.APP_DATA).warmups?.calisthenics  || [];
+  const cooldowns = (window.APP_DATA_DEFAULT||window.APP_DATA).cooldowns?.calisthenics || [];
   const all = [
     ...warmups.map(e => ({ ...e, _section:'warmup' })),
     ...exercises.map(e => ({ ...e, _section:'main' })),
@@ -1443,7 +1443,7 @@ function renderCaliSkillTree() {
   const container = document.getElementById('cali-skills-content');
   if (!container) return;
   const user   = APP.currentUser;
-  const skills = APP_DATA.calisthenicsSkills || {};
+  const skills = (window.APP_DATA_DEFAULT||window.APP_DATA).calisthenicsSkills || {};
   const savedSkill = Store.get('ff_cali_skill_' + user.id);
 
   container.innerHTML = `
@@ -1519,7 +1519,7 @@ function renderCaliChallenge() {
   const container = document.getElementById('cali-challenge-content');
   if (!container) return;
   const user      = APP.currentUser;
-  const challenge = APP_DATA.calisthenicsChallenge || [];
+  const challenge = (window.APP_DATA_DEFAULT||window.APP_DATA).calisthenicsChallenge || [];
   const progress  = Store.get('ff_cali_challenge_' + user.id, {});
   const doneCount = Object.values(progress).filter(Boolean).length;
 
@@ -1570,7 +1570,7 @@ function renderCaliProgress() {
   const user  = APP.currentUser;
   const logs  = Store.getModuleDayLogs(user.id, 'calisthenics');
   const level = APP.currentCaliLevel;
-  const levels = APP_DATA.modules.calisthenics?.levels || {};
+  const levels = (window.APP_DATA_DEFAULT||window.APP_DATA).modules?.calisthenics?.levels || {};
   const equipment = Store.get('ff_cali_equipment_' + user.id, 'none');
   const equip_labels = { none: 'No Equipment', bar: 'Pull-up Bar', bars: 'Parallel Bars' };
   const challenge = Store.get('ff_cali_challenge_' + user.id, {});
