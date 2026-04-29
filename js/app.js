@@ -302,7 +302,7 @@ function fmtPace(km, secs) {
 }
 function todayStr()    { return new Date().toISOString().split('T')[0]; }
 function dayName()     { return ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]; }
-function getWeekDays() { return ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']; }
+function getWeekDays() { return ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday']; }
 function getGreeting() {
   const h = new Date().getHours();
   if (h >= 5  && h < 12) return 'Good Morning';
@@ -359,16 +359,22 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   if ('serviceWorker' in navigator) {
-    // Unregister ALL old service workers and clear ALL caches
-    // This forces every device to get fresh files immediately
-    navigator.serviceWorker.getRegistrations().then(registrations => {
-      registrations.forEach(reg => reg.unregister());
-    });
-    caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
-    // Re-register the fresh service worker
-    setTimeout(() => {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
-    }, 1000);
+    // Register (or update) the service worker — the CACHE version bump in sw.js
+    // handles cache invalidation automatically. Never unregister on load:
+    // that destroys active push subscriptions tied to the SW registration.
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      reg.addEventListener('updatefound', () => {
+        const newSW = reg.installing;
+        if (newSW) {
+          newSW.addEventListener('statechange', () => {
+            if (newSW.state === 'installed' && navigator.serviceWorker.controller) {
+              newSW.postMessage({ type: 'SKIP_WAITING' });
+            }
+          });
+        }
+      });
+    }).catch(() => {});
   }
 
   const session = Store.getSession();
