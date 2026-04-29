@@ -518,7 +518,18 @@ function activateEditing(container) {
 // ════════════════════════════════════════════════════════════════
 function renderExerciseEditor(moduleId, body) {
   const days = getWeekDays();
+
+  // DEBUG: show raw data state so we can see what's available
+  const rawDays = APP_DATA.modules[moduleId]?.days;
+  const saved   = Store.getContent('exercises_' + moduleId);
   body.innerHTML = `
+    <div style="background:#1a3a1a;border:1px solid #4a7;padding:10px 14px;margin:0 16px 12px;border-radius:8px;font-size:11px;font-family:monospace;color:#8f8;line-height:1.6">
+      <strong>DEBUG — moduleId:</strong> ${moduleId}<br>
+      <strong>APP_DATA.days keys:</strong> ${rawDays ? Object.keys(rawDays).join(', ') : 'null/undefined'}<br>
+      <strong>APP_DATA.days.days:</strong> ${rawDays?.days ? Object.keys(rawDays.days).join(', ') : 'not present'}<br>
+      <strong>Monday exercises:</strong> ${JSON.stringify(rawDays?.Monday || rawDays?.days?.Monday || []).substring(0,80)}<br>
+      <strong>Sheets cached:</strong> ${saved ? JSON.stringify(Object.keys(saved)).substring(0,80) : 'null'}
+    </div>
     <div style="font-size:13px;color:var(--text2);padding:0 16px 12px;line-height:1.5">
       ✏️ <strong>Tap any field</strong> to edit. Applies to all users after saving.
     </div>
