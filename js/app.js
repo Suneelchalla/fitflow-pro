@@ -144,6 +144,10 @@ function showPage(id, addToHistory = true) {
   const pg = document.getElementById(id);
   if (pg) { pg.classList.add('active'); APP.currentPage = id; pg.scrollTop = 0; }
   window.history.pushState({ page: id }, '', '#' + id);
+  // Persist current page so session restore returns here after reload
+  if (APP.currentUser) {
+    Store.set('ff_last_page_' + APP.currentUser.id, id);
+  }
 }
 
 function goBack() {
@@ -246,10 +250,11 @@ window.addEventListener('popstate', () => {
   }
 
   document.addEventListener('touchstart', e => {
-    // Only on root pages (dashboard, admin) and when scrolled to top
-    const rootPages = ['page-dashboard', 'page-admin', 'page-history-global'];
-    if (!rootPages.includes(APP.currentPage)) return;
-    const scrollEl = document.querySelector('#' + APP.currentPage + ' .scroll-content');
+    // Activate on ALL pages when scrolled to top — not just root pages
+    // This prevents the browser's native pull-to-refresh from firing on sub-pages
+    const scrollEl = APP.currentPage
+      ? document.querySelector('#' + APP.currentPage + ' .scroll-content')
+      : null;
     if (scrollEl && scrollEl.scrollTop > 5) return; // not at top
     startY  = e.touches[0].clientY;
     pulling = true;
@@ -284,16 +289,18 @@ window.addEventListener('popstate', () => {
 
   async function _inAppRefresh() {
     try {
-      // Sync latest content + logs from Sheets
       await syncContentFromSheets();
-      // Re-render current page
-      if (APP.currentPage === 'page-dashboard') {
-        refreshDashboard();
-      } else if (APP.currentPage === 'page-admin') {
-        renderAdminPanel();
-      } else if (APP.currentPage === 'page-history-global') {
-        renderGlobalHistory();
-      }
+      // Re-render whatever page is currently showing
+      const p = APP.currentPage;
+      if      (p === 'page-dashboard')      refreshDashboard();
+      else if (p === 'page-admin')          renderAdminPanel();
+      else if (p === 'page-admin-editor')   { if (typeof renderModuleEditor  === 'function') renderModuleEditor(); }
+      else if (p === 'page-history-global') { if (typeof renderGlobalHistory === 'function') renderGlobalHistory(); }
+      else if (p === 'page-running')        { if (typeof initRunningPage     === 'function') initRunningPage(); }
+      else if (p === 'page-calisthenics')   { if (typeof renderCalisthenicsPage === 'function') renderCalisthenicsPage(); }
+      else if (p === 'page-weekly-report')  { if (typeof renderWeeklyReport  === 'function') renderWeeklyReport(); }
+      else if (p === 'page-my-plan')        { if (typeof renderMyPlan        === 'function') renderMyPlan(); }
+      // For other sub-pages (module exercises etc.) just sync is enough
     } catch (e) {
       showToast('Refresh failed. Check connection.', 'error');
     }
@@ -411,35 +418,59 @@ document.addEventListener('DOMContentLoaded', () => {
   if (session) {
     APP.currentUser = session;
 
-    // Restore to correct page INSTANTLY before any rendering
-    const targetPage = session.role === 'ADMIN'
-      ? 'page-admin'
-      : Store.get('ff_quote_' + session.id) === todayStr()
-        ? 'page-dashboard'
-        : 'page-quote';
+    // Pages that require re-render on restore (they have dynamic content)
+    const renderOnRestore = {
+      'page-admin-editor':   () => { if (typeof renderModuleEditor  === 'function') renderModuleEditor(); },
+      'page-module':         () => { if (typeof renderModulePage    === 'function' && APP.currentModule) renderModulePage(APP.currentModule); },
+      'page-running':        () => { if (typeof initRunningPage     === 'function') initRunningPage(); },
+      'page-calisthenics':   () => { if (typeof renderCalisthenicsPage === 'function') renderCalisthenicsPage(); },
+      'page-weekly-report':  () => { if (typeof renderWeeklyReport  === 'function') renderWeeklyReport(); },
+      'page-custom-workouts':() => { if (typeof renderCustomWorkoutsList === 'function') renderCustomWorkoutsList(); },
+      'page-history-global': () => { if (typeof renderGlobalHistory === 'function') renderGlobalHistory(); },
+      'page-my-plan':        () => { if (typeof renderMyPlan        === 'function') renderMyPlan(); },
+    };
 
-    // Show target page immediately (no animation, no flash)
+    // Determine target page — use last visited page if it's valid and exists in DOM
+    const lastPage  = Store.get('ff_last_page_' + session.id);
+    const adminRoot = 'page-admin';
+    const userRoot  = Store.get('ff_quote_' + session.id) === todayStr() ? 'page-dashboard' : 'page-quote';
+    const rootPage  = session.role === 'ADMIN' ? adminRoot : userRoot;
+
+    // Validate last page: must exist in DOM, and belong to the right role
+    const adminOnlyPages = ['page-admin', 'page-admin-editor'];
+    const lastPageEl     = lastPage ? document.getElementById(lastPage) : null;
+    const lastPageValid  = lastPageEl &&
+      !(session.role !== 'ADMIN' && adminOnlyPages.includes(lastPage));
+
+    const targetPage = lastPageValid ? lastPage : rootPage;
+
+    // Show target page immediately
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     const targetEl = document.getElementById(targetPage);
     if (targetEl) { targetEl.classList.add('active'); APP.currentPage = targetPage; }
 
-    // Set URL hash to match — must happen AFTER setting APP.currentPage
-    // so any popstate that fires sees the correct page
     window.history.replaceState({ page: targetPage }, '', '#' + targetPage);
 
-    // Then render content
+    // Sync content and init
     syncContentFromSheets();
     initDashboard();
 
     if (session.role === 'ADMIN') {
       renderAdminPanel();
+      // Re-render sub-page if needed
+      if (targetPage !== 'page-admin' && renderOnRestore[targetPage]) {
+        renderOnRestore[targetPage]();
+      }
     } else if (targetPage === 'page-quote') {
       renderQuote();
     } else {
       setActiveNav('home');
+      // Re-render sub-page if needed
+      if (renderOnRestore[targetPage]) {
+        renderOnRestore[targetPage]();
+      }
     }
 
-    // Init push for non-admin on session restore (page reload)
     if (session.role !== 'ADMIN' && typeof initPushNotifications === 'function') {
       initPushNotifications();
     }
