@@ -586,12 +586,26 @@ function showChangePlanSheet() {
 }
 
 // ── MY PLAN PAGE ──────────────────────────────────────────────────
+function openMyPlanPage() {
+  showPage('page-my-plan', false);
+  APP._myPlanViewWeek = null;
+  renderMyPlan();
+}
+
 function renderMyPlan() {
   const container = document.getElementById('myplan-content');
   const active    = getActivePlan();
 
   // Update header title
   const titleEl = document.getElementById('myplan-title');
+
+  // Validate active plan — if planKey doesn't exist in APP_DATA, clear it
+  if (active && (!APP_DATA.running.plans[active.planKey] || !active.registeredAt)) {
+    clearActivePlan();
+    showToast('Your previous plan was reset — please register again.', 'info');
+    renderMyPlan();
+    return;
+  }
 
   if (!active) {
     // No plan registered — show picker inline
