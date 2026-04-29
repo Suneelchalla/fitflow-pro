@@ -70,18 +70,21 @@ function renderDashboardStats() {
 
 // ── MODULE ORDER STORAGE ─────────────────────────────────────────
 const ALL_MODULES = [
-  { id: 'cardio',     name: 'Home Cardio',      emoji: '🏠', color: 'grad-cardio',  sub: '8-9 exercises · 6 days' },
-  { id: 'gym',        name: 'Gym Workouts',      emoji: '🏋️', color: 'grad-gym',     sub: '8 exercises · 6 days' },
-  { id: 'yoga',       name: 'Yoga',              emoji: '🧘', color: 'grad-yoga',    sub: '8-12 poses · 6 days' },
-  { id: 'running',    name: 'Running & Walking', emoji: '🏃', color: 'grad-running', sub: 'GPS tracker + plans' },
-  { id: 'stretching', name: 'Stretching',        emoji: '🤸', color: 'grad-stretch', sub: '6 stretches · 6 days' },
+  { id: 'cardio',        name: 'Home Cardio',      emoji: '🏠',    color: 'grad-cardio',  sub: '8-9 exercises · 6 days' },
+  { id: 'gym',           name: 'Gym Workouts',      emoji: '🏋️',   color: 'grad-gym',     sub: '8 exercises · 6 days' },
+  { id: 'yoga',          name: 'Yoga',              emoji: '🧘',    color: 'grad-yoga',    sub: '8-12 poses · 6 days' },
+  { id: 'running',       name: 'Running & Walking', emoji: '🏃',    color: 'grad-running', sub: 'GPS tracker + plans' },
+  { id: 'stretching',    name: 'Stretching',        emoji: '🤸',    color: 'grad-stretch', sub: '6 stretches · 6 days' },
+  { id: 'calisthenics',  name: 'Calisthenics',      emoji: '🤸‍♂️', color: 'grad-cali',    sub: '3 levels · skill tree' },
 ];
 
 function getModuleOrder(userId) {
   const saved = Store.get('ff_module_order_' + userId);
-  if (saved && Array.isArray(saved) && saved.length === ALL_MODULES.length) {
-    // Return modules in saved order
-    return saved.map(id => ALL_MODULES.find(m => m.id === id)).filter(Boolean);
+  if (saved && Array.isArray(saved) && saved.length >= 5) {
+    // Return modules in saved order, add any new modules not in saved order
+    const ordered = saved.map(id => ALL_MODULES.find(m => m.id === id)).filter(Boolean);
+    const missing = ALL_MODULES.filter(m => !saved.includes(m.id));
+    return [...ordered, ...missing];
   }
   return [...ALL_MODULES];
 }
@@ -304,6 +307,11 @@ function openModule(moduleId) {
   if (moduleId === 'running') {
     showPage('page-running');
     initRunningPage();
+    return;
+  }
+  if (moduleId === 'calisthenics') {
+    showPage('page-calisthenics');
+    if (typeof initCalisthenicsPage === 'function') initCalisthenicsPage();
     return;
   }
   showPage('page-module');
@@ -854,8 +862,8 @@ function renderGlobalHistory() {
     : '<div class="empty-state"><div class="empty-icon">📋</div><p>No activity yet. Start working out!</p></div>';
 }
 
-function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🤸', running: '🏃' }[mod] || '💪'; }
-function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running' }[mod] || mod; }
+function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🤸', running: '🏃', calisthenics: '🤸‍♂️' }[mod] || '💪'; }
+function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics' }[mod] || mod; }
 
 // ════════════════════════════════════════════════════════════════
 // USER PROFILE PAGE
@@ -1204,4 +1212,410 @@ function openWeeklyReport() {
       if (typeof renderWeeklyReport === 'function') renderWeeklyReport();
     }, 300);
   }
+}
+
+// ════════════════════════════════════════════════════════════════
+// CALISTHENICS MODULE
+// ════════════════════════════════════════════════════════════════
+function initCalisthenicsPage() {
+  APP.currentCaliLevel = Store.get('ff_cali_level_' + APP.currentUser?.id, 1);
+  APP.currentCaliSkill = Store.get('ff_cali_skill_' + APP.currentUser?.id, null);
+  renderCalisthenicsPage();
+}
+
+function renderCalisthenicsPage() {
+  const container = document.getElementById('cali-page-content');
+  if (!container) return;
+
+  const tabs = [
+    { id:'workout',   label:'💪 Workout' },
+    { id:'skills',    label:'🎯 Skill Tree' },
+    { id:'challenge', label:'⚡ 21 Days' },
+    { id:'progress',  label:'📊 Progress' },
+  ];
+
+  const currentTab = APP._caliTab || 'workout';
+  container.innerHTML = `
+    <div class="tab-strip" style="padding:12px 16px 4px">
+      ${tabs.map(t => `
+        <button class="tab-btn cali-tab-btn ${currentTab===t.id?'active':''}" data-tab="${t.id}"
+          onclick="switchCaliTab('${t.id}',this)">${t.label}</button>`).join('')}
+    </div>
+    ${tabs.map(t => `
+      <div id="cali-tab-${t.id}" class="run-tab-content ${currentTab===t.id?'active':''}">
+        <div id="cali-${t.id}-content"></div>
+      </div>`).join('')}`;
+
+  if (currentTab === 'workout')   renderCaliWorkout();
+  if (currentTab === 'skills')    renderCaliSkillTree();
+  if (currentTab === 'challenge') renderCaliChallenge();
+  if (currentTab === 'progress')  renderCaliProgress();
+}
+
+function switchCaliTab(tab, btn) {
+  APP._caliTab = tab;
+  document.querySelectorAll('.cali-tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('[id^="cali-tab-"]').forEach(el => el.classList.remove('active'));
+  document.getElementById('cali-tab-' + tab)?.classList.add('active');
+  if (tab === 'workout')   renderCaliWorkout();
+  if (tab === 'skills')    renderCaliSkillTree();
+  if (tab === 'challenge') renderCaliChallenge();
+  if (tab === 'progress')  renderCaliProgress();
+}
+
+function renderCaliWorkout() {
+  const container = document.getElementById('cali-workout-content');
+  if (!container) return;
+  const user   = APP.currentUser;
+  const level  = APP.currentCaliLevel;
+  const levels = APP_DATA.modules.calisthenics?.levels || {};
+  const lvlData = levels[level];
+  if (!lvlData) return;
+
+  const days = getWeekDays();
+  const today = dayName();
+  const logs  = Store.getModuleDayLogs(user.id, 'calisthenics');
+  const todayDate = todayStr();
+
+  container.innerHTML = `
+    <div style="padding:0 16px 16px">
+      <!-- Level selector -->
+      <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap">
+        ${[1,2,3].map(l => {
+          const ld = levels[l];
+          const isActive = level === l;
+          return `<button onclick="selectCaliLevel(${l})"
+            style="flex:1;padding:10px 8px;border-radius:12px;border:2px solid ${isActive?'var(--g4)':'var(--border)'};
+              background:${isActive?'rgba(46,125,70,0.2)':'var(--surface)'};cursor:pointer;min-width:80px">
+            <div style="font-size:11px;font-weight:700;color:${isActive?'var(--g5)':'var(--text3)'}">L${l}</div>
+            <div style="font-size:12px;font-weight:600;color:${isActive?'var(--text)':'var(--text2)'}">${ld?.name||''}</div>
+          </button>`;
+        }).join('')}
+      </div>
+      <div style="font-size:12px;color:var(--text3);margin-bottom:16px">${lvlData.desc}</div>
+
+      <!-- Day strip -->
+      <div class="tab-strip" style="margin-bottom:16px">
+        ${days.map(d => {
+          const done = logs.some(l => l.day === d && l.date === todayDate);
+          const isToday = d === today;
+          return `<button class="tab-btn ${isToday?'active':''}" onclick="selectCaliDay('${d}',this)">
+            ${d.slice(0,3)} ${done?'✓':''}</button>`;
+        }).join('')}
+      </div>
+
+      <div id="cali-exercises-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px"></div>
+      <button id="cali-complete-btn" class="btn btn-primary btn-full" onclick="completeCaliDay()" style="margin-bottom:20px">
+        Mark Day Complete
+      </button>
+    </div>`;
+
+  APP.currentDay = today;
+  renderCaliExercises();
+  updateCaliCompleteBtn();
+}
+
+function selectCaliLevel(level) {
+  APP.currentCaliLevel = level;
+  Store.set('ff_cali_level_' + APP.currentUser.id, level);
+  renderCaliWorkout();
+}
+
+function selectCaliDay(day, btn) {
+  APP.currentDay = day;
+  document.querySelectorAll('#cali-workout-content .tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderCaliExercises();
+  updateCaliCompleteBtn();
+}
+
+function renderCaliExercises() {
+  const container = document.getElementById('cali-exercises-list');
+  if (!container) return;
+  const level   = APP.currentCaliLevel;
+  const day     = APP.currentDay || dayName();
+  const user    = APP.currentUser;
+  const levels  = APP_DATA.modules.calisthenics?.levels || {};
+  const lvlDays = levels[level]?.days || {};
+
+  const override = Store.getContent('exercises_calisthenics_l' + level);
+  const exercises = override?.days?.[day] || lvlDays[day] || [];
+
+  const warmups   = APP_DATA.warmups?.calisthenics  || [];
+  const cooldowns = APP_DATA.cooldowns?.calisthenics || [];
+  const all = [
+    ...warmups.map(e => ({ ...e, _section:'warmup' })),
+    ...exercises.map(e => ({ ...e, _section:'main' })),
+    ...cooldowns.map(e => ({ ...e, _section:'cooldown' })),
+  ];
+
+  const sessionKey  = `sess_${user.id}_calisthenics_${day}_${todayStr()}`;
+  const sessionData = Store.get(sessionKey, {});
+
+  function secHeader(label, bg) {
+    return `<div style="display:flex;align-items:center;gap:8px;margin:10px 0 8px;padding:8px 12px;border-radius:10px;background:${bg}">
+      <span style="font-size:12px;font-weight:700;color:#fff;text-transform:uppercase;letter-spacing:.08em">${label}</span>
+    </div>`;
+  }
+
+  let prevSec = '';
+  container.innerHTML = all.map((ex, i) => {
+    let hdr = '';
+    if (ex._section !== prevSec) {
+      prevSec = ex._section;
+      if (ex._section === 'warmup')   hdr = secHeader('🔥 Warm-Up',   'rgba(30,136,229,0.3)');
+      if (ex._section === 'main')     hdr = secHeader('💪 Workout',    'rgba(46,125,70,0.35)');
+      if (ex._section === 'cooldown') hdr = secHeader('🧘 Cool-Down',  'rgba(103,58,183,0.35)');
+    }
+    const checked = sessionData[i] || [];
+    const total   = parseInt(ex.sets) || 1;
+    const allDone = checked.length >= total;
+
+    const checksHtml = Array.from({ length: total }, (_, s) => {
+      const isDone = checked.includes(s);
+      return `<div class="set-check ${isDone?'checked':''}" onclick="toggleCaliSet(${i},${s})">
+        <div class="check-box">${isDone?'✓':''}</div>
+        <span class="check-label">Set ${s+1} — ${ex.reps||''}</span>
+      </div>`;
+    }).join('');
+
+    return `${hdr}
+      <div class="exercise-card ${allDone?'completed':''}">
+        <div class="exercise-body">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+            <div class="exercise-name" style="font-size:15px">${i+1}. ${ex.name}</div>
+            ${allDone?'<span class="badge badge-green">✓</span>':''}
+          </div>
+          <div class="exercise-meta"><span>🔄 ${ex.sets||1} sets</span><span>💪 ${ex.reps||''}</span></div>
+          <div class="exercise-desc">${ex.desc||''}</div>
+          ${ex.demo?`<a href="${ex.demo}" target="_blank" rel="noopener" class="demo-link">▶ Watch Demo</a>`:''}
+          <div class="sets-grid">${checksHtml}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function toggleCaliSet(exIdx, setIdx) {
+  const user       = APP.currentUser;
+  const day        = APP.currentDay || dayName();
+  const sessionKey = `sess_${user.id}_calisthenics_${day}_${todayStr()}`;
+  const sessionData = Store.get(sessionKey, {});
+  if (!sessionData[exIdx]) sessionData[exIdx] = [];
+  const pos = sessionData[exIdx].indexOf(setIdx);
+  if (pos >= 0) sessionData[exIdx].splice(pos, 1);
+  else sessionData[exIdx].push(setIdx);
+  Store.set(sessionKey, sessionData);
+  renderCaliExercises();
+  updateCaliCompleteBtn();
+}
+
+function updateCaliCompleteBtn() {
+  const btn = document.getElementById('cali-complete-btn');
+  if (!btn) return;
+  const user = APP.currentUser;
+  const day  = APP.currentDay || dayName();
+  const alreadyLogged = Store.getModuleDayLogs(user.id, 'calisthenics').some(l => l.day === day && l.date === todayStr());
+  if (alreadyLogged) {
+    btn.textContent = '✓ Day Complete!';
+    btn.className   = 'btn btn-outline btn-full';
+    btn.disabled    = true;
+  } else {
+    btn.textContent = '🎉 Complete Day!';
+    btn.className   = 'btn btn-primary btn-full';
+    btn.disabled    = false;
+  }
+}
+
+function completeCaliDay() {
+  const user = APP.currentUser;
+  const day  = APP.currentDay || dayName();
+  const logged = Store.addLog({
+    userId: user.id, module: 'calisthenics', day, date: todayStr(), timestamp: new Date().toISOString()
+  });
+  if (!logged) { showToast('Already logged today!', 'info'); return; }
+  showToast('🎉 ' + day + ' calisthenics complete! 💪', 'success');
+  sheetsPost('logCompletion', { userId: user.id, module: 'calisthenics', day, date: todayStr() });
+  updateCaliCompleteBtn();
+}
+
+function renderCaliSkillTree() {
+  const container = document.getElementById('cali-skills-content');
+  if (!container) return;
+  const user   = APP.currentUser;
+  const skills = APP_DATA.calisthenicsSkills || {};
+  const savedSkill = Store.get('ff_cali_skill_' + user.id);
+
+  container.innerHTML = `
+    <div style="padding:16px">
+      <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6">
+        Pick ONE skill to focus on. Chase it for 3–6 months. Complete each step before the next.
+      </div>
+      ${Object.entries(skills).map(([key, skill]) => {
+        const progress = Store.get('ff_skill_progress_' + user.id + '_' + key, {});
+        const done = Object.values(progress).filter(Boolean).length;
+        const total = skill.steps.length;
+        const pct   = Math.round(done / total * 100);
+        const isActive = savedSkill === key;
+        return `
+          <div class="card" style="margin-bottom:12px;border:2px solid ${isActive?'var(--g4)':'var(--border)'}">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+              <div style="display:flex;align-items:center;gap:10px">
+                <span style="font-size:28px">${skill.emoji}</span>
+                <div>
+                  <div style="font-weight:700;font-size:15px">${skill.name}</div>
+                  <div style="font-size:12px;color:var(--text3)">${skill.desc}</div>
+                </div>
+              </div>
+              ${isActive
+                ? `<span class="badge badge-green">Active Goal</span>`
+                : `<button class="btn btn-outline btn-sm" onclick="setCaliSkill('${key}')">Set Goal</button>`}
+            </div>
+            <div class="progress-bar" style="margin-bottom:8px">
+              <div class="progress-fill" style="width:${pct}%"></div>
+            </div>
+            <div style="font-size:11px;color:var(--text3);margin-bottom:10px">${done}/${total} steps · ${pct}% complete</div>
+            ${skill.steps.map(step => {
+              const isDone = progress[step.id] === true;
+              return `
+                <div style="display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+                  <div onclick="toggleSkillStep('${key}',${step.id})"
+                    style="width:22px;height:22px;border-radius:50%;border:2px solid ${isDone?'var(--g4)':'var(--border)'};
+                      background:${isDone?'var(--g4)':'transparent'};flex-shrink:0;margin-top:2px;cursor:pointer;
+                      display:flex;align-items:center;justify-content:center;color:white;font-size:12px">
+                    ${isDone?'✓':''}
+                  </div>
+                  <div style="flex:1">
+                    <div style="font-size:13px;font-weight:600;${isDone?'color:var(--text3);text-decoration:line-through':''}">${step.id}. ${step.name}</div>
+                    <div style="font-size:12px;color:var(--text3);margin-top:2px">${step.desc}</div>
+                    <div style="font-size:11px;color:var(--text3);margin-top:2px">Equipment: ${step.req}</div>
+                  </div>
+                </div>`;
+            }).join('')}
+          </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function setCaliSkill(skillKey) {
+  const user = APP.currentUser;
+  Store.set('ff_cali_skill_' + user.id, skillKey);
+  APP.currentCaliSkill = skillKey;
+  showToast('Skill goal set! Now work through each step. 🎯', 'success');
+  renderCaliSkillTree();
+}
+
+function toggleSkillStep(skillKey, stepId) {
+  const user = APP.currentUser;
+  const key  = 'ff_skill_progress_' + user.id + '_' + skillKey;
+  const progress = Store.get(key, {});
+  progress[stepId] = !progress[stepId];
+  Store.set(key, progress);
+  if (progress[stepId]) showToast('Step completed! Great progress! 💪', 'success');
+  renderCaliSkillTree();
+}
+
+function renderCaliChallenge() {
+  const container = document.getElementById('cali-challenge-content');
+  if (!container) return;
+  const user      = APP.currentUser;
+  const challenge = APP_DATA.calisthenicsChallenge || [];
+  const progress  = Store.get('ff_cali_challenge_' + user.id, {});
+  const doneCount = Object.values(progress).filter(Boolean).length;
+
+  container.innerHTML = `
+    <div style="padding:16px">
+      <div class="card" style="margin-bottom:16px;background:linear-gradient(135deg,var(--g1),var(--bg2))">
+        <div style="font-family:var(--font-display);font-size:28px;color:var(--g5)">${doneCount}/21 <span style="font-size:16px;color:var(--text2)">days complete</span></div>
+        <div class="progress-bar" style="margin:8px 0">
+          <div class="progress-fill" style="width:${Math.round(doneCount/21*100)}%"></div>
+        </div>
+        <div style="font-size:13px;color:var(--text2)">Complete all 21 days to build your calisthenics habit!</div>
+      </div>
+      ${challenge.map(day => {
+        const isDone = progress[day.day] === true;
+        return `
+          <div class="card card-sm" style="margin-bottom:8px;border:1px solid ${isDone?'var(--g3)':'var(--border)'}">
+            <div style="display:flex;align-items:center;gap:12px">
+              <div onclick="toggleChallengeDay(${day.day})"
+                style="width:32px;height:32px;border-radius:50%;border:2px solid ${isDone?'var(--g4)':'var(--border)'};
+                  background:${isDone?'var(--g4)':'transparent'};flex-shrink:0;cursor:pointer;
+                  display:flex;align-items:center;justify-content:center;color:white;font-size:16px">
+                ${isDone?'✓':day.day}
+              </div>
+              <div style="flex:1">
+                <div style="font-weight:600;font-size:13px${isDone?';color:var(--text3);text-decoration:line-through':''}">${day.name}</div>
+                <div style="font-size:11px;color:var(--text3)">${day.exercises?.map(e=>e.name).join(' · ')||''}</div>
+              </div>
+              ${isDone?'<span class="badge badge-green">Done</span>':''}
+            </div>
+          </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function toggleChallengeDay(dayNum) {
+  const user     = APP.currentUser;
+  const key      = 'ff_cali_challenge_' + user.id;
+  const progress = Store.get(key, {});
+  progress[dayNum] = !progress[dayNum];
+  Store.set(key, progress);
+  if (progress[dayNum]) showToast(`Day ${dayNum} complete! 🔥`, 'success');
+  renderCaliChallenge();
+}
+
+function renderCaliProgress() {
+  const container = document.getElementById('cali-progress-content');
+  if (!container) return;
+  const user  = APP.currentUser;
+  const logs  = Store.getModuleDayLogs(user.id, 'calisthenics');
+  const level = APP.currentCaliLevel;
+  const levels = APP_DATA.modules.calisthenics?.levels || {};
+  const equipment = Store.get('ff_cali_equipment_' + user.id, 'none');
+  const equip_labels = { none: 'No Equipment', bar: 'Pull-up Bar', bars: 'Parallel Bars' };
+  const challenge = Store.get('ff_cali_challenge_' + user.id, {});
+  const challengeDone = Object.values(challenge).filter(Boolean).length;
+
+  container.innerHTML = `
+    <div style="padding:16px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="stat-card"><div class="stat-val">${logs.length}</div><div class="stat-label">Sessions Done</div></div>
+        <div class="stat-card"><div class="stat-val">L${level}</div><div class="stat-label">${levels[level]?.name||''}</div></div>
+        <div class="stat-card"><div class="stat-val">${challengeDone}</div><div class="stat-label">21-Day Progress</div></div>
+        <div class="stat-card"><div class="stat-val">${[...new Set(logs.map(l=>l.date))].length}</div><div class="stat-label">Active Days</div></div>
+      </div>
+
+      <div class="section-title" style="margin-bottom:10px">Equipment Setup</div>
+      <div class="card card-sm" style="margin-bottom:16px">
+        <div style="font-size:13px;color:var(--text2);margin-bottom:12px">
+          Your equipment affects which exercises appear. Current: <strong style="color:var(--g5)">${equip_labels[equipment]||equipment}</strong>
+        </div>
+        <div style="display:flex;gap:8px">
+          ${[['none','No Equipment 🧑'],['bar','Pull-up Bar 🔝'],['bars','Parallel Bars 🏅']].map(([v,l]) => `
+            <button onclick="setCaliEquipment('${v}')"
+              style="flex:1;padding:8px;border-radius:10px;border:2px solid ${equipment===v?'var(--g4)':'var(--border)'};
+                background:${equipment===v?'rgba(46,125,70,0.2)':'var(--surface)'};cursor:pointer;font-size:11px;font-weight:600;color:${equipment===v?'var(--g5)':'var(--text2)'}">
+              ${l}
+            </button>`).join('')}
+        </div>
+      </div>
+
+      <div class="section-title" style="margin-bottom:10px">Recent Sessions</div>
+      ${logs.length
+        ? logs.sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10).map(l => `
+          <div class="card card-sm" style="margin-bottom:8px;display:flex;justify-content:space-between;align-items:center">
+            <div>
+              <div style="font-weight:600;font-size:13px">${l.day}</div>
+              <div style="font-size:12px;color:var(--text3)">${l.date}</div>
+            </div>
+            <span class="badge badge-green">✓ Done</span>
+          </div>`).join('')
+        : '<div class="empty-state" style="padding:24px"><p>No sessions yet.<br>Start your first workout!</p></div>'}
+    </div>`;
+}
+
+function setCaliEquipment(eq) {
+  Store.set('ff_cali_equipment_' + APP.currentUser.id, eq);
+  showToast('Equipment updated! ✅', 'success');
+  renderCaliProgress();
 }
