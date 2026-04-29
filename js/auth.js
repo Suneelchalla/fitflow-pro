@@ -263,7 +263,12 @@ function _applyToAppData(key, value) {
     }
     const exMatch = key.match(/^exercises_(.+)$/);
     if (exMatch && value?.days && APP_DATA.modules[exMatch[1]]) {
-      APP_DATA.modules[exMatch[1]].days = value.days;
+      // Unwrap double-nested { days: { days: { Monday: [] } } } if present
+      let days = value.days;
+      if (days && typeof days === 'object' && days.days && typeof days.days === 'object') {
+        days = days.days;
+      }
+      APP_DATA.modules[exMatch[1]].days = days;
     }
     const wuMatch = key.match(/^warmup_(.+)$/);
     if (wuMatch && Array.isArray(value)) {
