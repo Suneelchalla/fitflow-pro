@@ -30,9 +30,6 @@ window.APP_DATA = {
     running: [
       { name:"Pre-Run Warm-Up", sets:1, reps:"5 min", desc:"Brisk walk 2 min → slow high knees 30 sec → ankle circles 10 each → hip flexor lunge 30 sec each → leg swings 10 each. Essential before every run to prevent injury.", image:"", demo:"https://www.youtube.com/results?search_query=running+warm+up+routine", tag:"warmup" },
     ],
-    calisthenics: [
-      { name:"Calisthenics Warm-Up", sets:1, reps:"5 min", desc:"Wrist circles 30 sec each direction → shoulder rotations 30 sec → arm swings 30 sec → hip circles 30 sec → cat-cow 8 reps → 20 jumping jacks. Joint prep is non-negotiable before any calisthenics or skill work.", image:"", demo:"https://www.youtube.com/results?search_query=calisthenics+warm+up+routine+wrist+shoulder", tag:"warmup" },
-    ],
   },
 
     cooldowns: {
@@ -48,9 +45,6 @@ window.APP_DATA = {
     running: [
       { name:"Post-Run Cool-Down", sets:1, reps:"5 min", desc:"Easy walk 3 min → standing calf stretch 45 sec each → quad stretch 30 sec each → IT band stretch 45 sec each → seated hamstring & glute stretch 60 sec each. Critical for runner recovery.", image:"", demo:"https://www.youtube.com/results?search_query=post+run+cool+down+stretches", tag:"cooldown" },
     ],
-    calisthenics: [
-      { name:"Calisthenics Cool-Down", sets:1, reps:"5 min", desc:"Wrist flexor stretch 30 sec each → chest opener 45 sec → lat doorway stretch 30 sec → hip flexor lunge 30 sec each → seated hamstring 45 sec → thoracic extension on floor 60 sec. Wrists and shoulders are priority.", image:"", demo:"https://www.youtube.com/results?search_query=calisthenics+cool+down+wrist+shoulder+hip+flexor", tag:"cooldown" },
-    ],
   },
 
     modules: {
@@ -58,6 +52,7 @@ window.APP_DATA = {
       name: "Home Cardio",
       emoji: "🏠",
       color: "grad-cardio",
+      days: {
       days: {
         Monday: [
           { name:"Warm-Up: Jumping Jacks", sets:1, reps:"2 min", desc:"Stand upright, jump feet apart while raising arms overhead. Increases heart rate and warms joints. Month 1: 60 sec. Month 2: 90 sec. Month 3: 2 min.", image:"", demo:"https://www.youtube.com/results?search_query=jumping+jacks+warm+up+exercise" },
@@ -129,6 +124,7 @@ window.APP_DATA = {
       name: "Gym Workouts",
       emoji: "🏋️",
       color: "grad-gym",
+      days: {
       days: {
         Monday: [
           { name:"Warm-Up: Treadmill + Mobility", sets:1, reps:"5-8 min", desc:"5 min light treadmill jog then chest mobility - arm circles, band pull-aparts, shoulder rolls. Prepares chest and shoulder joints for heavy pressing.", image:"", demo:"https://www.youtube.com/results?search_query=chest+day+warm+up+gym+mobility" },
@@ -329,197 +325,6 @@ window.APP_DATA = {
           { name:"Anterior Tib Stretch", hold:"30 sec each side", rounds:1, desc:"Kneel, top of foot flat on floor, sit back on heel. Stretches the shin (anterior tibialis). Essential for runners and hikers. Often forgotten but very important.", image:"👣", demo:"https://www.youtube.com/results?search_query=anterior+tibialis+stretch+shin" },
           { name:"Progressive Muscle Relaxation", hold:"5 min", rounds:1, desc:"Tense each muscle group 5 sec then completely release. Toes to face. The deepest physical relaxation technique available. Perfect weekly close.", image:"✨", demo:"https://www.youtube.com/results?search_query=progressive+muscle+relaxation+technique" },
         ],
-      }
-    },
-
-    calisthenics: {
-      name: "Calisthenics",
-      emoji: "🤸‍♂️",
-      color: "grad-cali",
-      levels: {
-        beginner: {
-          label: "Level 1 — Beginner",
-          unlockReps: null,
-          days: {
-            Monday: [
-              { name:"Incline Push-Up", sets:3, reps:"10 reps", desc:"Hands on wall or sturdy surface. Body straight, lower chest to surface, press back. Master this before floor push-ups. Month 1: 3x8. Month 2: 3x10 lower surface. Month 3: 3x12 near floor.", image:"", demo:"https://www.youtube.com/results?search_query=incline+push+up+beginner+form" },
-              { name:"Knee Push-Up", sets:3, reps:"8 reps", desc:"Hands shoulder-width, knees on floor. Lower chest fully, press up. Build chest and tricep strength progressively. Month 1: 3x6. Month 2: 3x8. Month 3: 3x10.", image:"", demo:"https://www.youtube.com/results?search_query=knee+push+up+beginner+tutorial" },
-              { name:"Negative Push-Up", sets:3, reps:"5 reps", desc:"Start at top of push-up. Take 5 seconds to lower chest to floor. Reset from knees. Builds strength for full push-ups fast. Month 1: 5 sec down 3x3. Month 3: 3x5 full negative.", image:"", demo:"https://www.youtube.com/results?search_query=negative+push+up+eccentric+beginner" },
-              { name:"Dead Hang", sets:3, reps:"15 sec", desc:"Hang from bar, arms fully extended. No pulling — just hang. Builds grip, shoulder health and lat engagement. Month 1: 3x10 sec. Month 2: 3x20 sec. Month 3: 3x30 sec.", image:"", demo:"https://www.youtube.com/results?search_query=dead+hang+bar+exercise+beginner" },
-              { name:"Scapular Retraction Hang", sets:3, reps:"8 reps", desc:"Dead hang. Without bending elbows, shrug shoulder blades down and together, then release. First step to pull-ups. Month 1: 3x5. Month 2: 3x8. Month 3: 3x10 with 2-sec hold.", image:"", demo:"https://www.youtube.com/results?search_query=scapular+retraction+hang+pull+up+prep" },
-              { name:"Plank", sets:3, reps:"20 sec", desc:"Forearms on floor, body straight. The foundation of all calisthenics. Month 1: 3x15 sec. Month 2: 3x25 sec. Month 3: 3x35 sec.", image:"", demo:"https://www.youtube.com/results?search_query=plank+exercise+beginners+calisthenics" },
-              { name:"Hollow Body Hold", sets:3, reps:"15 sec", desc:"Lie on back, arms overhead and legs raised. Press lower back into floor. The most important core exercise in calisthenics — used in every skill. Month 1: knees bent 3x10 sec. Month 3: legs straight 3x15 sec.", image:"", demo:"https://www.youtube.com/results?search_query=hollow+body+hold+calisthenics+beginner" },
-              { name:"Box Squat", sets:3, reps:"12 reps", desc:"Squat onto a chair or box, touch lightly, stand back up. Teaches correct squat depth. Month 1: 3x10 high box. Month 2: 3x12 lower box. Month 3: 3x15 below parallel.", image:"", demo:"https://www.youtube.com/results?search_query=box+squat+beginner+bodyweight" },
-            ],
-            Tuesday: [
-              { name:"Assisted Squat", sets:3, reps:"12 reps", desc:"Hold doorframe or TRX for balance. Squat to full depth. Removes balance limitation so you can train legs immediately. Month 1: 3x10. Month 2: 3x15. Month 3: full bodyweight squat.", image:"", demo:"https://www.youtube.com/results?search_query=assisted+squat+TRX+beginner" },
-              { name:"Glute Bridge", sets:3, reps:"15 reps", desc:"Lie on back, feet flat. Drive hips to ceiling, squeeze glutes. Foundation for all lower-body calisthenics. Month 1: 3x12. Month 2: 3x15. Month 3: single-leg version.", image:"", demo:"https://www.youtube.com/results?search_query=glute+bridge+exercise+beginners" },
-              { name:"Step-Up", sets:3, reps:"10 each leg", desc:"Step onto a box or sturdy chair. Full leg extension at top. Month 1: 3x8 low step. Month 2: 3x10 higher. Month 3: 3x12 each leg.", image:"", demo:"https://www.youtube.com/results?search_query=step+up+exercise+beginner+calisthenics" },
-              { name:"Calf Raise", sets:3, reps:"20 reps", desc:"Stand on step edge. Rise onto toes, hold 1 sec, lower slowly. Month 1: both legs 4x15. Month 3: single-leg 3x10.", image:"", demo:"https://www.youtube.com/results?search_query=calf+raise+bodyweight+beginner" },
-              { name:"Lying Hip Extension", sets:3, reps:"12 reps", desc:"Face down, lift one leg at a time off floor. Activates glutes and lower back. Month 1: 3x10. Month 3: add ankle weights.", image:"", demo:"https://www.youtube.com/results?search_query=lying+hip+extension+glute+activation" },
-              { name:"Wall Sit", sets:3, reps:"20 sec", desc:"Back flat on wall, thighs parallel. Hold. Month 1: 3x20 sec. Month 2: 3x35 sec. Month 3: 3x50 sec.", image:"", demo:"https://www.youtube.com/results?search_query=wall+sit+exercise+beginner" },
-              { name:"Reverse Lunge", sets:3, reps:"8 each leg", desc:"Step backward into lunge, back knee nearly touching floor. Easier than forward lunge, same benefit. Month 1: 3x6. Month 2: 3x10. Month 3: 3x12.", image:"", demo:"https://www.youtube.com/results?search_query=reverse+lunge+beginner+bodyweight" },
-              { name:"Mountain Climbers", sets:3, reps:"20 sec", desc:"High plank, drive knees to chest alternately. Core and cardio together. Month 1: 3x15 sec slow. Month 2: 3x20 sec. Month 3: 3x30 sec fast.", image:"", demo:"https://www.youtube.com/results?search_query=mountain+climbers+beginner+calisthenics" },
-            ],
-            Wednesday: [
-              { name:"Superman Hold", sets:3, reps:"20 sec", desc:"Lie face down, lift arms and legs. Builds lower back and posterior chain. Month 1: 3x15 sec. Month 2: 3x25 sec. Month 3: 3x35 sec.", image:"", demo:"https://www.youtube.com/results?search_query=superman+hold+calisthenics+beginner" },
-              { name:"Dead Hang", sets:4, reps:"20 sec", desc:"Full hang. Week over week add 5 seconds. This is your most important exercise right now — builds grip and shoulder stability.", image:"", demo:"https://www.youtube.com/results?search_query=dead+hang+beginner+progress" },
-              { name:"Scapular Pull-Up", sets:3, reps:"8 reps", desc:"From dead hang, pull shoulder blades down without bending elbows. Activates lats. Essential foundation for pull-ups. Month 1: 3x5. Month 3: 3x10 with 2-sec hold.", image:"", demo:"https://www.youtube.com/results?search_query=scapular+pull+up+lat+activation" },
-              { name:"Hollow Body Rock", sets:3, reps:"15 sec", desc:"Hollow body hold + rock gently forward and back. Builds core tension. Month 1: bent knees. Month 3: straight legs.", image:"", demo:"https://www.youtube.com/results?search_query=hollow+body+rock+calisthenics+core" },
-              { name:"Arch Body Hold", sets:3, reps:"15 sec", desc:"Lie face down, arms and legs off floor, arch body like a bow. Counterpart to hollow body. Both are required for bar skills. Month 1: 3x10 sec. Month 3: 3x20 sec.", image:"", demo:"https://www.youtube.com/results?search_query=arch+body+hold+calisthenics+gymnastics" },
-              { name:"Side Plank", sets:2, reps:"15 sec each side", desc:"One forearm, stack feet or stagger. Body straight. Month 1: from knee 2x15 sec. Month 2: 2x20 full. Month 3: 2x30.", image:"", demo:"https://www.youtube.com/results?search_query=side+plank+beginner+progression" },
-              { name:"Leg Raises (Lying)", sets:3, reps:"8 reps", desc:"On back, raise straight legs to 90°, lower slowly. Month 1: bent knees 3x8. Month 2: 3x10 straight. Month 3: 3x12 with pause.", image:"", demo:"https://www.youtube.com/results?search_query=lying+leg+raises+ab+beginner" },
-              { name:"Push-Up Progression", sets:3, reps:"Max reps", desc:"Attempt the hardest version you can: wall → incline → knee → full. Never skip a day of push work — this is your primary press.", image:"", demo:"https://www.youtube.com/results?search_query=push+up+progression+beginner+to+full" },
-            ],
-            Thursday: [
-              { name:"Full Bodyweight Squat", sets:4, reps:"12 reps", desc:"No assistance. Feet shoulder-width, full depth. Month 1: 4x10. Month 2: 4x15. Month 3: 4x20 or jump squats.", image:"", demo:"https://www.youtube.com/results?search_query=bodyweight+squat+full+depth+form" },
-              { name:"Lunge", sets:3, reps:"10 each leg", desc:"Forward or reverse. Full depth — back knee near floor. Month 1: stationary 3x8. Month 2: 3x10. Month 3: 3x12 walking.", image:"", demo:"https://www.youtube.com/results?search_query=lunge+bodyweight+calisthenics" },
-              { name:"Single Leg Glute Bridge", sets:3, reps:"10 each leg", desc:"One leg extended, drive hip up. Progression from two-leg bridge. Month 1: modified 3x8. Month 3: full 3x12.", image:"", demo:"https://www.youtube.com/results?search_query=single+leg+glute+bridge+exercise" },
-              { name:"Pike Push-Up", sets:3, reps:"8 reps", desc:"Downward dog position, bend elbows and lower head to floor. Shoulder pressing movement. Month 1: 3x5. Month 2: 3x8. Month 3: 3x10 slow.", image:"", demo:"https://www.youtube.com/results?search_query=pike+push+up+shoulder+beginner" },
-              { name:"Tricep Dip (Bench)", sets:3, reps:"10 reps", desc:"Hands on bench behind you. Lower until elbows 90°, press up. Month 1: 3x8 knees bent. Month 3: 3x12 legs straight.", image:"", demo:"https://www.youtube.com/results?search_query=bench+dip+tricep+calisthenics" },
-              { name:"Floor Row (Inverted)", sets:3, reps:"8 reps", desc:"Under a table, pull chest to table edge. Best horizontal pull substitute when no bar available. Month 1: feet on floor bent. Month 3: legs straight.", image:"", demo:"https://www.youtube.com/results?search_query=floor+row+inverted+row+table" },
-              { name:"Plank Shoulder Taps", sets:3, reps:"16 taps", desc:"High plank. Tap opposite shoulder. Core fights rotation. Month 1: slow 3x12 taps. Month 3: 3x20.", image:"", demo:"https://www.youtube.com/results?search_query=plank+shoulder+taps+calisthenics" },
-              { name:"Bear Crawl", sets:3, reps:"20 sec", desc:"All fours, knees 1 inch off floor. Crawl forward and back. Full body coordination and core. Month 1: 3x15 sec. Month 3: 3x30 sec.", image:"", demo:"https://www.youtube.com/results?search_query=bear+crawl+exercise+core+calisthenics" },
-            ],
-            Friday: [
-              { name:"Full Push-Up Attempt", sets:4, reps:"Max reps", desc:"Best effort full push-ups. Drop to knees when form breaks. Record your number. Progress is the goal. Month 1: 4x3–5. Month 3: 4x10+.", image:"", demo:"https://www.youtube.com/results?search_query=full+push+up+form+max+reps" },
-              { name:"Negative Pull-Up", sets:3, reps:"5 reps", desc:"Jump or step to bar, chin over bar. Take 5 sec to lower. Reset. The fastest way to build pull-up strength. Month 1: 3x3 slow. Month 3: 3x5 10-sec negatives.", image:"", demo:"https://www.youtube.com/results?search_query=negative+pull+up+eccentric+training" },
-              { name:"Band-Assisted Pull-Up", sets:3, reps:"5 reps", desc:"Resistance band looped on bar, foot in band. Pull chin to bar. Month 1: heavy band 3x3. Month 3: light band 3x8.", image:"", demo:"https://www.youtube.com/results?search_query=band+assisted+pull+up+beginner" },
-              { name:"Jump Squat", sets:3, reps:"10 reps", desc:"Squat, then explode upward. Land softly. Builds power and athleticism. Month 1: low jump 3x8. Month 3: 3x12 full.", image:"", demo:"https://www.youtube.com/results?search_query=jump+squat+plyometric+calisthenics" },
-              { name:"Burpee (Modified)", sets:3, reps:"6 reps", desc:"Step back to plank (no jump), push-up optional, step forward, stand. Full burpee is intermediate. Month 1: 3x5 slow. Month 3: 3x8 faster.", image:"", demo:"https://www.youtube.com/results?search_query=modified+burpee+beginner+calisthenics" },
-              { name:"Hollow Body + Tuck Hold", sets:3, reps:"20 sec", desc:"Hollow body with knees tucked to chest. Bridge to straight hollow body. Month 1: tuck 3x15 sec. Month 3: full 3x25 sec.", image:"", demo:"https://www.youtube.com/results?search_query=tuck+hollow+body+hold+beginner" },
-              { name:"L-Sit Prep (Seated)", sets:3, reps:"10 sec", desc:"Sit on floor, hands beside hips, press down and try to lift hips. The root of the L-sit skill. Month 1: just press 3x8 sec. Month 3: slight lift 3x12 sec.", image:"", demo:"https://www.youtube.com/results?search_query=L+sit+progression+floor+seated+beginner" },
-              { name:"Wrist Prep", sets:1, reps:"2 min", desc:"Wrist circles, forearm stretch, fist extension. Non-negotiable in calisthenics — prevents wrist injury during skill training.", image:"", demo:"https://www.youtube.com/results?search_query=wrist+warm+up+calisthenics+preparation" },
-            ],
-            Saturday: [
-              { name:"Burpee", sets:4, reps:"8 reps", desc:"Full burpee: squat down, jump feet back, push-up, jump feet forward, jump up with arms overhead. The king of bodyweight conditioning. Month 1: modified. Month 3: full 4x10.", image:"", demo:"https://www.youtube.com/results?search_query=burpee+full+form+calisthenics" },
-              { name:"Full Squat + Hold", sets:3, reps:"10 reps + 30 sec", desc:"10 reps followed by a 30-second hold at the bottom. Improves ankle and hip mobility alongside strength.", image:"", demo:"https://www.youtube.com/results?search_query=squat+hold+bottom+flexibility" },
-              { name:"Push-Up Complex", sets:3, reps:"8 reps", desc:"Wide push-up → standard → close-grip. 3 variations in one set targeting all chest and tricep angles. Month 1: incline versions. Month 3: full.", image:"", demo:"https://www.youtube.com/results?search_query=push+up+complex+variations" },
-              { name:"Dead Hang + Leg Raise", sets:3, reps:"5 reps", desc:"Dead hang, then raise knees to chest 5 times. Combines grip and core in one movement. Month 1: just hang. Month 3: tuck raise 3x8.", image:"", demo:"https://www.youtube.com/results?search_query=dead+hang+leg+raise+hanging+core" },
-              { name:"Plank Variations", sets:1, reps:"3 min total", desc:"30 sec elbow plank → 30 sec high plank → 20 sec each side plank → 20 sec reverse plank. Core endurance circuit.", image:"", demo:"https://www.youtube.com/results?search_query=plank+variations+calisthenics+core" },
-              { name:"Animal Flow Intro", sets:2, reps:"2 min", desc:"Combination of bear crawl, crab walk, lateral ape walk. Builds coordination and movement quality. Follow along with a video.", image:"", demo:"https://www.youtube.com/results?search_query=animal+flow+beginner+tutorial" },
-              { name:"Flexibility Cooldown", sets:1, reps:"5 min", desc:"Chest stretch, wrist and forearm, hip flexor lunge, hamstring fold, shoulder cross-body. Essential after every calisthenics session.", image:"", demo:"https://www.youtube.com/results?search_query=calisthenics+cooldown+flexibility" },
-            ],
-          }
-        },
-        intermediate: {
-          label: "Level 2 — Intermediate",
-          unlockTarget: { exercise:"Push-Up", reps:10, weeks:2 },
-          days: {
-            Monday: [
-              { name:"Full Push-Up", sets:4, reps:"15 reps", desc:"Full push-up — chest to floor, full lockout. If you're here you can do 10 clean reps. Month 1: 4x12. Month 2: 4x15. Month 3: 4x20 or archer push-ups.", image:"", demo:"https://www.youtube.com/results?search_query=full+push+up+intermediate+form" },
-              { name:"Decline Push-Up", sets:3, reps:"12 reps", desc:"Feet elevated on chair. Upper chest and shoulder focus. Month 1: 3x10 low decline. Month 3: 3x15 higher elevation.", image:"", demo:"https://www.youtube.com/results?search_query=decline+push+up+elevated+feet" },
-              { name:"Diamond Push-Up", sets:3, reps:"10 reps", desc:"Hands form diamond under chest. Maximises tricep engagement. Month 1: 3x8. Month 3: 3x12 with pause.", image:"", demo:"https://www.youtube.com/results?search_query=diamond+push+up+tricep+chest" },
-              { name:"Pull-Up (1–3 reps)", sets:5, reps:"Max (1–5)", desc:"Full hang, pull chin over bar, lower with control. Even 1 rep per set builds strength fast. Month 1: negatives + partials. Month 3: 5x5.", image:"", demo:"https://www.youtube.com/results?search_query=pull+up+1+to+5+reps+intermediate+form" },
-              { name:"Australian Pull-Up", sets:3, reps:"12 reps", desc:"Body below the bar, pull chest to bar, straight body. The best horizontal pull in calisthenics. Month 1: 3x10 60° body angle. Month 3: 3x15 near-horizontal.", image:"", demo:"https://www.youtube.com/results?search_query=australian+pull+up+inverted+row+form" },
-              { name:"Hollow Body Hold", sets:3, reps:"30 sec", desc:"Full straight-leg hollow body. Month 1: 3x25 sec. Month 3: 3x45 sec.", image:"", demo:"https://www.youtube.com/results?search_query=hollow+body+hold+intermediate+calisthenics" },
-              { name:"L-Sit (Ground)", sets:4, reps:"10 sec", desc:"Hands on floor, lift hips and extend legs to L position. The fundamental compression strength exercise. Month 1: tuck 4x8 sec. Month 3: full L 4x15 sec.", image:"", demo:"https://www.youtube.com/results?search_query=L+sit+ground+progression+calisthenics" },
-              { name:"Dip (Parallel Bars)", sets:3, reps:"10 reps", desc:"Full range dip — go deep, lock out. Chest forward for pec focus, upright for tricep. Month 1: 3x6–8. Month 3: 3x15.", image:"", demo:"https://www.youtube.com/results?search_query=parallel+bar+dip+calisthenics+form" },
-            ],
-            Tuesday: [
-              { name:"Pistol Squat Progression", sets:4, reps:"6 each leg", desc:"Assist with hand/band. Lower on one leg, extend other forward. The pinnacle of lower-body calisthenics. Month 1: deep assisted 4x4. Month 3: partial unassisted 4x6.", image:"", demo:"https://www.youtube.com/results?search_query=pistol+squat+progression+intermediate" },
-              { name:"Bulgarian Split Squat", sets:3, reps:"10 each leg", desc:"Rear foot elevated, front foot forward. Deep single-leg strength. Month 1: bodyweight 3x8. Month 3: 3x12 explosive.", image:"", demo:"https://www.youtube.com/results?search_query=bulgarian+split+squat+bodyweight" },
-              { name:"Jump Squat", sets:4, reps:"12 reps", desc:"Full explosive jump squat. Land softly, immediately into next rep. Month 1: 4x10. Month 3: 4x15 consecutive.", image:"", demo:"https://www.youtube.com/results?search_query=jump+squat+plyometric+intermediate" },
-              { name:"Shrimp Squat Prep", sets:3, reps:"8 each leg", desc:"Hold back foot with hand, squat down on one leg. Knee-tap-to-floor progression. Month 1: assisted 3x5. Month 3: unassisted 3x8.", image:"", demo:"https://www.youtube.com/results?search_query=shrimp+squat+progression+beginner" },
-              { name:"Nordic Curl (Assisted)", sets:3, reps:"5 reps", desc:"Anchor feet under couch. Slowly lower torso to floor, use hands to push back. Builds massive hamstring strength. Month 1: 3x3 with strong assist. Month 3: 3x6.", image:"", demo:"https://www.youtube.com/results?search_query=nordic+curl+assisted+beginner+hamstring" },
-              { name:"Calf Raise (Single Leg)", sets:3, reps:"15 each leg", desc:"Single leg on step. Full range, 1 sec pause at top. Month 1: 3x10. Month 3: 3x20.", image:"", demo:"https://www.youtube.com/results?search_query=single+leg+calf+raise+step" },
-              { name:"Dragon Flag Prep", sets:3, reps:"8 reps", desc:"Lie on bench, hold behind head. Raise legs and lower back in straight line, lower slowly. Month 1: tucked 3x6. Month 3: semi-straight 3x8.", image:"", demo:"https://www.youtube.com/results?search_query=dragon+flag+progression+beginner" },
-              { name:"Tuck Jump", sets:3, reps:"8 reps", desc:"Jump and pull knees to chest. Landing soft. Explosive power development. Month 1: 3x6. Month 3: 3x10.", image:"", demo:"https://www.youtube.com/results?search_query=tuck+jump+plyometric+exercise" },
-            ],
-            Wednesday: [
-              { name:"Handstand Wall Hold", sets:4, reps:"30 sec", desc:"Hands 10cm from wall, kick up. Full lockout arms and hollow body. Month 1: 4x20 sec. Month 3: 4x45 sec facing the wall.", image:"", demo:"https://www.youtube.com/results?search_query=handstand+wall+hold+intermediate" },
-              { name:"Pike Push-Up", sets:4, reps:"12 reps", desc:"Downward dog, lower head to floor. Build to wall handstand. Month 1: 4x8. Month 3: 4x15 with elevated feet.", image:"", demo:"https://www.youtube.com/results?search_query=pike+push+up+shoulder+intermediate" },
-              { name:"Crow Pose Hold", sets:4, reps:"15 sec", desc:"Knees on upper arms, lean forward, lift feet. First arm balance. Month 1: 4x10 sec. Month 3: 4x25 sec.", image:"", demo:"https://www.youtube.com/results?search_query=crow+pose+hold+calisthenics+intermediate" },
-              { name:"Tuck Planche Hold (Floor)", sets:4, reps:"10 sec", desc:"Crow but lean further forward until arms are straight. Month 1: 4x6 sec. Month 3: 4x15 sec.", image:"", demo:"https://www.youtube.com/results?search_query=tuck+planche+floor+progression" },
-              { name:"Hollow Body + Arch Swings (Bar)", sets:3, reps:"10 reps", desc:"On bar — swing from hollow (front) to arch (back). Foundation for kip and muscle-up. Month 1: 3x8 controlled. Month 3: 3x12.", image:"", demo:"https://www.youtube.com/results?search_query=hollow+arch+swing+bar+kip+tutorial" },
-              { name:"Tuck Front Lever Hold", sets:4, reps:"8 sec", desc:"On bar, pull up partway and pull body horizontal — tucked knees. Month 1: tucked 4x5 sec. Month 3: straddle 4x8 sec.", image:"", demo:"https://www.youtube.com/results?search_query=tuck+front+lever+hold+calisthenics" },
-              { name:"L-Sit to Tuck (Bar)", sets:3, reps:"10 sec", desc:"Hang from bar, raise legs to tuck or L position. Month 1: tuck 3x8 sec. Month 3: L 3x12 sec.", image:"", demo:"https://www.youtube.com/results?search_query=L+sit+hang+bar+calisthenics" },
-              { name:"Wrist and Shoulder Cooldown", sets:1, reps:"5 min", desc:"Wrist stretches all directions, chest opener, shoulder internal rotation. Essential after skill work.", image:"", demo:"https://www.youtube.com/results?search_query=wrist+shoulder+cooldown+calisthenics+skills" },
-            ],
-            Thursday: [
-              { name:"Pull-Up", sets:5, reps:"Max reps", desc:"Full hang, chin over bar, lower controlled. This is your weekly benchmark. Record every single set. Month 1: 5x3. Month 3: 5x8+.", image:"", demo:"https://www.youtube.com/results?search_query=pull+up+max+reps+program+intermediate" },
-              { name:"Archer Push-Up", sets:3, reps:"8 each side", desc:"Wide push-up, shift weight to one arm as the other straightens. Bridges to one-arm push-up. Month 1: assisted 3x6. Month 3: 3x10.", image:"", demo:"https://www.youtube.com/results?search_query=archer+push+up+one+arm+progression" },
-              { name:"Australian Pull-Up (High Tuck)", sets:3, reps:"12 reps", desc:"Inverted row with feet elevated on chair. Near horizontal body. Month 1: 3x10. Month 3: 3x15.", image:"", demo:"https://www.youtube.com/results?search_query=high+tuck+inverted+row+feet+elevated" },
-              { name:"Dip + L-Sit", sets:3, reps:"8 reps", desc:"Perform parallel bar dip then hold L-sit at bottom position for 3 sec. Compound strength. Month 1: partial L. Month 3: full L.", image:"", demo:"https://www.youtube.com/results?search_query=dip+L+sit+parallel+bars+calisthenics" },
-              { name:"Dragon Flag", sets:3, reps:"6 reps", desc:"Full straight body lower from top to bottom on bench. Month 1: tucked 3x5. Month 3: full 3x8.", image:"", demo:"https://www.youtube.com/results?search_query=dragon+flag+full+progression+intermediate" },
-              { name:"Human Flag Prep (Side Hold)", sets:3, reps:"5 sec each side", desc:"Hold vertical pole, extend body horizontal to side. Month 1: tuck 3x4 sec. Month 3: straight 3x6 sec.", image:"", demo:"https://www.youtube.com/results?search_query=human+flag+progression+beginner+intermediate" },
-              { name:"Planche Lean", sets:4, reps:"15 sec", desc:"High plank, lean forward over hands. Loads wrists and prepares for planche. Month 1: 4x10 sec. Month 3: 4x20 sec.", image:"", demo:"https://www.youtube.com/results?search_query=planche+lean+progression+calisthenics" },
-              { name:"Ab Wheel Rollout", sets:3, reps:"8 reps", desc:"From knees, roll wheel forward, pull back. The hardest core exercise. Month 1: partial 3x6. Month 3: full 3x10.", image:"", demo:"https://www.youtube.com/results?search_query=ab+wheel+rollout+intermediate+core" },
-            ],
-            Friday: [
-              { name:"Muscle-Up Prep (Transition)", sets:4, reps:"6 reps", desc:"Jump or kip to bar, pull explosively, transition over bar into dip position. Month 1: jump-assist 4x3. Month 3: strict 4x5.", image:"", demo:"https://www.youtube.com/results?search_query=muscle+up+transition+progression+calisthenics" },
-              { name:"High Pull-Up (Chest to Bar)", sets:4, reps:"6 reps", desc:"Pull until chest touches bar (not just chin). Develops pulling strength above the bar needed for muscle-up. Month 1: chin over 4x5. Month 3: chest to bar 4x6.", image:"", demo:"https://www.youtube.com/results?search_query=chest+to+bar+pull+up+calisthenics" },
-              { name:"Deep Dip", sets:4, reps:"10 reps", desc:"Parallel bars, go deep — shoulders below elbows. Full range. Month 1: 4x8. Month 3: 4x12 slow.", image:"", demo:"https://www.youtube.com/results?search_query=deep+dip+full+range+parallel+bars" },
-              { name:"Tuck Planche Push-Up", sets:3, reps:"6 reps", desc:"Tuck planche position, perform push-up. One of the hardest compound exercises. Month 1: 3x3. Month 3: 3x8.", image:"", demo:"https://www.youtube.com/results?search_query=tuck+planche+push+up+calisthenics" },
-              { name:"Single Leg Squat (Free)", sets:3, reps:"5 each leg", desc:"Unassisted pistol squat. Full depth. Month 1: partial 3x4. Month 3: full depth 3x8.", image:"", demo:"https://www.youtube.com/results?search_query=pistol+squat+free+calisthenics" },
-              { name:"Front Lever Row", sets:3, reps:"8 reps", desc:"From tuck front lever hold, perform a pull. Month 1: tuck 3x5. Month 3: half-lay 3x8.", image:"", demo:"https://www.youtube.com/results?search_query=front+lever+row+progression+calisthenics" },
-              { name:"Handstand Push-Up Prep", sets:3, reps:"5 reps", desc:"Wall handstand, lower head to floor and push back up. Month 1: partial range 3x3. Month 3: full 3x6.", image:"", demo:"https://www.youtube.com/results?search_query=handstand+push+up+wall+progression" },
-              { name:"Thorough Cooldown", sets:1, reps:"5 min", desc:"Hip flexor lunge, shoulder cross-body, chest opener, lat stretch, wrist flexors and extensors. You earned it.", image:"", demo:"https://www.youtube.com/results?search_query=calisthenics+cooldown+intermediate+flexibility" },
-            ],
-            Saturday: [
-              { name:"Full Skill Practice Day", sets:1, reps:"30 min", desc:"Dedicate today to your chosen skill from the skill tree. Handstand, front lever, muscle-up or planche. Use progression steps from the skill tree section.", image:"", demo:"https://www.youtube.com/results?search_query=calisthenics+skill+practice+session" },
-              { name:"Outdoor Session", sets:1, reps:"30–45 min", desc:"Find a park with a pull-up bar. Practice: pull-ups, dips, skin the cat, bar holds. Outdoor training builds authentic strength.", image:"", demo:"https://www.youtube.com/results?search_query=outdoor+calisthenics+park+workout" },
-            ],
-          }
-        },
-        advanced: {
-          label: "Level 3 — Advanced",
-          unlockTarget: { exercise:"Pull-Up", reps:8, weeks:2 },
-          days: {
-            Monday: [
-              { name:"One-Arm Push-Up (Progression)", sets:4, reps:"5 each arm", desc:"Feet wide, one arm on floor, other behind back. Lower to floor with one arm. Month 1: 4x3 assisted. Month 3: 4x6 unassisted.", image:"", demo:"https://www.youtube.com/results?search_query=one+arm+push+up+progression+advanced" },
-              { name:"Typewriter Pull-Up", sets:3, reps:"6 reps", desc:"Pull up, move laterally across the bar, lower on one side, pull up again. Side-to-side at the top. Builds lateral pulling and shoulder stability.", image:"", demo:"https://www.youtube.com/results?search_query=typewriter+pull+up+calisthenics+advanced" },
-              { name:"Strict Muscle-Up", sets:4, reps:"4 reps", desc:"No kip. Straight pull-up transitioning over the bar. Month 1: 4x2 partial transition. Month 3: 4x4 clean.", image:"", demo:"https://www.youtube.com/results?search_query=strict+muscle+up+no+kip+calisthenics" },
-              { name:"Straddle Planche Hold", sets:5, reps:"10 sec", desc:"Hands on floor, legs spread wide, body horizontal. Month 1: straddle tuck 5x8 sec. Month 3: straddle 5x12 sec.", image:"", demo:"https://www.youtube.com/results?search_query=straddle+planche+hold+calisthenics+advanced" },
-              { name:"Full Front Lever Hold", sets:4, reps:"8 sec", desc:"Horizontal body from bar, arms straight. Month 1: straddle 4x6 sec. Month 3: full 4x10 sec.", image:"", demo:"https://www.youtube.com/results?search_query=full+front+lever+hold+calisthenics" },
-              { name:"Dragon Flag (Slow)", sets:3, reps:"8 reps", desc:"5-second lowering on each rep. Maximal core loading. Month 1: 3x5 slow. Month 3: 3x10 full slow.", image:"", demo:"https://www.youtube.com/results?search_query=dragon+flag+slow+eccentric+advanced" },
-              { name:"Handstand Push-Up (Free)", sets:4, reps:"5 reps", desc:"Freestanding handstand, lower head and press back up. Month 1: wall 4x4. Month 3: freestanding attempts 4x3.", image:"", demo:"https://www.youtube.com/results?search_query=freestanding+handstand+push+up+advanced" },
-              { name:"Manna Hold Prep", sets:3, reps:"8 sec", desc:"L-sit with torso leaning back, hips raised. Path to full manna. Month 1: L-sit 3x8 sec. Month 3: behind-body 3x10 sec.", image:"", demo:"https://www.youtube.com/results?search_query=manna+calisthenics+progression" },
-            ],
-            Tuesday: [
-              { name:"Full Pistol Squat", sets:5, reps:"8 each leg", desc:"Unassisted, full depth, controlled. Month 1: 5x5. Month 3: 5x10 weighted.", image:"", demo:"https://www.youtube.com/results?search_query=pistol+squat+full+advanced+calisthenics" },
-              { name:"Shrimp Squat", sets:3, reps:"8 each leg", desc:"Hold back foot, lower knee to floor, drive up. Month 1: 3x5. Month 3: 3x10 explosive.", image:"", demo:"https://www.youtube.com/results?search_query=shrimp+squat+advanced+calisthenics" },
-              { name:"Nordic Curl", sets:4, reps:"6 reps", desc:"Unassisted lowering. Feet anchored, slow lower. Month 1: 4x4 with minimal assist. Month 3: 4x6 strict.", image:"", demo:"https://www.youtube.com/results?search_query=nordic+curl+unassisted+advanced" },
-              { name:"Jumping Pistol Squat", sets:3, reps:"6 each leg", desc:"Pistol squat + explode up. Advanced plyometric. Month 1: landing focus 3x4. Month 3: 3x8.", image:"", demo:"https://www.youtube.com/results?search_query=jumping+pistol+squat+plyometric" },
-              { name:"Pole Squat", sets:3, reps:"5 reps", desc:"Hold vertical pole, lower into deep squat and hold. Develops ankle and hip mobility needed for full skill work.", image:"", demo:"https://www.youtube.com/results?search_query=pole+squat+deep+squat+mobility" },
-              { name:"Sprint Intervals", sets:6, reps:"30 sec on / 30 sec rest", desc:"Full sprint efforts. Calisthenics athletes need explosive cardio. Month 1: 4x30 sec. Month 3: 8x30 sec.", image:"", demo:"https://www.youtube.com/results?search_query=sprint+intervals+calisthenics+conditioning" },
-              { name:"Tuck Planche to Push-Up", sets:3, reps:"8 reps", desc:"Tuck planche hold, perform push-up. Month 1: 3x5 partial. Month 3: 3x10 full.", image:"", demo:"https://www.youtube.com/results?search_query=tuck+planche+push+up+advanced" },
-              { name:"Hip Flexor and Wrist Work", sets:1, reps:"5 min", desc:"Deep hip flexor, wrist circles and extensions. Protects joints under advanced loading.", image:"", demo:"https://www.youtube.com/results?search_query=hip+flexor+wrist+mobility+calisthenics+advanced" },
-            ],
-            Wednesday: [
-              { name:"Freestanding Handstand", sets:6, reps:"Attempts", desc:"Free handstand balance practice. Month 1: 30 sec wall + kick-ups. Month 3: 20–30 sec freestanding.", image:"", demo:"https://www.youtube.com/results?search_query=freestanding+handstand+balance+practice+advanced" },
-              { name:"Planche Push-Up", sets:4, reps:"5 reps", desc:"Full planche body position, push-up. Month 1: tuck 4x4. Month 3: straddle 4x6.", image:"", demo:"https://www.youtube.com/results?search_query=planche+push+up+advanced+calisthenics" },
-              { name:"Front Lever Pull", sets:4, reps:"6 reps", desc:"Front lever hold + rowing pull. Month 1: tuck/straddle 4x5. Month 3: full 4x6.", image:"", demo:"https://www.youtube.com/results?search_query=front+lever+pull+advanced+calisthenics" },
-              { name:"Back Lever Hold", sets:4, reps:"8 sec", desc:"Face down from bar, body horizontal below. Month 1: tuck 4x6 sec. Month 3: full 4x10 sec.", image:"", demo:"https://www.youtube.com/results?search_query=back+lever+hold+calisthenics+advanced" },
-              { name:"360° Pull-Up", sets:3, reps:"5 reps", desc:"Pull up and rotate 360° around the bar. Month 1: just attempt rotation 3x3. Month 3: full 3x5.", image:"", demo:"https://www.youtube.com/results?search_query=360+pull+up+bar+spin+calisthenics" },
-              { name:"Hollow Body Press", sets:3, reps:"10 reps", desc:"Press from hollow body on floor. Maximal core tension. Month 1: 3x8. Month 3: 3x12 with pause.", image:"", demo:"https://www.youtube.com/results?search_query=hollow+body+press+floor+advanced+core" },
-              { name:"Human Flag Hold", sets:4, reps:"6 sec", desc:"Body horizontal on vertical pole or stall bars. Month 1: tuck 4x5 sec. Month 3: full 4x8 sec.", image:"", demo:"https://www.youtube.com/results?search_query=human+flag+hold+calisthenics+advanced" },
-              { name:"Comprehensive Cooldown", sets:1, reps:"8 min", desc:"Full shoulder mobility circuit, hip flexors, wrist and forearm, thoracic extension. Advanced skill work demands serious recovery.", image:"", demo:"https://www.youtube.com/results?search_query=calisthenics+advanced+cooldown+mobility" },
-            ],
-            Thursday: [
-              { name:"One-Arm Pull-Up Progression", sets:5, reps:"Max each arm", desc:"Assist opposite hand on wrist or towel. Month 1: two-finger assist 5x2. Month 3: minimal assist 5x3.", image:"", demo:"https://www.youtube.com/results?search_query=one+arm+pull+up+progression+advanced" },
-              { name:"Ring Muscle-Up", sets:4, reps:"4 reps", desc:"Muscle-up on gymnastics rings. Harder than bar — requires full false grip and straight body. Month 1: bar version. Month 3: ring 4x4.", image:"", demo:"https://www.youtube.com/results?search_query=ring+muscle+up+calisthenics+advanced" },
-              { name:"Ring Dip", sets:4, reps:"10 reps", desc:"Dip on rings. Stabiliser work is immense. Month 1: 4x8. Month 3: 4x12.", image:"", demo:"https://www.youtube.com/results?search_query=ring+dip+gymnastics+rings" },
-              { name:"Weighted Pull-Up", sets:4, reps:"6 reps", desc:"Belt or vest adding 5–20kg. Month 1: +5kg 4x5. Month 3: +15kg 4x6.", image:"", demo:"https://www.youtube.com/results?search_query=weighted+pull+up+calisthenics+advanced" },
-              { name:"L-Sit to V-Sit", sets:3, reps:"8 sec", desc:"From L-sit, press legs above horizontal into V-sit. Month 1: attempt only 3x5 sec. Month 3: full V-sit 3x10 sec.", image:"", demo:"https://www.youtube.com/results?search_query=V+sit+calisthenics+advanced+compression" },
-              { name:"Skin the Cat", sets:3, reps:"6 reps", desc:"On rings or bar, swing legs through and below to German hang, return. Total shoulder mobility. Month 1: tuck 3x4. Month 3: straight 3x8.", image:"", demo:"https://www.youtube.com/results?search_query=skin+the+cat+rings+bar+calisthenics" },
-              { name:"Press to Handstand", sets:5, reps:"Attempts", desc:"From L-sit or straddle, press body up to handstand without jumping. Month 1: straddle tuck press 5x attempts. Month 3: full press attempts.", image:"", demo:"https://www.youtube.com/results?search_query=press+to+handstand+calisthenics+gymnastics" },
-              { name:"Recovery Stretch", sets:1, reps:"5 min", desc:"Priority: wrists, shoulders, hip flexors, thoracic. Advanced calisthenics demands daily flexibility investment.", image:"", demo:"https://www.youtube.com/results?search_query=advanced+calisthenics+recovery+stretch" },
-            ],
-            Friday: [
-              { name:"Planche Balance (Max Hold)", sets:5, reps:"Max sec", desc:"Full planche — straight arms, body horizontal, toes pointed. Record each hold. Month 1: tuck/straddle. Month 3: full planche.", image:"", demo:"https://www.youtube.com/results?search_query=planche+max+hold+calisthenics" },
-              { name:"Front Lever (Max Hold)", sets:5, reps:"Max sec", desc:"Bar, straight arms, body horizontal. Record every set. Month 1: half-lay. Month 3: full.", image:"", demo:"https://www.youtube.com/results?search_query=front+lever+max+hold+record" },
-              { name:"Human Flag (Max Hold)", sets:4, reps:"Max sec each side", desc:"Full body horizontal. Record each hold. Month 1: tuck/knees. Month 3: full.", image:"", demo:"https://www.youtube.com/results?search_query=human+flag+max+hold+sides" },
-              { name:"One-Arm Push-Up", sets:4, reps:"Max each arm", desc:"Clean one-arm push-ups. Record number. Month 1: 4x2–3. Month 3: 4x8+.", image:"", demo:"https://www.youtube.com/results?search_query=one+arm+push+up+max+reps" },
-              { name:"Handstand Push-Up (Free)", sets:4, reps:"Max reps", desc:"Freestanding HSPU. Month 1: wall 4x5. Month 3: freestanding 4x4.", image:"", demo:"https://www.youtube.com/results?search_query=freestanding+handstand+push+up+max" },
-              { name:"Full Conditioning Circuit", sets:3, reps:"10 min rounds", desc:"Pull-up × 5 + dip × 10 + push-up × 15 + squat × 20 + burpee × 5. No rest between. 3 rounds with 2-min rest.", image:"", demo:"https://www.youtube.com/results?search_query=calisthenics+conditioning+circuit+advanced" },
-              { name:"Mobility and Reflection", sets:1, reps:"10 min", desc:"Full joint mobility + review your logbook. Note personal records. What improved this week? Plan next week's focus.", image:"", demo:"https://www.youtube.com/results?search_query=advanced+calisthenics+mobility+routine" },
-            ],
-            Saturday: [
-              { name:"Freestyle / Flow", sets:1, reps:"45 min", desc:"Combine all skills freely. Invent transitions. Calisthenics at this level is an art form — let it be creative. Film yourself to identify weaknesses.", image:"", demo:"https://www.youtube.com/results?search_query=advanced+calisthenics+freestyle+flow+session" },
-            ],
-          }
-        }
       }
     },
   },
@@ -1041,99 +846,6 @@ window.APP_DATA = {
     }
   }
 };
-
-window.CALI_SKILLS = {
-  handstand: {
-    name: "Handstand", emoji: "🤸", equipment: "None",
-    steps: [
-      { step:1, name:"Wall Plank", desc:"Hands on floor 10cm from wall, hold plank position. Builds wrist and shoulder endurance.", sets:3, hold:"30 sec" },
-      { step:2, name:"Chest-to-Wall Handstand", desc:"Walk feet up wall until body is vertical, face wall. Focus on straight arms and hollow body.", sets:4, hold:"20 sec" },
-      { step:3, name:"Kick-Up to Wall", desc:"Kick up to handstand from standing. Back of heels touch wall for safety. 10 kick-up attempts.", sets:2, hold:"attempts" },
-      { step:4, name:"Timed Wall Handstand", desc:"Hold wall handstand aiming for 60 consecutive seconds with straight body and pointed toes.", sets:3, hold:"60 sec" },
-      { step:5, name:"Wall Handstand to Free Attempts", desc:"From wall handstand, try to push heels off wall and balance freely for 2–3 sec.", sets:5, hold:"attempts" },
-      { step:6, name:"Freestanding Handstand", desc:"No wall. Kick up and balance. 20–30 seconds is mastery. Takes 3–6 months of daily practice.", sets:6, hold:"max sec" },
-    ]
-  },
-  muscleup: {
-    name: "Muscle-Up", emoji: "💪", equipment: "Pull-up bar",
-    steps: [
-      { step:1, name:"High Pull-Up", desc:"Pull until chest touches the bar. Must be able to do 10 before starting muscle-up training.", sets:4, reps:"6 reps" },
-      { step:2, name:"Bar Dip", desc:"Jump to support above bar, perform dip. Builds the push phase of muscle-up.", sets:4, reps:"10 reps" },
-      { step:3, name:"Hollow-Arch Swing", desc:"Swing forward in hollow body then backward in arch. Controls the kip for kipping muscle-up.", sets:3, reps:"10 swings" },
-      { step:4, name:"Transition Drill", desc:"Jump from below bar, pull explosively and transition chest over bar. Focus on the turnaround point.", sets:4, reps:"5 reps" },
-      { step:5, name:"Kipping Muscle-Up", desc:"Use swing momentum. Pull at front of swing, transition, press out. Record first successful rep.", sets:3, reps:"max" },
-      { step:6, name:"Strict Muscle-Up", desc:"No kip, no swing. Pure pulling and pressing strength. 5 clean reps is elite.", sets:4, reps:"max" },
-    ]
-  },
-  frontlever: {
-    name: "Front Lever", emoji: "⬅️", equipment: "Pull-up bar",
-    steps: [
-      { step:1, name:"Dead Hang (30 sec)", desc:"Must be able to hold 30 seconds. Builds grip and shoulder stability.", sets:4, hold:"30 sec" },
-      { step:2, name:"Tuck Front Lever", desc:"Pull up, bring knees to chest, hold body horizontal. Most important step.", sets:5, hold:"10 sec" },
-      { step:3, name:"Advanced Tuck (Flat Back)", desc:"Tuck position but back flat, hips lower. Halfway between tuck and straddle.", sets:5, hold:"8 sec" },
-      { step:4, name:"Straddle Front Lever", desc:"Legs split wide, body horizontal. Weight of each leg is 70% of full front lever.", sets:5, hold:"8 sec" },
-      { step:5, name:"One-Leg Front Lever", desc:"One leg tucked, one straight. 90% of full lever difficulty.", sets:4, hold:"6 sec" },
-      { step:6, name:"Full Front Lever", desc:"Both legs together, body perfectly horizontal. 10 seconds is mastery.", sets:5, hold:"max sec" },
-    ]
-  },
-  planche: {
-    name: "Planche", emoji: "🏋️", equipment: "None / Parallettes",
-    steps: [
-      { step:1, name:"Planche Lean", desc:"High plank, lean shoulders forward over hands. Loads wrists for planche.", sets:4, hold:"15 sec" },
-      { step:2, name:"Frog Stand", desc:"Squat, knees on upper arms, lean forward, lift feet. Balance drill.", sets:4, hold:"20 sec" },
-      { step:3, name:"Tuck Planche", desc:"Lift hips and knees, body horizontal, arms straight. Must not use arm momentum.", sets:5, hold:"10 sec" },
-      { step:4, name:"Advanced Tuck Planche", desc:"Tuck but hips lower — back flat. Body more horizontal than basic tuck.", sets:5, hold:"8 sec" },
-      { step:5, name:"Straddle Planche", desc:"Legs split wide, body horizontal. Requires massive shoulder and wrist strength.", sets:5, hold:"8 sec" },
-      { step:6, name:"Full Planche", desc:"Legs together, body perfectly horizontal. One of the hardest gymnastic skills.", sets:4, hold:"max sec" },
-    ]
-  },
-  pistolsquat: {
-    name: "Pistol Squat", emoji: "🦵", equipment: "None",
-    steps: [
-      { step:1, name:"Assisted Squat (Full Depth)", desc:"Hold doorframe, squat to full depth on both legs. Trains ankle flexibility needed for pistol.", sets:3, reps:"12 reps" },
-      { step:2, name:"Box Pistol Squat", desc:"Lower onto a box on one leg, stand back up. Box removes balance requirement.", sets:3, reps:"8 each" },
-      { step:3, name:"Assisted Pistol Squat", desc:"One hand touches wall. Full depth single-leg squat. Minimise assistance each session.", sets:4, reps:"6 each" },
-      { step:4, name:"Slow Eccentric Pistol", desc:"5-second lowering, pause at bottom, stand up. Can use minimal assistance at first.", sets:3, reps:"5 each" },
-      { step:5, name:"Partial Pistol (Free)", desc:"No assistance but partial depth. Increase range by 2cm per session.", sets:4, reps:"6 each" },
-      { step:6, name:"Full Pistol Squat", desc:"Unassisted, full depth, controlled up. 8 reps each leg is mastery.", sets:4, reps:"max each" },
-    ]
-  },
-  lsit: {
-    name: "L-Sit", emoji: "📐", equipment: "None / Parallettes",
-    steps: [
-      { step:1, name:"Seated Compression Hold", desc:"Sit on floor, hands beside hips. Press down and try to lift hips. Trains compression needed for L-sit.", sets:4, hold:"10 sec" },
-      { step:2, name:"Tuck L-Sit (Floor)", desc:"Knees tucked to chest, lift body off floor. Core and tricep foundation.", sets:4, hold:"10 sec" },
-      { step:3, name:"One-Leg Extended", desc:"One leg tucked, one straight. Half way to full L-sit.", sets:4, hold:"8 sec each" },
-      { step:4, name:"Full L-Sit (Floor)", desc:"Both legs straight, body off floor, L position. The complete skill.", sets:5, hold:"10 sec" },
-      { step:5, name:"L-Sit on Parallettes", desc:"More range of motion than floor. Can lift higher and hold longer.", sets:5, hold:"15 sec" },
-      { step:6, name:"V-Sit", desc:"Legs above horizontal. Requires extreme compression strength. 10 sec is elite.", sets:4, hold:"max sec" },
-    ]
-  }
-};
-
-window.CALI_21DAY = [
-  { day:1,  title:"Foundation Day",       exercises:[ {name:"Wall Push-Up", sets:3, reps:"12"}, {name:"Dead Hang", sets:3, reps:"15 sec"}, {name:"Bodyweight Squat", sets:3, reps:"15"}, {name:"Plank", sets:3, reps:"20 sec"} ] },
-  { day:2,  title:"Lower Body",           exercises:[ {name:"Squat", sets:4, reps:"15"}, {name:"Glute Bridge", sets:3, reps:"15"}, {name:"Reverse Lunge", sets:3, reps:"8 each"}, {name:"Calf Raise", sets:3, reps:"20"} ] },
-  { day:3,  title:"Core Focus",           exercises:[ {name:"Hollow Body Hold", sets:3, reps:"15 sec"}, {name:"Plank", sets:3, reps:"25 sec"}, {name:"Leg Raise (Lying)", sets:3, reps:"10"}, {name:"Side Plank", sets:2, reps:"15 sec each"} ] },
-  { day:4,  title:"Rest / Light Stretch", exercises:[ {name:"Hip Flexor Stretch", sets:2, reps:"45 sec each"}, {name:"Chest Opener", sets:2, reps:"45 sec"}, {name:"Hamstring Stretch", sets:2, reps:"45 sec each"} ] },
-  { day:5,  title:"Push Day",             exercises:[ {name:"Incline Push-Up", sets:4, reps:"10"}, {name:"Pike Push-Up", sets:3, reps:"6"}, {name:"Bench Dip", sets:3, reps:"10"}, {name:"Plank", sets:3, reps:"30 sec"} ] },
-  { day:6,  title:"Pull Day",             exercises:[ {name:"Dead Hang", sets:4, reps:"20 sec"}, {name:"Scapular Retraction", sets:3, reps:"8"}, {name:"Floor Row (Table)", sets:3, reps:"10"}, {name:"Hollow Body Hold", sets:3, reps:"20 sec"} ] },
-  { day:7,  title:"Full Body",            exercises:[ {name:"Squat", sets:3, reps:"12"}, {name:"Push-Up (Best Version)", sets:3, reps:"max"}, {name:"Hip Extension", sets:3, reps:"12 each"}, {name:"Plank", sets:3, reps:"30 sec"} ] },
-  { day:8,  title:"Rest",                 exercises:[ {name:"5-Min Mobility", sets:1, reps:"5 min"} ] },
-  { day:9,  title:"Strength Push",        exercises:[ {name:"Knee Push-Up", sets:4, reps:"12"}, {name:"Decline Push-Up Prep", sets:3, reps:"8"}, {name:"Diamond Push-Up", sets:3, reps:"6"}, {name:"Hollow Body Hold", sets:3, reps:"25 sec"} ] },
-  { day:10, title:"Strength Pull",        exercises:[ {name:"Dead Hang", sets:4, reps:"25 sec"}, {name:"Negative Pull-Up", sets:3, reps:"3"}, {name:"Band Pull-Apart", sets:3, reps:"12"}, {name:"Arch Hold", sets:3, reps:"15 sec"} ] },
-  { day:11, title:"Legs + Core",          exercises:[ {name:"Jump Squat", sets:3, reps:"8"}, {name:"Single-Leg Glute Bridge", sets:3, reps:"10 each"}, {name:"Mountain Climbers", sets:3, reps:"20 sec"}, {name:"L-Sit Prep", sets:3, reps:"8 sec"} ] },
-  { day:12, title:"Conditioning",         exercises:[ {name:"Modified Burpee", sets:4, reps:"6"}, {name:"Mountain Climbers", sets:3, reps:"25 sec"}, {name:"Jump Squat", sets:3, reps:"8"}, {name:"Plank", sets:3, reps:"40 sec"} ] },
-  { day:13, title:"Rest",                 exercises:[ {name:"Full Body Stretch", sets:1, reps:"10 min"} ] },
-  { day:14, title:"Benchmark Day",        exercises:[ {name:"Max Push-Ups (Best Form)", sets:1, reps:"max — record it!"}, {name:"Dead Hang (Max)", sets:1, reps:"max sec — record it!"}, {name:"Plank (Max)", sets:1, reps:"max sec — record it!"}, {name:"Max Squats", sets:1, reps:"max — record it!"} ] },
-  { day:15, title:"Full Push-Up Day",     exercises:[ {name:"Full Push-Up (or Best Version)", sets:4, reps:"max"}, {name:"Archer Push-Up Intro", sets:2, reps:"4 each"}, {name:"Pike Push-Up", sets:3, reps:"8"}, {name:"Bench Dip", sets:3, reps:"12"} ] },
-  { day:16, title:"First Pull-Ups",       exercises:[ {name:"Negative Pull-Up", sets:4, reps:"4 (5 sec down)"}, {name:"Band-Assisted Pull-Up", sets:3, reps:"max"}, {name:"Australian Pull-Up", sets:3, reps:"10"}, {name:"Dead Hang", sets:4, reps:"30 sec"} ] },
-  { day:17, title:"Skill Introduction",   exercises:[ {name:"Crow Pose Attempt", sets:4, reps:"10 sec"}, {name:"L-Sit Tuck", sets:4, reps:"10 sec"}, {name:"Handstand Wall Hold Intro", sets:3, reps:"15 sec"}, {name:"Hollow Body Rock", sets:3, reps:"15 sec"} ] },
-  { day:18, title:"Legs Power",           exercises:[ {name:"Jump Squat", sets:4, reps:"10"}, {name:"Pistol Squat Prep", sets:3, reps:"6 each"}, {name:"Nordic Curl Attempt", sets:3, reps:"3"}, {name:"Tuck Jump", sets:3, reps:"6"} ] },
-  { day:19, title:"Rest",                 exercises:[ {name:"Yoga Flow or Walk", sets:1, reps:"20 min"} ] },
-  { day:20, title:"Peak Day",             exercises:[ {name:"Pull-Up (Max)", sets:4, reps:"max"}, {name:"Push-Up (Max)", sets:4, reps:"max"}, {name:"Pistol Squat (Best)", sets:3, reps:"max each"}, {name:"L-Sit (Max Hold)", sets:4, reps:"max sec"}, {name:"Plank (Max)", sets:1, reps:"max sec"} ] },
-  { day:21, title:"🏆 Graduation Day",    exercises:[ {name:"Full Warm-Up", sets:1, reps:"5 min"}, {name:"Push-Up Max Test", sets:1, reps:"max — vs Day 14!"}, {name:"Pull-Up or Negative Max", sets:1, reps:"max — vs Day 14!"}, {name:"Squat Max", sets:1, reps:"max — vs Day 14!"}, {name:"Pick 1 Skill and Attempt", sets:1, reps:"best hold"}, {name:"Cooldown + Celebrate 🎉", sets:1, reps:"5 min"} ] },
-];
 
 window.DEFAULT_USERS = [
   { id:"u_admin", name:"Admin User",  email:"admin@fitflow.com", password:"admin123", tempPassword:"", isFirstLogin:false, role:"ADMIN", status:"ACTIVE", createdDate:"2025-01-01" },
