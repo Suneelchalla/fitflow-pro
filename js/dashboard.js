@@ -70,9 +70,9 @@ function renderDashboardStats() {
 
 // ── MODULE ORDER STORAGE ─────────────────────────────────────────
 const ALL_MODULES = [
-  { id: 'cardio',     name: 'Home Cardio',      emoji: '🏠', color: 'grad-cardio',  sub: '6 exercises · 6 days' },
-  { id: 'gym',        name: 'Gym Workouts',      emoji: '🏋️', color: 'grad-gym',     sub: '6 exercises · 6 days' },
-  { id: 'yoga',       name: 'Yoga',              emoji: '🧘', color: 'grad-yoga',    sub: '6 poses · 6 days' },
+  { id: 'cardio',     name: 'Home Cardio',      emoji: '🏠', color: 'grad-cardio',  sub: '8-9 exercises · 6 days' },
+  { id: 'gym',        name: 'Gym Workouts',      emoji: '🏋️', color: 'grad-gym',     sub: '8 exercises · 6 days' },
+  { id: 'yoga',       name: 'Yoga',              emoji: '🧘', color: 'grad-yoga',    sub: '8-12 poses · 6 days' },
   { id: 'running',    name: 'Running & Walking', emoji: '🏃', color: 'grad-running', sub: 'GPS tracker + plans' },
   { id: 'stretching', name: 'Stretching',        emoji: '🤸', color: 'grad-stretch', sub: '6 stretches · 6 days' },
 ];
@@ -775,7 +775,7 @@ function renderGlobalHistory() {
   document.getElementById('history-stats').innerHTML  = `
     <div class="stat-row">
       <div class="stat-card"><div class="stat-val">${logs.length}</div><div class="stat-label">Total Workouts</div></div>
-      <div class="stat-card"><div class="stat-val">${calcStreak(user.id)}</div><div class="stat-label">Day Streak 🔥</div></div>
+      <div class="stat-card"><div class="stat-val">${calcStreak(user.id)}🔥</div><div class="stat-label">Day Streak</div></div>
       <div class="stat-card"><div class="stat-val">${runLogs.length}</div><div class="stat-label">Runs Logged</div></div>
       <div class="stat-card"><div class="stat-val">${runLogs.reduce((a, r) => a + (r.distance || 0), 0).toFixed(1)}</div><div class="stat-label">Total km Run</div></div>
     </div>`;
@@ -871,7 +871,7 @@ function renderProfilePage() {
       <div class="stat-card"><div class="stat-val">${thisWeek}</div><div class="stat-label">This Week</div></div>
       <div class="stat-card"><div class="stat-val">${totalRuns}</div><div class="stat-label">Total Runs</div></div>
       <div class="stat-card"><div class="stat-val">${totalKm.toFixed(1)}</div><div class="stat-label">km Run</div></div>
-      <div class="stat-card"><div class="stat-val">${streak}🔥</div><div class="stat-label">Streak</div></div>
+      <div class="stat-card"><div class="stat-val">${favMod ? favMod[1] : 0}</div><div class="stat-label">${favMod ? getModuleName(favMod[0]).split(' ')[0] + ' Sessions' : 'Sessions'}</div></div>
     </div>
 
     <!-- Highlights -->
