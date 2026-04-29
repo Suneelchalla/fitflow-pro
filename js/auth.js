@@ -102,6 +102,9 @@ function completeLogin(user) {
   // Sync all admin-edited content from Sheets (non-blocking)
   syncContentFromSheets();
 
+  // Auto-seed exercises to Sheets if data version changed
+  _autoSeedIfVersionChanged(user);
+
   if (user.role === 'ADMIN') {
     initDashboard();
     showPage('page-admin');
@@ -271,6 +274,79 @@ function _applyToAppData(key, value) {
       APP_DATA.cooldowns[cdMatch[1]] = value;
     }
   } catch { /* silently ignore */ }
+}
+
+// ── AUTO-SEED DATA VERSION ───────────────────────────────────────
+// Runs on every login. If data.js DATA_VERSION is newer than what
+// Sheets has, pushes all exercises/warmups/cooldowns to Sheets
+// automatically — no manual admin action needed.
+async function _autoSeedIfVersionChanged(user) {
+  try {
+    const currentVersion = (typeof DATA_VERSION !== 'undefined') ? DATA_VERSION : null;
+    if (!currentVersion) return;
+
+    const storedVersion = Store.get('ff_data_version');
+    if (storedVersion === currentVersion) return;
+
+    // Version mismatch — push all module data to Sheets
+    console.log('[FitFlow] Data version changed to', currentVersion, '— seeding Sheets...');
+
+    const modules = ['cardio', 'gym', 'yoga', 'stretching'];
+    const seedPromises = [];
+
+    // Seed exercises for each module
+    modules.forEach(mod => {
+      const days = APP_DATA.modules?.[mod]?.days;
+      if (days && Object.keys(days).length > 0) {
+        seedPromises.push(
+          Sheets.post('saveContent', { key: 'exercises_' + mod, value: { days } })
+            .then(() => {
+              Store.setContent('exercises_' + mod, { days });
+              console.log('[FitFlow] Seeded exercises_' + mod);
+            })
+            .catch(e => console.warn('[FitFlow] Seed failed for exercises_' + mod, e.message))
+        );
+      }
+    });
+
+    // Seed warmups
+    const warmupMods = ['cardio','gym','yoga','running','stretching'];
+    warmupMods.forEach(mod => {
+      const wu = APP_DATA.warmups?.[mod];
+      if (wu?.length) {
+        seedPromises.push(
+          Sheets.post('saveContent', { key: 'warmup_' + mod, value: wu })
+            .then(() => {
+              Store.setContent('warmup_' + mod, wu);
+            })
+            .catch(() => {})
+        );
+      }
+    });
+
+    // Seed cooldowns
+    warmupMods.forEach(mod => {
+      const cd = APP_DATA.cooldowns?.[mod];
+      if (cd?.length) {
+        seedPromises.push(
+          Sheets.post('saveContent', { key: 'cooldown_' + mod, value: cd })
+            .then(() => {
+              Store.setContent('cooldown_' + mod, cd);
+            })
+            .catch(() => {})
+        );
+      }
+    });
+
+    await Promise.allSettled(seedPromises);
+
+    // Mark version as seeded
+    Store.set('ff_data_version', currentVersion);
+    console.log('[FitFlow] Auto-seed complete for version', currentVersion);
+
+  } catch (e) {
+    console.warn('[FitFlow] Auto-seed error:', e.message);
+  }
 }
 
 // ── FIRST LOGIN — SET PASSWORD ────────────────────────────────────
