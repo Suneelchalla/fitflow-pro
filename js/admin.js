@@ -447,6 +447,7 @@ async function _collectAndSave() {
     });
     Store.setContent('exercises_' + moduleId, result);
     if (APP_DATA.modules[moduleId]) APP_DATA.modules[moduleId].days = result.days;
+    if (window.APP_DATA_DEFAULT?.modules?.[moduleId]) window.APP_DATA_DEFAULT.modules[moduleId].days = result.days;
     await Sheets.post('saveContent', { key: 'exercises_' + moduleId, value: result });
   }
 
@@ -801,7 +802,8 @@ function addHydrationTip() {
 // RUNNING PLANS EDITOR
 // ════════════════════════════════════════════════════════════════
 function renderRunningPlansEditor(body) {
-  const plans = APP_DATA.running?.plans || {};
+  const _D = window.APP_DATA_DEFAULT || window.APP_DATA;
+  const plans = _D.running?.plans || {};
   const planKeys = Object.keys(plans);
   const activePlan = body.dataset.activePlan || planKeys[0] || '5K';
 
@@ -886,7 +888,8 @@ function _renderAdminPlanWeeks(plan, planKey) {
 async function saveRunningPlanChanges() {
   const body    = document.getElementById('editor-body');
   const planKey = body?.dataset.activePlan;
-  const plan    = APP_DATA.running?.plans?.[planKey];
+  const _D      = window.APP_DATA_DEFAULT || window.APP_DATA;
+  const plan    = _D.running?.plans?.[planKey];
   if (!plan) return;
 
   // Collect edits from DOM
