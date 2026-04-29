@@ -288,6 +288,13 @@ async function _autoSeedIfVersionChanged(user) {
     const storedVersion = Store.get('ff_data_version');
     if (storedVersion === currentVersion) return;
 
+    // Clear stale localStorage exercise/warmup/cooldown cache before seeding
+    ['cardio','gym','yoga','stretching','running'].forEach(mod => {
+      Store.remove('ff_content_exercises_' + mod);
+      Store.remove('ff_content_warmup_' + mod);
+      Store.remove('ff_content_cooldown_' + mod);
+    });
+
     // Version mismatch — push all module data to Sheets
     console.log('[FitFlow] Data version changed to', currentVersion, '— seeding Sheets...');
 
