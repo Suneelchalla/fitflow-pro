@@ -263,9 +263,7 @@ function _applyToAppData(key, value) {
     }
     const exMatch = key.match(/^exercises_(.+)$/);
     if (exMatch && value?.days && APP_DATA.modules[exMatch[1]]) {
-      let days = value.days;
-      if (days && days.days) days = days.days;
-      APP_DATA.modules[exMatch[1]].days = days;
+      APP_DATA.modules[exMatch[1]].days = value.days;
     }
     const wuMatch = key.match(/^warmup_(.+)$/);
     if (wuMatch && Array.isArray(value)) {
@@ -631,6 +629,7 @@ function renderOnboardingStep(step) {
             { id:'yoga',       emoji:'🧘', name:'Yoga',             sub:'Mind & body balance' },
             { id:'stretching', emoji:'🤸', name:'Stretching',       sub:'Flexibility & recovery' },
             { id:'running',    emoji:'🏃', name:'Running & Walking',sub:'GPS tracking + plans' },
+            { id:'calisthenics',emoji:'🤸‍♂️',name:'Calisthenics',    sub:'Bodyweight skills & progressions' },
           ].map(m => `
             <div onclick="toggleOnboardModule('${m.id}',this)"
               id="mod-${m.id}"
@@ -876,12 +875,19 @@ function completeOnboarding() {
 
   // Save preferred module order based on selections
   if (_onboardData.modules.length > 0 && typeof saveModuleOrder === 'function') {
-    const ALL = ['cardio','gym','yoga','stretching','running'];
+    const ALL = ['cardio','gym','yoga','stretching','running','calisthenics'];
     const ordered = [
       ..._onboardData.modules,
       ...ALL.filter(m => !_onboardData.modules.includes(m)),
     ];
     saveModuleOrder(user.id, ordered.map(id => ({ id })));
+  }
+
+  // Save default calisthenics equipment (no bar = safest default)
+  if (_onboardData.modules.includes('calisthenics')) {
+    if (!Store.get('ff_cali_equipment_' + user.id)) {
+      Store.set('ff_cali_equipment_' + user.id, 'none');
+    }
   }
 
   // Init push
