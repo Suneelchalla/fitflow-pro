@@ -94,31 +94,42 @@ async function attemptLogin(email, password) {
 }
 
 // ── COMPLETE LOGIN ────────────────────────────────────────────────
+function _dbg(msg) {
+  console.log('[FitFlow]', msg);
+  const el = document.getElementById('login-debug');
+  if (el) { el.style.display = 'block'; el.innerHTML += msg + '<br>'; }
+}
+
 function completeLogin(user) {
   try {
+    _dbg('1. completeLogin start role=' + user.role);
     APP.currentUser = user;
     Store.saveSession(user);
+    _dbg('2. session saved');
 
-    // Sync all admin-edited content from Sheets (non-blocking)
     syncContentFromSheets();
+    _dbg('3. sync started');
 
-    // Auto-seed exercises to Sheets if data version changed
     _autoSeedIfVersionChanged(user);
+    _dbg('4. autoseed started');
 
     if (user.role === 'ADMIN') {
+      _dbg('5. admin path');
       initDashboard();
+      _dbg('6. initDashboard done');
       showPage('page-admin');
+      _dbg('7. showPage done');
       renderAdminPanel();
+      _dbg('8. renderAdminPanel done');
       return;
     }
 
-    // Init push notifications for regular users (non-blocking)
     if (typeof initPushNotifications === 'function') initPushNotifications();
-    // Show My Plan nav tab if user has a registered plan
     if (typeof _refreshMyPlanNav === 'function') _refreshMyPlanNav();
 
     const lastQuote = Store.get('ff_quote_' + user.id);
     const today     = todayStr();
+    _dbg('5. user path lastQuote=' + lastQuote + ' today=' + today);
 
     if (lastQuote === today) {
       initDashboard();
@@ -130,12 +141,12 @@ function completeLogin(user) {
       renderQuote();
       showPage('page-quote');
     }
+    _dbg('9. done');
   } catch (err) {
     console.error('[FitFlow] completeLogin error:', err);
-    // Show error on login page so user knows what happened
+    _dbg('ERROR: ' + err.message + ' | ' + err.stack);
     const errEl = document.getElementById('login-error');
-    if (errEl) errEl.textContent = '⚠️ Login error: ' + err.message;
-    // Re-enable login button
+    if (errEl) errEl.textContent = '⚠️ ' + err.message;
     const btn = document.getElementById('login-btn');
     if (btn) { btn.disabled = false; btn.textContent = 'Sign In'; }
   }
