@@ -844,15 +844,15 @@
     }
   }
 </script>
-<script src="js/data.js?v=8"></script>
-<script src="js/app.js?v=8"></script>
-<script src="js/auth.js?v=8"></script>
-<script src="js/dashboard.js?v=8"></script>
-<script src="js/running.js?v=8"></script>
-<script src="js/admin.js?v=8"></script>
-<script src="push.js?v=8"></script>
-<script src="js/custom-workouts.js?v=8"></script>
-<script src="js/weekly-report.js?v=8"></script>
+<script src="js/data.js?v=7"></script>
+<script src="js/app.js?v=7"></script>
+<script src="js/auth.js?v=7"></script>
+<script src="js/dashboard.js?v=7"></script>
+<script src="js/running.js?v=7"></script>
+<script src="js/admin.js?v=7"></script>
+<script src="push.js?v=7"></script>
+<script src="js/custom-workouts.js?v=7"></script>
+<script src="js/weekly-report.js?v=7"></script>
 <script>
 
 // ── PROFILE DROPDOWN ──────────────────────────────────────────
@@ -1152,6 +1152,23 @@ document.addEventListener('DOMContentLoaded', () => {
         <button class="btn btn-primary btn-full" onclick="saveExerciseModal()">Save Exercise</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PAGE: CALISTHENICS                                               -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="page-calisthenics" class="page">
+  <div class="scroll-content pb-nav">
+    <div class="top-bar">
+      <button class="back-btn" onclick="showPage('page-dashboard');refreshDashboard()">‹</button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:24px">🤸‍♂️</span>
+        <span class="top-bar-title">Calisthenics</span>
+      </div>
+      <div style="width:38px"></div>
+    </div>
+    <div id="cali-page-content"></div>
   </div>
 </div>
 
