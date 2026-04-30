@@ -49,21 +49,20 @@ function renderWeeklyReport() {
   const days7 = getLast7Days();
   const dayGrid = days7.map(d => {
     const dayLogs = allLogs.filter(l => l.date === d);
-    const emojis  = [...new Set(dayLogs.map(l => getModuleEmoji(l.module.replace('custom_','').length > 8 ? 'custom' : l.module)))];
+    // FIX: custom_* module IDs should always map to the custom emoji fallback
+    const emojis  = [...new Set(dayLogs.map(l => getModuleEmoji(l.module.startsWith('custom_') ? 'custom' : l.module)))];
     const isToday = d === todayStr();
     const isFuture = d > todayStr();
     return { date: d, emojis, isToday, isFuture, count: dayLogs.length };
   });
 
   // Grade
-  const grade = activeDays >= 6 ? { letter:'A+', label:'Outstanding!', color:'var(--g4)' }
-              : activeDays >= 5 ? { letter:'A',  label:'Excellent!',   color:'var(--g4)' }
-              : activeDays >= 4 ? { letter:'B',  label:'Great job!',   color:'#43a05a'   }
-              : activeDays >= 3 ? { letter:'C',  label:'Good effort',  color:var_accent() }
-              : activeDays >= 2 ? { letter:'D',  label:'Keep going!',  color:'#fb8c00'   }
-              :                   { letter:'F',  label:'Let\'s start!', color:'var(--danger)' };
-
-  function var_accent(){ return 'var(--accent)'; }
+  const grade = activeDays >= 6 ? { letter:'A+', label:'Outstanding!', color:'var(--g4)'     }
+              : activeDays >= 5 ? { letter:'A',  label:'Excellent!',   color:'var(--g4)'     }
+              : activeDays >= 4 ? { letter:'B',  label:'Great job!',   color:'#43a05a'        }
+              : activeDays >= 3 ? { letter:'C',  label:'Good effort',  color:'var(--accent)'  }
+              : activeDays >= 2 ? { letter:'D',  label:'Keep going!',  color:'#fb8c00'        }
+              :                   { letter:'F',  label:"Let's start!", color:'var(--danger)'  };
 
   // ── Render ─────────────────────────────────────────────────────
   const container = document.getElementById('weekly-report-content');
