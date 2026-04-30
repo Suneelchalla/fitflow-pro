@@ -585,24 +585,35 @@ window.addEventListener('DOMContentLoaded', function() {
   <!-- ═══ ACTIVE RUN STATE — full-screen live map ══════════════════ -->
   <div id="run-active" class="hidden" style="display:flex;flex-direction:column;flex:1;position:relative;overflow:hidden">
 
-    <!-- Live map — fills entire background -->
+    <!-- Live map — fills entire background; pointer-events managed via CSS -->
     <div id="run-live-map" style="position:absolute;inset:0;z-index:0"></div>
 
     <!-- Top overlay: back + activity label + gps badge -->
-    <div style="position:absolute;top:0;left:0;right:0;z-index:10;
+    <div style="position:absolute;top:0;left:0;right:0;z-index:20;
       display:flex;align-items:center;justify-content:space-between;
       padding:calc(env(safe-area-inset-top,0px) + 12px) 16px 12px;
-      background:linear-gradient(to bottom,rgba(7,21,16,0.85) 0%,transparent 100%)">
-      <button class="back-btn" onclick="stopRun()" style="background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.15)">⏹</button>
-      <div style="display:flex;align-items:center;gap:8px">
+      background:linear-gradient(to bottom,rgba(7,21,16,0.85) 0%,transparent 100%);
+      pointer-events:none">
+      <div style="pointer-events:auto">
+        <button class="back-btn" onclick="showPage('page-dashboard');refreshDashboard()"
+          style="background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.15)">‹</button>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;pointer-events:none">
         <span id="run-active-label" style="font-size:15px;font-weight:700;color:#fff">🏃 Run</span>
-        <span id="run-gps-badge" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(67,160,90,0.85);color:#fff">GPS</span>
+        <span id="run-gps-badge" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(67,160,90,0.85);color:#fff">GPS ●</span>
       </div>
       <div style="width:38px"></div>
     </div>
 
-    <!-- Bottom stats panel — floats above map -->
-    <div style="position:absolute;bottom:0;left:0;right:0;z-index:10">
+    <!-- Zoom buttons — right side, middle of screen -->
+    <div style="position:absolute;right:14px;top:50%;transform:translateY(-50%);z-index:20;
+      display:flex;flex-direction:column;gap:8px;pointer-events:auto">
+      <button class="run-zoom-btn" onclick="_liveMapZoom(1)">+</button>
+      <button class="run-zoom-btn" onclick="_liveMapZoom(-1)">−</button>
+    </div>
+
+    <!-- Bottom stats panel — floats above map, full pointer-events -->
+    <div style="position:absolute;bottom:0;left:0;right:0;z-index:20;pointer-events:auto">
 
       <!-- Stats card -->
       <div style="margin:0 12px 10px;border-radius:20px;overflow:hidden;
@@ -623,7 +634,7 @@ window.addEventListener('DOMContentLoaded', function() {
           </div>
           <div class="run-stat">
             <div class="val" id="run-pace">--:--</div>
-            <div class="lbl">MIN/KM</div>
+            <div class="lbl">PACE</div>
           </div>
           <div class="run-stat">
             <div class="val" id="run-speed">0.0</div>
@@ -1146,16 +1157,16 @@ window.addEventListener('DOMContentLoaded', function() {
     }
   }
 </script>
-<script src="js/data.js?v=10"></script>
-<script src="js/data-cali.js?v=10"></script>
-<script src="js/app.js?v=10"></script>
-<script src="js/auth.js?v=10"></script>
-<script src="js/dashboard.js?v=10"></script>
-<script src="js/running.js?v=10"></script>
-<script src="js/admin.js?v=10"></script>
-<script src="push.js?v=10"></script>
-<script src="js/custom-workouts.js?v=10"></script>
-<script src="js/weekly-report.js?v=10"></script>
+<script src="js/data.js?v=11"></script>
+<script src="js/data-cali.js?v=11"></script>
+<script src="js/app.js?v=11"></script>
+<script src="js/auth.js?v=11"></script>
+<script src="js/dashboard.js?v=11"></script>
+<script src="js/running.js?v=11"></script>
+<script src="js/admin.js?v=11"></script>
+<script src="push.js?v=11"></script>
+<script src="js/custom-workouts.js?v=11"></script>
+<script src="js/weekly-report.js?v=11"></script>
 <script>
 
 // ── PROFILE DROPDOWN ──────────────────────────────────────────
@@ -1472,6 +1483,19 @@ document.addEventListener('DOMContentLoaded', () => {
       <div style="width:38px"></div>
     </div>
     <div id="cali-page-content"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- MODAL: Run / Activity Detail                                    -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="modal-run-detail" class="modal-overlay">
+  <div class="modal-sheet" style="max-height:90vh;overflow-y:auto;padding:0">
+    <div class="modal-handle" style="margin:12px auto 0"></div>
+    <div id="run-detail-content" style="padding:0 0 24px"></div>
+    <div style="padding:0 16px 8px">
+      <button class="btn btn-outline btn-full" onclick="closeModal('modal-run-detail')">Close</button>
+    </div>
   </div>
 </div>
 
