@@ -1692,6 +1692,11 @@ function checkAndUnlockAchievements(userId) {
 
   if (newUnlocks.length) {
     _saveAchievements(userId, unlocked);
+    // Persist to Sheets so achievements survive cache clears / reinstalls
+    sheetsPost('saveContent', {
+      key:   'achievements_' + userId,
+      value: unlocked,
+    });
     newUnlocks.forEach((a, i) => {
       setTimeout(() => showToast(`${a.emoji} Achievement unlocked: ${a.name}!`, 'success'), i * 1800);
     });
@@ -1723,6 +1728,11 @@ function _renderRunPBBadges(distance, elapsed) {
 
   if (badges.length) {
     _savePBs(user.id, newPbs);
+    // Persist PBs to Sheets so they survive reinstalls
+    sheetsPost('saveContent', {
+      key:   'pbs_' + user.id,
+      value: newPbs,
+    });
     el.innerHTML = badges.join('');
     el.style.display = 'flex';
   } else {
