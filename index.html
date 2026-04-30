@@ -492,117 +492,196 @@ window.addEventListener('DOMContentLoaded', function() {
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <!-- PAGE: RUNNING                                                    -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<div id="page-running" class="page">
-  <div class="scroll-content pb-nav">
+<!-- Leaflet CSS — loaded once, used for both live map and summary map -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
 
-    <div class="top-bar">
+<div id="page-running" class="page" style="flex-direction:column;overflow:hidden">
+
+  <!-- ═══ IDLE STATE — full scrollable page ═══════════════════════ -->
+  <div id="run-idle" style="display:flex;flex-direction:column;flex:1;overflow-y:auto">
+
+    <!-- Top bar -->
+    <div class="top-bar" style="flex-shrink:0">
       <button class="back-btn" onclick="showPage('page-dashboard');refreshDashboard()">‹</button>
-      <div class="top-bar-title">🏃 Running & Walking</div>
+      <div class="top-bar-title" id="run-page-title">🏃 Running & Walking</div>
       <div style="width:38px"></div>
     </div>
 
-    <!-- Run tabs -->
-    <div style="padding:12px 16px 0">
+    <!-- Run tabs (only visible when idle) -->
+    <div style="padding:0 16px 0;flex-shrink:0">
       <div class="tab-strip">
-        <button class="tab-btn run-tab-btn active" data-tab="log" onclick="renderRunningTabs('log')">📍 Log Run</button>
-        <button class="tab-btn run-tab-btn" data-tab="plans" onclick="renderRunningTabs('plans')">📋 Plans</button>
-        <button class="tab-btn run-tab-btn" data-tab="history" onclick="renderRunningTabs('history')">📊 History</button>
-        <button class="tab-btn run-tab-btn" data-tab="achievements" onclick="renderRunningTabs('achievements')">🏅 Badges</button>
-        <button class="tab-btn run-tab-btn" data-tab="hydration" onclick="renderRunningTabs('hydration')">💧 Hydration</button>
-        <button class="tab-btn run-tab-btn" data-tab="diet" onclick="renderRunningTabs('diet')">🥗 Diet</button>
+        <button class="tab-btn run-tab-btn active" data-tab="log"          onclick="renderRunningTabs('log')">📍 Log</button>
+        <button class="tab-btn run-tab-btn"         data-tab="plans"        onclick="renderRunningTabs('plans')">📋 Plans</button>
+        <button class="tab-btn run-tab-btn"         data-tab="history"      onclick="renderRunningTabs('history')">📊 History</button>
+        <button class="tab-btn run-tab-btn"         data-tab="achievements" onclick="renderRunningTabs('achievements')">🏅 Badges</button>
+        <button class="tab-btn run-tab-btn"         data-tab="hydration"    onclick="renderRunningTabs('hydration')">💧 Hydration</button>
+        <button class="tab-btn run-tab-btn"         data-tab="diet"         onclick="renderRunningTabs('diet')">🥗 Diet</button>
       </div>
     </div>
 
-    <!-- LOG RUN TAB -->
-    <div id="run-tab-log" class="run-tab-content active" style="padding:16px">
+    <!-- Tab contents -->
+    <div style="flex:1">
 
-      <!-- IDLE STATE -->
-      <div id="run-idle">
-        <div class="card" style="text-align:center;padding:36px 24px;background:linear-gradient(135deg,var(--bg2),var(--surface));margin-bottom:16px">
-          <div style="font-size:64px;margin-bottom:16px">🏃</div>
-          <div class="display" style="font-size:42px;color:var(--g5);margin-bottom:8px">START A RUN</div>
-          <div style="font-size:14px;color:var(--text2);margin-bottom:24px;line-height:1.5">GPS-tracked distance, real-time pace, and auto-saved to your history.</div>
-          <button class="btn btn-primary btn-full btn-lg" onclick="startRun()">▶ Start Run</button>
+      <!-- LOG TAB -->
+      <div id="run-tab-log" class="run-tab-content active" style="padding:16px">
+
+        <!-- Activity type selector -->
+        <div style="margin-bottom:16px">
+          <div style="font-size:12px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Activity Type</div>
+          <div style="display:flex;gap:10px">
+            <button class="activity-pill active" data-type="run"   onclick="selectActivityType('run',this)">🏃 Run</button>
+            <button class="activity-pill"        data-type="walk"  onclick="selectActivityType('walk',this)">🚶 Walk</button>
+            <button class="activity-pill"        data-type="cycle" onclick="selectActivityType('cycle',this)">🚴 Cycle</button>
+          </div>
         </div>
 
-        <div class="card card-sm" style="background:rgba(240,192,64,0.06);border-color:rgba(240,192,64,0.2)">
-          <div style="font-size:13px;color:var(--accent)">📍 Allow location access when prompted for GPS tracking. Works without GPS in time-only mode.</div>
+        <!-- Start card -->
+        <div class="card" style="text-align:center;padding:32px 24px;background:linear-gradient(135deg,var(--bg2),var(--surface));margin-bottom:14px">
+          <div style="font-size:56px;margin-bottom:12px" id="run-idle-emoji">🏃</div>
+          <div class="display" style="font-size:38px;color:var(--g5);margin-bottom:6px" id="run-idle-label">START A RUN</div>
+          <div style="font-size:13px;color:var(--text2);margin-bottom:20px;line-height:1.5">GPS-tracked distance, live map, real-time pace & speed.</div>
+          <button class="btn btn-primary btn-full btn-lg" onclick="startRun()">▶ Start</button>
         </div>
-        <div class="card card-sm" style="margin-top:10px;background:rgba(30,136,229,0.08);border-color:rgba(30,136,229,0.2)">
-          <div style="font-size:13px;color:#64b5f6">🔒 While running, your timer &amp; distance will show on the lock screen notification. Lock your phone freely!</div>
+
+        <div class="card card-sm" style="background:rgba(240,192,64,0.06);border-color:rgba(240,192,64,0.2);margin-bottom:10px">
+          <div style="font-size:13px;color:var(--accent)">📍 Allow location access when prompted. Works in time-only mode without GPS.</div>
+        </div>
+        <div class="card card-sm" style="background:rgba(30,136,229,0.08);border-color:rgba(30,136,229,0.2)">
+          <div style="font-size:13px;color:#64b5f6">🔒 Timer &amp; distance show on the lock screen while running. Lock your phone freely!</div>
         </div>
       </div>
 
-      <!-- ACTIVE RUN STATE -->
-      <div id="run-active" class="hidden">
-        <div class="card" style="background:linear-gradient(135deg,var(--g1),var(--bg2));padding:32px 20px;text-align:center;margin-bottom:16px">
-          <div style="font-size:12px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:8px">Elapsed Time</div>
+      <!-- PLANS TAB -->
+      <div id="run-tab-plans" class="run-tab-content" style="padding:16px">
+        <div id="training-plans-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px"></div>
+        <div id="plan-detail" style="display:none"></div>
+      </div>
+
+      <!-- BADGES TAB -->
+      <div id="run-tab-achievements" class="run-tab-content" style="padding:16px">
+        <div id="run-achievements-content"></div>
+      </div>
+
+      <!-- HISTORY TAB -->
+      <div id="run-tab-history" class="run-tab-content" style="padding:16px">
+        <div id="run-stats-row" style="margin-bottom:16px"></div>
+        <div class="section-title">Activity Log</div>
+        <div id="run-history-list"></div>
+      </div>
+
+      <!-- HYDRATION TAB -->
+      <div id="run-tab-hydration" class="run-tab-content">
+        <div id="run-hydration-content"></div>
+      </div>
+
+      <!-- DIET TAB -->
+      <div id="run-tab-diet" class="run-tab-content">
+        <div id="run-diet-content"></div>
+      </div>
+
+    </div>
+  </div><!-- /#run-idle -->
+
+  <!-- ═══ ACTIVE RUN STATE — full-screen live map ══════════════════ -->
+  <div id="run-active" class="hidden" style="display:flex;flex-direction:column;flex:1;position:relative;overflow:hidden">
+
+    <!-- Live map — fills entire background -->
+    <div id="run-live-map" style="position:absolute;inset:0;z-index:0"></div>
+
+    <!-- Top overlay: back + activity label + gps badge -->
+    <div style="position:absolute;top:0;left:0;right:0;z-index:10;
+      display:flex;align-items:center;justify-content:space-between;
+      padding:calc(env(safe-area-inset-top,0px) + 12px) 16px 12px;
+      background:linear-gradient(to bottom,rgba(7,21,16,0.85) 0%,transparent 100%)">
+      <button class="back-btn" onclick="stopRun()" style="background:rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.15)">⏹</button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span id="run-active-label" style="font-size:15px;font-weight:700;color:#fff">🏃 Run</span>
+        <span id="run-gps-badge" style="font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:rgba(67,160,90,0.85);color:#fff">GPS</span>
+      </div>
+      <div style="width:38px"></div>
+    </div>
+
+    <!-- Bottom stats panel — floats above map -->
+    <div style="position:absolute;bottom:0;left:0;right:0;z-index:10">
+
+      <!-- Stats card -->
+      <div style="margin:0 12px 10px;border-radius:20px;overflow:hidden;
+        background:rgba(7,21,16,0.92);backdrop-filter:blur(12px);
+        border:1px solid rgba(255,255,255,0.1);padding:20px 20px 16px">
+
+        <!-- Timer -->
+        <div style="text-align:center;margin-bottom:14px">
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Elapsed Time</div>
           <div class="run-timer" id="run-timer">00:00</div>
-          <div style="height:1px;background:var(--border);margin:20px 0"></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-            <div class="run-stat"><div class="val" id="run-dist">0.00</div><div class="lbl">KM</div></div>
-            <div class="run-stat"><div class="val" id="run-pace">--:--</div><div class="lbl">MIN/KM</div></div>
-            <div class="run-stat"><div class="val" id="run-cal">0</div><div class="lbl">KCAL</div></div>
+        </div>
+
+        <!-- Stats row: distance / pace / speed / cal -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-bottom:16px">
+          <div class="run-stat">
+            <div class="val" id="run-dist">0.00</div>
+            <div class="lbl">KM</div>
+          </div>
+          <div class="run-stat">
+            <div class="val" id="run-pace">--:--</div>
+            <div class="lbl">MIN/KM</div>
+          </div>
+          <div class="run-stat">
+            <div class="val" id="run-speed">0.0</div>
+            <div class="lbl">KM/H</div>
+          </div>
+          <div class="run-stat">
+            <div class="val" id="run-cal">0</div>
+            <div class="lbl">KCAL</div>
           </div>
         </div>
-        <div style="display:flex;gap:12px;margin-bottom:16px">
-          <button id="pause-run-btn" class="btn btn-outline btn-full" onclick="togglePauseRun()">⏸ Pause</button>
+
+        <!-- Pause / Stop buttons -->
+        <div style="display:flex;gap:10px">
+          <button id="pause-run-btn" class="btn btn-outline btn-full" onclick="togglePauseRun()"
+            style="border-color:rgba(255,255,255,0.3);color:#fff;background:rgba(255,255,255,0.08)">⏸ Pause</button>
           <button class="btn btn-danger btn-full" onclick="stopRun()">⏹ Stop</button>
         </div>
       </div>
+    </div>
+  </div><!-- /#run-active -->
 
-      <!-- RUN SUMMARY STATE -->
-      <div id="run-summary" class="hidden">
-        <div class="card" style="background:linear-gradient(135deg,var(--g1),var(--g2));text-align:center;padding:28px 20px;margin-bottom:16px">
-          <div style="font-size:48px;margin-bottom:12px">🏅</div>
-          <div class="display" style="font-size:34px;color:var(--g5);margin-bottom:16px">RUN COMPLETE!</div>
-          <!-- PB Badges -->
-          <div id="sum-pb-badges" style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:14px"></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
-            <div class="stat-card"><div class="stat-val" id="sum-dist">0.00 km</div><div class="stat-label">Distance</div></div>
-            <div class="stat-card"><div class="stat-val" id="sum-time">00:00</div><div class="stat-label">Time</div></div>
-            <div class="stat-card"><div class="stat-val" id="sum-pace">--:--</div><div class="stat-label">Pace /km</div></div>
-            <div class="stat-card"><div class="stat-val" id="sum-cal">0</div><div class="stat-label">Calories</div></div>
-          </div>
-        </div>
-        <!-- Route Map -->
-        <div id="sum-route-map" style="margin-bottom:16px"></div>
-        <div style="display:flex;gap:12px">
-          <button class="btn btn-outline btn-full" onclick="discardRun()">Discard</button>
-          <button class="btn btn-accent btn-full" onclick="saveRun()">💾 Save Run</button>
-        </div>
+  <!-- ═══ SUMMARY STATE — scrollable post-run screen ═══════════════ -->
+  <div id="run-summary" class="hidden" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+
+    <!-- Top bar -->
+    <div class="top-bar" style="flex-shrink:0">
+      <div style="width:38px"></div>
+      <div id="sum-activity-label" class="top-bar-title">🏅 Activity Complete!</div>
+      <div style="width:38px"></div>
+    </div>
+
+    <!-- Scrollable body -->
+    <div style="flex:1;overflow-y:auto;padding:0 16px 32px">
+
+      <!-- Route map on real tiles — tall card -->
+      <div id="sum-route-map" style="height:260px;border-radius:16px;overflow:hidden;margin-bottom:16px;position:relative"></div>
+
+      <!-- Stats grid -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="stat-card"><div class="stat-val" id="sum-dist">0.00 km</div><div class="stat-label">Distance</div></div>
+        <div class="stat-card"><div class="stat-val" id="sum-time">00:00</div><div class="stat-label">Time</div></div>
+        <div class="stat-card"><div class="stat-val" id="sum-pace">--:--</div><div class="stat-label">Avg Pace /km</div></div>
+        <div class="stat-card"><div class="stat-val" id="sum-speed">0.0</div><div class="stat-label">Avg Speed km/h</div></div>
+        <div class="stat-card" style="grid-column:span 2"><div class="stat-val" id="sum-cal">0 kcal</div><div class="stat-label">Calories Burned</div></div>
       </div>
 
-    </div><!-- /log tab -->
+      <!-- PB Badges -->
+      <div id="sum-pb-badges" style="display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin-bottom:16px"></div>
 
-    <!-- PLANS TAB -->
-    <div id="run-tab-plans" class="run-tab-content" style="padding:16px">
-      <div id="training-plans-list" style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px"></div>
-      <div id="plan-detail" style="display:none"></div>
+      <!-- Save / Discard -->
+      <div style="display:flex;gap:12px">
+        <button class="btn btn-outline btn-full" onclick="discardRun()">Discard</button>
+        <button class="btn btn-accent btn-full" onclick="saveRun()">💾 Save</button>
+      </div>
+
     </div>
+  </div><!-- /#run-summary -->
 
-    <!-- HISTORY TAB -->
-    <div id="run-tab-achievements" class="run-tab-content" style="padding:16px">
-      <div id="run-achievements-content"></div>
-    </div>
-
-    <div id="run-tab-history" class="run-tab-content" style="padding:16px">
-      <div id="run-stats-row" style="margin-bottom:16px"></div>
-      <div class="section-title">Run Log</div>
-      <div id="run-history-list"></div>
-    </div>
-
-    <!-- HYDRATION TAB -->
-    <div id="run-tab-hydration" class="run-tab-content">
-      <div id="run-hydration-content"></div>
-    </div>
-
-    <!-- DIET TAB -->
-    <div id="run-tab-diet" class="run-tab-content">
-      <div id="run-diet-content"></div>
-    </div>
-
-  </div><!-- /scroll-content -->
 </div><!-- /page-running -->
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
