@@ -124,10 +124,9 @@ const LockScreen = {
 
 function _lockScreenArtwork() {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-    <rect width="512" height="512" rx="80" fill="#1a5c32"/>
-    <text y="360" x="256" font-size="280" text-anchor="middle" font-family="serif">🏃</text>
-    <text y="470" x="256" font-size="72" text-anchor="middle"
-          font-family="sans-serif" fill="#7ed9a0" font-weight="bold">FitFlow</text>
+    <rect width="512" height="512" rx="80" fill="#0a3d1f"/>
+    <polygon points="290,60 180,280 255,280 220,452 340,220 265,220" fill="#4caf50"/>
+    <polygon points="290,60 180,280 255,280 220,452 340,220 265,220" fill="none" stroke="rgba(255,255,255,0.15)" stroke-width="6"/>
   </svg>`;
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
