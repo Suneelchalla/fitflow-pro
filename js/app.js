@@ -183,18 +183,29 @@ window.addEventListener('popstate', e => {
   goBack();
 });
 
-// Swipe-left → back (strict: must be clearly horizontal, not a scroll)
+// ── SWIPE-LEFT → BACK ─────────────────────────────────────────────
+// Tracks peak vertical movement during the touch to distinguish
+// a real horizontal swipe from a finger lifting off after a scroll.
 (function () {
-  let sx = 0, sy = 0;
+  let sx = 0, sy = 0, maxDy = 0;
   document.addEventListener('touchstart', e => {
-    sx = e.touches[0].clientX;
-    sy = e.touches[0].clientY;
+    sx    = e.touches[0].clientX;
+    sy    = e.touches[0].clientY;
+    maxDy = 0;
+  }, { passive: true });
+  document.addEventListener('touchmove', e => {
+    // Track the highest vertical displacement seen during this gesture
+    const dy = Math.abs(e.touches[0].clientY - sy);
+    if (dy > maxDy) maxDy = dy;
   }, { passive: true });
   document.addEventListener('touchend', e => {
     const dx = e.changedTouches[0].clientX - sx;
     const dy = Math.abs(e.changedTouches[0].clientY - sy);
-    // Much stricter: horizontal swipe must be > 80px, vertical drift < 40px
-    // AND horizontal movement must be at least 2x the vertical movement
+    // If the finger traveled more than 30px vertically at ANY point during
+    // the gesture, treat it as a scroll — never trigger swipe-back.
+    if (maxDy > 30) return;
+    // Horizontal swipe must be > 80px, final vertical drift < 40px,
+    // and horizontal movement must be at least 2x the vertical movement.
     if (dx < -80 && dy < 40 && Math.abs(dx) > dy * 2 && !ROOT_PAGES.includes(APP.currentPage)) {
       goBack();
     }
