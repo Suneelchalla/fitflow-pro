@@ -559,7 +559,7 @@ function completeDay() {
     btn.textContent = d.slice(0, 3) + (done ? ' ✓' : '');
   });
 
-  sheetsPost('logCompletion', { userId: user.id, module: mod, day, date: todayStr() });
+  sheetsPost('logCompletion', { userId: user.id, email: user.email, module: mod, day, date: todayStr() });
 }
 
 // ── MODULE INNER TABS ─────────────────────────────────────────────
@@ -1408,7 +1408,7 @@ function completeCaliDay() {
   });
   if (!logged) { showToast('Already logged today!', 'info'); return; }
   showToast('🎉 ' + day + ' calisthenics complete! 💪', 'success');
-  sheetsPost('logCompletion', { userId: user.id, module: 'calisthenics', day, date: todayStr() });
+  sheetsPost('logCompletion', { userId: user.id, email: user.email, module: 'calisthenics', day, date: todayStr() });
   updateCaliCompleteBtn();
 }
 
