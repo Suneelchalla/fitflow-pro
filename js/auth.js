@@ -111,6 +111,10 @@ function completeLogin(user) {
     if (typeof initPushNotifications === 'function') initPushNotifications();
     if (typeof _refreshMyPlanNav === 'function') _refreshMyPlanNav();
 
+    // FIX: Recover any active run session that survived a refresh or app kill.
+    // Must run before rendering dashboard so the UI reflects the in-progress run.
+    if (typeof _tryRecoverRunSession === 'function') _tryRecoverRunSession();
+
     const lastQuote = Store.get('ff_quote_' + user.id);
     const today     = todayStr();
 
@@ -558,6 +562,22 @@ async function submitChangePassword() {
 
 // ── LOGOUT ────────────────────────────────────────────────────────
 function logout() {
+  // FIX: Clean up any active run before logging out.
+  // Without this, GPS watchPosition and setInterval keep running in the
+  // background after logout — draining battery and potentially crashing.
+  if (APP.runInterval) {
+    clearInterval(APP.runInterval);
+    APP.runInterval = null;
+  }
+  if (APP.runWatchId != null) {
+    navigator.geolocation?.clearWatch(APP.runWatchId);
+    APP.runWatchId = null;
+  }
+  if (typeof LockScreen !== 'undefined') LockScreen.stop();
+  // Do NOT clear the persisted run session from storage — if the user logs
+  // back in they should be able to resume their run.
+  APP.runSession = null;
+
   Store.clearSession();
   APP.currentUser  = null;
   APP.pageHistory  = [];
