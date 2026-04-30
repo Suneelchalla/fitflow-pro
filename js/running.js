@@ -246,55 +246,75 @@ function _loadLeaflet(cb) {
   document.head.appendChild(s);
 }
 
+// ── ZOOM HELPER (called by +/− buttons) ───────────────────────────
+function _liveMapZoom(delta) {
+  if (!_liveMap) return;
+  _liveMap.zoomIn && delta > 0 ? _liveMap.zoomIn() : _liveMap.zoomOut();
+}
+
 // ── LIVE MAP (during active run) ──────────────────────────────────
 function _initLiveMap() {
   _loadLeaflet(() => {
     const container = document.getElementById('run-live-map');
     if (!container) return;
 
-    // Destroy old instance if re-entering the page
     if (_liveMap) { _liveMap.remove(); _liveMap = null; _livePolyline = null; _liveMarker = null; }
 
     const startCoord = APP.gpsCoords.length > 0
       ? [APP.gpsCoords[APP.gpsCoords.length - 1].lat, APP.gpsCoords[APP.gpsCoords.length - 1].lon]
-      : [20.5937, 78.9629]; // India centre fallback
+      : [20.5937, 78.9629];
 
     _liveMap = L.map(container, {
-      zoomControl:        false,
+      zoomControl:     false,
       attributionControl: false,
-      dragging:           true,
-      scrollWheelZoom:    false,
+      dragging:        true,
+      scrollWheelZoom: false,
+      // Disable tap handler — it conflicts with our button touch events
+      tap:             false,
+      // Keep pinch zoom enabled
+      touchZoom:       true,
+      doubleClickZoom: false,
     }).setView(startCoord, 17);
 
-    // Dark OSM tile layer (looks great on our dark theme)
+    // Re-enable pointer events on just the drag/zoom panes after init
+    // (CSS sets pointer-events:none on #run-live-map; drag pane needs auto)
+    if (container._leaflet_id) {
+      const dragPane = container.querySelector('.leaflet-drag-pane');
+      if (dragPane) dragPane.style.pointerEvents = 'auto';
+    }
+
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
     }).addTo(_liveMap);
 
-    // Live route polyline — accent2 orange like Strava
     _livePolyline = L.polyline([], {
-      color:     '#ff6b35',
-      weight:    5,
-      opacity:   0.95,
-      lineCap:   'round',
-      lineJoin:  'round',
+      color:   '#ff6b35',
+      weight:  5,
+      opacity: 0.95,
+      lineCap: 'round',
+      lineJoin:'round',
     }).addTo(_liveMap);
 
-    // Current position marker — pulsing blue dot
     const icon = L.divIcon({
       className: '',
       html: `<div style="
         width:18px;height:18px;border-radius:50%;
         background:#4285f4;border:3px solid #fff;
         box-shadow:0 0 0 6px rgba(66,133,244,0.25);
+        pointer-events:none;
       "></div>`,
       iconSize:   [18, 18],
       iconAnchor: [9, 9],
     });
-    _liveMarker = L.marker(startCoord, { icon, zIndexOffset: 1000 }).addTo(_liveMap);
+    _liveMarker = L.marker(startCoord, { icon, zIndexOffset: 1000, interactive: false }).addTo(_liveMap);
 
-    // Draw any existing coords (session recovery)
     if (APP.gpsCoords.length > 0) _redrawLivePolyline();
+
+    // After tiles load, make drag pane interactive for panning
+    _liveMap.whenReady(() => {
+      const dp = container.querySelector('.leaflet-drag-pane');
+      if (dp) dp.style.pointerEvents = 'auto';
+    });
   });
 }
 
@@ -586,6 +606,10 @@ function saveRun() {
     activityType: s.activityType || _activityType,
     planType:     ctx ? `${ctx.planKey} · Wk${ctx.week} D${ctx.day}` : (APP.selectedPlan || 'Free Run'),
     timestamp:    new Date().toISOString(),
+    // Save coords for history detail map (thin to max 500 points to keep storage small)
+    coords:       APP.gpsCoords.length > 500
+                    ? APP.gpsCoords.filter((_, i) => i % Math.ceil(APP.gpsCoords.length / 500) === 0)
+                    : APP.gpsCoords.slice(),
   };
 
   Store.addRunLog(log);
@@ -1309,41 +1333,199 @@ function renderAchievements() {
 
 function renderRunHistory() {
   const user      = APP.currentUser;
-  const logs      = Store.getUserRunLogs(user.id).sort((a, b) => b.date?.localeCompare(a.date)).slice(0, 20);
+  const logs      = Store.getUserRunLogs(user.id).sort((a, b) => (b.timestamp||b.date||'').localeCompare(a.timestamp||a.date||'')).slice(0, 30);
   const container = document.getElementById('run-history-list');
   const statsEl   = document.getElementById('run-stats-row');
+
+  // ── Summary stats ─────────────────────────────────────────────
   const totalKm   = logs.reduce((a, r) => a + (r.distance || 0), 0);
   const totalRuns = logs.length;
-  const avgPace   = logs.length ? logs.reduce((a, r) => a + (r.pace || 0), 0) / logs.length : 0;
+  const totalTime = logs.reduce((a, r) => a + (r.duration || 0), 0);
+  const totalKcal = logs.reduce((a, r) => {
+    const meta = ACTIVITY_META[r.activityType || 'run'] || ACTIVITY_META.run;
+    return a + Math.round((r.distance || 0) * meta.kcalPerKm);
+  }, 0);
 
   if (statsEl) statsEl.innerHTML = `
-    <div class="stat-row">
-      <div class="stat-card"><div class="stat-val">${totalRuns}</div><div class="stat-label">Total Runs</div></div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:4px">
+      <div class="stat-card"><div class="stat-val">${totalRuns}</div><div class="stat-label">Activities</div></div>
       <div class="stat-card"><div class="stat-val">${totalKm.toFixed(1)}</div><div class="stat-label">Total km</div></div>
-      <div class="stat-card"><div class="stat-val">${avgPace > 0 ? avgPace.toFixed(1) : '--'}</div><div class="stat-label">Avg Pace /km</div></div>
-      <div class="stat-card"><div class="stat-val">${Math.round(totalKm * 70)}</div><div class="stat-label">Total kcal</div></div>
+      <div class="stat-card"><div class="stat-val">${fmtTime(totalTime)}</div><div class="stat-label">Total Time</div></div>
+      <div class="stat-card"><div class="stat-val">${totalKcal}</div><div class="stat-label">Total kcal</div></div>
     </div>`;
 
   if (!container) return;
-  container.innerHTML = logs.length
-    ? logs.map(r => {
-        const type  = r.activityType || 'run';
-        const meta  = ACTIVITY_META[type] || ACTIVITY_META.run;
-        return `
-        <div class="card card-sm" style="margin-bottom:8px">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start">
-            <div>
-              <div style="font-weight:700;font-size:15px">${meta.emoji} ${r.planType || meta.label}</div>
-              <div style="font-size:12px;color:var(--text3);margin-top:2px">${r.date}</div>
+  if (!logs.length) {
+    container.innerHTML = '<div class="empty-state"><div class="empty-icon">🏃</div><p>No activities logged yet.<br>Start your first one!</p></div>';
+    return;
+  }
+
+  container.innerHTML = logs.map((r, idx) => {
+    const type     = r.activityType || 'run';
+    const meta     = ACTIVITY_META[type] || ACTIVITY_META.run;
+    const speedKph = r.duration > 0 ? (r.distance / r.duration * 3600) : 0;
+    const kcal     = Math.round((r.distance || 0) * meta.kcalPerKm);
+    const dateObj  = r.timestamp ? new Date(r.timestamp) : new Date(r.date);
+    const dateStr  = dateObj.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
+    const timeStr  = r.timestamp ? dateObj.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true }) : '';
+    const hasMap   = r.coords && r.coords.length >= 2;
+
+    return `
+      <div class="card" style="margin-bottom:12px;cursor:pointer;transition:transform .15s,box-shadow .15s"
+        onclick="_showRunDetail(${idx})"
+        onmousedown="this.style.transform='scale(0.98)'" onmouseup="this.style.transform=''"
+        ontouchstart="this.style.transform='scale(0.98)'" ontouchend="this.style.transform=''">
+
+        <!-- Activity header -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <div style="width:40px;height:40px;border-radius:12px;
+              background:${meta.color}22;border:1.5px solid ${meta.color}55;
+              display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">
+              ${meta.emoji}
             </div>
-            <div style="text-align:right">
-              <div style="font-family:var(--font-display);font-size:26px;color:var(--g5)">${(r.distance||0).toFixed(2)}<span style="font-size:14px;color:var(--text2)"> km</span></div>
-              <div style="font-size:12px;color:var(--text3)">${fmtTime(r.duration||0)} · ${fmtPace(r.distance,r.duration)}/km</div>
+            <div>
+              <div style="font-weight:700;font-size:15px;color:var(--text)">${meta.label} · ${r.planType || 'Free Activity'}</div>
+              <div style="font-size:12px;color:var(--text3);margin-top:1px">${dateStr}${timeStr ? ' · ' + timeStr : ''}</div>
             </div>
           </div>
-        </div>`;
-      }).join('')
-    : '<div class="empty-state"><div class="empty-icon">🏃</div><p>No activities logged yet.<br>Start your first one!</p></div>';
+          <div style="font-size:12px;color:var(--text3)">${hasMap ? '🗺' : ''} ›</div>
+        </div>
+
+        <!-- Key stats row -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;
+          background:var(--bg3);border-radius:12px;padding:12px 8px">
+          <div style="text-align:center">
+            <div style="font-family:var(--font-display);font-size:22px;color:${meta.color};line-height:1">${(r.distance||0).toFixed(2)}</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:2px;text-transform:uppercase">km</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-family:var(--font-display);font-size:22px;color:var(--g5);line-height:1">${fmtTime(r.duration||0)}</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:2px;text-transform:uppercase">time</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-family:var(--font-display);font-size:22px;color:var(--g5);line-height:1">${fmtPace(r.distance, r.duration)}</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:2px;text-transform:uppercase">pace</div>
+          </div>
+          <div style="text-align:center">
+            <div style="font-family:var(--font-display);font-size:22px;color:var(--g5);line-height:1">${kcal}</div>
+            <div style="font-size:10px;color:var(--text3);margin-top:2px;text-transform:uppercase">kcal</div>
+          </div>
+        </div>
+
+      </div>`;
+  }).join('');
+}
+
+// ── RUN DETAIL MODAL ──────────────────────────────────────────────
+let _detailMapInst = null;
+
+function _showRunDetail(idx) {
+  const user = APP.currentUser;
+  const logs = Store.getUserRunLogs(user.id)
+    .sort((a, b) => (b.timestamp||b.date||'').localeCompare(a.timestamp||a.date||''));
+  const r    = logs[idx];
+  if (!r) return;
+
+  const type     = r.activityType || 'run';
+  const meta     = ACTIVITY_META[type] || ACTIVITY_META.run;
+  const speedKph = r.duration > 0 ? (r.distance / r.duration * 3600) : 0;
+  const kcal     = Math.round((r.distance || 0) * meta.kcalPerKm);
+  const dateObj  = r.timestamp ? new Date(r.timestamp) : new Date(r.date);
+  const dateStr  = dateObj.toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+  const timeStr  = r.timestamp ? dateObj.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true }) : '';
+  const hasMap   = r.coords && r.coords.length >= 2;
+
+  const el = document.getElementById('run-detail-content');
+  el.innerHTML = `
+
+    <!-- Map section -->
+    <div id="run-detail-map" style="height:${hasMap ? '240px' : '0'};background:var(--bg3);position:relative;overflow:hidden"></div>
+
+    <!-- Content body -->
+    <div style="padding:20px 16px 8px">
+
+      <!-- Activity type + title -->
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:6px">
+        <div style="width:48px;height:48px;border-radius:14px;
+          background:${meta.color}22;border:2px solid ${meta.color}55;
+          display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0">
+          ${meta.emoji}
+        </div>
+        <div>
+          <div style="font-size:20px;font-weight:700;color:var(--text)">${meta.label}</div>
+          <div style="font-size:13px;color:var(--text3)">${r.planType || 'Free Activity'}</div>
+        </div>
+      </div>
+
+      <!-- Date + time -->
+      <div style="font-size:13px;color:var(--text3);margin-bottom:18px">${dateStr}${timeStr ? ' at ' + timeStr : ''}</div>
+
+      <!-- Stats grid — Strava-style 2 column -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border-radius:14px;overflow:hidden;margin-bottom:16px">
+        ${[
+          { label: 'Distance',   val: (r.distance||0).toFixed(2) + ' km',   color: meta.color },
+          { label: 'Time',       val: fmtTime(r.duration||0),               color: 'var(--g5)' },
+          { label: 'Avg Pace',   val: fmtPace(r.distance, r.duration) + '/km', color: 'var(--g5)' },
+          { label: 'Avg Speed',  val: speedKph.toFixed(1) + ' km/h',        color: 'var(--g5)' },
+          { label: 'Calories',   val: kcal + ' kcal',                       color: 'var(--g5)' },
+          { label: 'Activity',   val: meta.label,                           color: meta.color  },
+        ].map(s => `
+          <div style="background:var(--surface);padding:14px 16px">
+            <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px">${s.label}</div>
+            <div style="font-size:18px;font-weight:700;color:${s.color}">${s.val}</div>
+          </div>`).join('')}
+      </div>
+
+      ${!hasMap ? `<div style="text-align:center;font-size:13px;color:var(--text3);padding:8px 0">No GPS route for this activity</div>` : ''}
+    </div>`;
+
+  openModal('modal-run-detail');
+
+  // Render Leaflet map inside modal after it opens
+  if (hasMap) {
+    setTimeout(() => {
+      _loadLeaflet(() => {
+        const mapEl = document.getElementById('run-detail-map');
+        if (!mapEl) return;
+        if (_detailMapInst) { _detailMapInst.remove(); _detailMapInst = null; }
+
+        const latlngs = r.coords.map(c => [c.lat, c.lon]);
+        _detailMapInst = L.map(mapEl, {
+          zoomControl:     true,
+          attributionControl: false,
+          dragging:        true,
+          scrollWheelZoom: false,
+          tap:             false,
+          touchZoom:       true,
+          doubleClickZoom: false,
+        });
+
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+          maxZoom: 19,
+        }).addTo(_detailMapInst);
+
+        L.polyline(latlngs, {
+          color:   meta.color,
+          weight:  5,
+          opacity: 0.95,
+          lineCap: 'round',
+        }).addTo(_detailMapInst);
+
+        // Start marker
+        L.circleMarker(latlngs[0], {
+          radius: 7, fillColor: '#43a05a', color: '#fff', weight: 2, fillOpacity: 1,
+        }).addTo(_detailMapInst);
+
+        // Finish marker
+        L.circleMarker(latlngs[latlngs.length - 1], {
+          radius: 7, fillColor: meta.color, color: '#fff', weight: 2, fillOpacity: 1,
+        }).addTo(_detailMapInst);
+
+        _detailMapInst.fitBounds(L.latLngBounds(latlngs).pad(0.15));
+      });
+    }, 250); // wait for modal animation to complete before sizing map
+  }
 }
 
 // ── HYDRATION & DIET ──────────────────────────────────────────────
@@ -1587,10 +1769,13 @@ function _renderRunRouteMap(coords) {
     const latlngs = pts.map(p => [p.lat, p.lon]);
 
     _sumMap = L.map(el, {
-      zoomControl:        false,
+      zoomControl:        true,
       attributionControl: false,
       dragging:           true,
       scrollWheelZoom:    false,
+      tap:                false,
+      touchZoom:          true,
+      doubleClickZoom:    false,
     });
 
     // Dark tile layer — same as live map for consistency
