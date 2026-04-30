@@ -1037,32 +1037,9 @@ function renderProfilePage() {
 }
 
 // ── PROFILE MENU ──────────────────────────────────────────────────
-function toggleProfileMenu() {
-  const menu = document.getElementById('profile-menu');
-  if (!menu) return;
-  const isOpen = menu.style.display !== 'none';
-  menu.style.display = isOpen ? 'none' : 'block';
-  // Update profile name/email in menu
-  if (!isOpen && APP.currentUser) {
-    const el = document.getElementById('profile-menu-name');
-    const em = document.getElementById('profile-menu-email');
-    if (el) el.textContent = APP.currentUser.name;
-    if (em) em.textContent = APP.currentUser.email;
-  }
-  // Close menu when clicking outside
-  if (!isOpen) {
-    setTimeout(() => {
-      document.addEventListener('click', function handler(e) {
-        const menu = document.getElementById('profile-menu');
-        const btn  = document.getElementById('profile-btn');
-        if (menu && btn && !menu.contains(e.target) && !btn.contains(e.target)) {
-          menu.style.display = 'none';
-          document.removeEventListener('click', handler);
-        }
-      });
-    }, 10);
-  }
-}
+// NOTE: toggleProfileMenu is defined in index.html inline script (loads last,
+// wins). That version also calls updateReminderBtn() and is the authoritative
+// one. Do not redefine it here.
 
 function openEditBodyStats() {
   const user = APP.currentUser;
@@ -1147,28 +1124,10 @@ function saveBodyStatsFromModal() {
   renderProfilePage();
 }
 
-function openFeedbackModal() {
-  const menu = document.getElementById('profile-menu');
-  if (menu) menu.style.display = 'none';
-  openModal('modal-feedback');
-}
-
-function toggleNotificationSetting() {
-  const menu = document.getElementById('profile-menu');
-  if (menu) menu.style.display = 'none';
-  if (typeof PUSH !== 'undefined' && PUSH.isSupported()) {
-    PUSH.isSubscribed().then(subscribed => {
-      if (subscribed) {
-        PUSH.unsubscribe();
-        showToast('Daily reminders disabled', 'info');
-      } else {
-        acceptPushNotifications();
-      }
-    });
-  } else {
-    showToast('Push notifications not supported on this device', 'error');
-  }
-}
+// NOTE: openFeedbackModal, toggleNotificationSetting are defined in the
+// index.html inline script (loads last, wins). Those versions handle the
+// full rating UI, updateReminderBtn, and async PUSH checks. Do not
+// redefine them here.
 
 // ── CUSTOM WORKOUTS & WEEKLY REPORT RELAY ────────────────────────
 // These ensure the pages work even if their scripts load after the click
