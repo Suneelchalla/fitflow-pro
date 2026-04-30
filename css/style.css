@@ -438,9 +438,34 @@ textarea.form-input { resize: vertical; min-height: 90px; line-height: 1.5; }
 }
 
 /* Leaflet map z-index fixes inside our app */
-.leaflet-pane { z-index: 1 !important; }
-.leaflet-top, .leaflet-bottom { z-index: 2 !important; }
-.leaflet-control { z-index: 2 !important; }
+.leaflet-pane         { z-index: 1 !important; }
+.leaflet-top,
+.leaflet-bottom       { z-index: 2 !important; }
+.leaflet-control      { z-index: 2 !important; }
+
+/* The map container itself must NOT capture pointer events —
+   our Pause/Stop buttons sit in a sibling div above it.
+   Individual Leaflet panes that need interaction get pointer-events
+   restored via the selectors below. */
+#run-live-map         { pointer-events: none; }
+#run-live-map .leaflet-tile-pane,
+#run-live-map .leaflet-overlay-pane,
+#run-live-map .leaflet-marker-pane,
+#run-live-map .leaflet-popup-pane { pointer-events: none; }
+/* Re-enable drag pane so map is still pannable / pinch-zoomable */
+#run-live-map .leaflet-drag-pane  { pointer-events: auto; }
+
+/* Zoom buttons overlay on live map */
+.run-zoom-btn {
+  width: 36px; height: 36px;
+  background: rgba(7,21,16,0.82);
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 10px;
+  color: #fff; font-size: 20px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer; user-select: none;
+  backdrop-filter: blur(6px);
+}
 
 /* ── SCROLLABLE CONTENT ────────────────────────────────────────── */
 .scroll-content {
