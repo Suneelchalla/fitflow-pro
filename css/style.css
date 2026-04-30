@@ -423,8 +423,24 @@ textarea.form-input { resize: vertical; min-height: 90px; line-height: 1.5; }
   letter-spacing: 0.04em; line-height: 1; text-align: center;
 }
 .run-stat { text-align: center; }
-.run-stat .val { font-family: var(--font-display); font-size: 38px; color: var(--g5); line-height: 1; }
-.run-stat .lbl { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
+.run-stat .val { font-family: var(--font-display); font-size: 28px; color: var(--g5); line-height: 1; }
+.run-stat .lbl { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 2px; }
+
+/* Activity type pill selector */
+.activity-pill {
+  flex: 1; padding: 10px 6px; border-radius: 14px;
+  border: 2px solid var(--border); background: var(--surface);
+  color: var(--text2); font-size: 13px; font-weight: 700;
+  cursor: pointer; transition: all 0.2s; text-align: center;
+}
+.activity-pill.active {
+  border-color: var(--g4); background: rgba(46,125,70,0.2); color: var(--g5);
+}
+
+/* Leaflet map z-index fixes inside our app */
+.leaflet-pane { z-index: 1 !important; }
+.leaflet-top, .leaflet-bottom { z-index: 2 !important; }
+.leaflet-control { z-index: 2 !important; }
 
 /* ── SCROLLABLE CONTENT ────────────────────────────────────────── */
 .scroll-content {
