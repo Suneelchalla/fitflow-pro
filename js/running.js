@@ -16,6 +16,33 @@
 // ── SESSION PERSISTENCE KEY ───────────────────────────────────────
 const RUN_SESSION_KEY = 'ff_active_run';
 
+// ── ACTIVITY TYPE ─────────────────────────────────────────────────
+// 'run' | 'walk' | 'cycle'
+// Calorie multipliers (kcal/km): run=70, walk=50, cycle=40
+const ACTIVITY_META = {
+  run:   { emoji: '🏃', label: 'Run',   kcalPerKm: 70, color: '#43a05a' },
+  walk:  { emoji: '🚶', label: 'Walk',  kcalPerKm: 50, color: '#1e88e5' },
+  cycle: { emoji: '🚴', label: 'Cycle', kcalPerKm: 40, color: '#f0c040' },
+};
+let _activityType = 'run';   // selected on idle screen, saved with run
+
+function selectActivityType(type, el) {
+  _activityType = type;
+  document.querySelectorAll('.activity-pill').forEach(p => p.classList.remove('active'));
+  el.classList.add('active');
+  const meta = ACTIVITY_META[type];
+  const emojiEl = document.getElementById('run-idle-emoji');
+  const labelEl = document.getElementById('run-idle-label');
+  if (emojiEl) emojiEl.textContent = meta.emoji;
+  if (labelEl) labelEl.textContent = 'START A ' + meta.label.toUpperCase();
+}
+
+// ── LEAFLET MAP INSTANCES ─────────────────────────────────────────
+let _liveMap      = null;   // Leaflet map shown during active run
+let _livePolyline = null;   // live route polyline
+let _liveMarker   = null;   // current position marker
+let _sumMap       = null;   // Leaflet map shown in summary screen
+
 // ════════════════════════════════════════════════════════════════
 // LOCK SCREEN DISPLAY — Media Session API + Silent Audio trick
 // ════════════════════════════════════════════════════════════════
@@ -72,9 +99,10 @@ const LockScreen = {
     if (!s) return;
     const elapsed = _calcElapsed(s);
     const status  = s.paused ? '⏸ Paused' : '🏃 Running';
+    const meta    = ACTIVITY_META[s.activityType || _activityType] || ACTIVITY_META.run;
     navigator.mediaSession.metadata = new MediaMetadata({
       title:   `${status}  ${fmtTime(elapsed)}  ·  ${s.distance.toFixed(2)} km`,
-      artist:  `Pace ${fmtPace(s.distance, elapsed)} /km  ·  ${Math.round(s.distance * 70)} kcal`,
+      artist:  `Pace ${fmtPace(s.distance, elapsed)} /km  ·  ${Math.round(s.distance * meta.kcalPerKm)} kcal`,
       album:   'FitFlow Pro',
       artwork: [{ src: _lockScreenArtwork(), sizes: '512x512', type: 'image/svg+xml' }],
     });
@@ -107,18 +135,18 @@ function _lockScreenArtwork() {
 // ── SESSION PERSISTENCE ───────────────────────────────────────────
 function _saveRunSession() {
   if (!APP.runSession) return;
-  // FIX #9: store up to 2000 coords; thin if longer (keep every 2nd point)
   let coordsToSave = APP.gpsCoords;
   if (coordsToSave.length > 2000) {
     coordsToSave = coordsToSave.filter((_, i) => i % 2 === 0);
   }
   Store.set(RUN_SESSION_KEY, {
-    startTime:   APP.runSession.startTime,
-    pausedAt:    APP.runSession.pausedAt    || null,
-    totalPaused: APP.runSession.totalPaused || 0,
-    distance:    APP.runSession.distance,
-    paused:      APP.runSession.paused,
-    coords:      coordsToSave,
+    startTime:    APP.runSession.startTime,
+    pausedAt:     APP.runSession.pausedAt    || null,
+    totalPaused:  APP.runSession.totalPaused || 0,
+    distance:     APP.runSession.distance,
+    paused:       APP.runSession.paused,
+    activityType: APP.runSession.activityType || _activityType,
+    coords:       coordsToSave,
   });
 }
 
@@ -151,21 +179,22 @@ document.addEventListener('visibilitychange', () => {
 // call it whenever initRunningPage fires. Belt-and-suspenders.
 function _tryRecoverRunSession() {
   const saved = Store.get(RUN_SESSION_KEY);
-  if (!saved || APP.runSession) return;   // nothing to recover or already active
+  if (!saved || APP.runSession) return;
 
   APP.runSession = {
-    startTime:   saved.startTime,
-    pausedAt:    saved.pausedAt    || null,
-    totalPaused: saved.totalPaused || 0,
-    distance:    saved.distance    || 0,
-    paused:      saved.paused      || false,
+    startTime:    saved.startTime,
+    pausedAt:     saved.pausedAt    || null,
+    totalPaused:  saved.totalPaused || 0,
+    distance:     saved.distance    || 0,
+    paused:       saved.paused      || false,
+    activityType: saved.activityType || 'run',
   };
-  APP.gpsCoords = saved.coords || [];
+  APP.gpsCoords  = saved.coords || [];
+  _activityType  = APP.runSession.activityType;
 
   _startRunTimerLoop();
   if (!APP.runSession.paused) startGPS();
   LockScreen.start();
-
   showToast('Run restored — still tracking! 🏃', 'success');
 }
 
@@ -173,16 +202,22 @@ function _tryRecoverRunSession() {
 function initRunningPage() {
   APP.currentModule = 'running';
 
-  // Recover session (shows active-run UI if a run was in progress)
   _tryRecoverRunSession();
 
-  // If session is active, make sure UI reflects it
   if (APP.runSession) {
-    document.getElementById('run-idle')?.classList.add('hidden');
+    // Show active run UI (hides idle, shows full-screen map state)
+    document.getElementById('run-idle')?.style.setProperty('display','none');
     document.getElementById('run-active')?.classList.remove('hidden');
     document.getElementById('run-summary')?.classList.add('hidden');
     const pauseBtn = document.getElementById('pause-run-btn');
     if (pauseBtn) pauseBtn.textContent = APP.runSession.paused ? '▶ Resume' : '⏸ Pause';
+    // Re-init live map with existing coords
+    _initLiveMap();
+    if (APP.gpsCoords.length > 1) _redrawLivePolyline();
+  } else {
+    document.getElementById('run-idle')?.style.setProperty('display','flex');
+    document.getElementById('run-active')?.classList.add('hidden');
+    document.getElementById('run-summary')?.classList.add('hidden');
   }
 
   renderRunningTabs('log');
@@ -199,6 +234,98 @@ function renderRunningTabs(tab) {
   if (tab === 'achievements') renderAchievements();
   if (tab === 'hydration')    renderHydrationRunning();
   if (tab === 'diet')         renderDietRunning();
+}
+
+// ── LEAFLET LOADER ────────────────────────────────────────────────
+// Loads Leaflet JS from CDN once, then calls the callback
+function _loadLeaflet(cb) {
+  if (window.L) { cb(); return; }
+  const s = document.createElement('script');
+  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+  s.onload = cb;
+  document.head.appendChild(s);
+}
+
+// ── LIVE MAP (during active run) ──────────────────────────────────
+function _initLiveMap() {
+  _loadLeaflet(() => {
+    const container = document.getElementById('run-live-map');
+    if (!container) return;
+
+    // Destroy old instance if re-entering the page
+    if (_liveMap) { _liveMap.remove(); _liveMap = null; _livePolyline = null; _liveMarker = null; }
+
+    const startCoord = APP.gpsCoords.length > 0
+      ? [APP.gpsCoords[APP.gpsCoords.length - 1].lat, APP.gpsCoords[APP.gpsCoords.length - 1].lon]
+      : [20.5937, 78.9629]; // India centre fallback
+
+    _liveMap = L.map(container, {
+      zoomControl:        false,
+      attributionControl: false,
+      dragging:           true,
+      scrollWheelZoom:    false,
+    }).setView(startCoord, 17);
+
+    // Dark OSM tile layer (looks great on our dark theme)
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+    }).addTo(_liveMap);
+
+    // Live route polyline — accent2 orange like Strava
+    _livePolyline = L.polyline([], {
+      color:     '#ff6b35',
+      weight:    5,
+      opacity:   0.95,
+      lineCap:   'round',
+      lineJoin:  'round',
+    }).addTo(_liveMap);
+
+    // Current position marker — pulsing blue dot
+    const icon = L.divIcon({
+      className: '',
+      html: `<div style="
+        width:18px;height:18px;border-radius:50%;
+        background:#4285f4;border:3px solid #fff;
+        box-shadow:0 0 0 6px rgba(66,133,244,0.25);
+      "></div>`,
+      iconSize:   [18, 18],
+      iconAnchor: [9, 9],
+    });
+    _liveMarker = L.marker(startCoord, { icon, zIndexOffset: 1000 }).addTo(_liveMap);
+
+    // Draw any existing coords (session recovery)
+    if (APP.gpsCoords.length > 0) _redrawLivePolyline();
+  });
+}
+
+function _redrawLivePolyline() {
+  if (!_liveMap || !_livePolyline) return;
+  const latlngs = APP.gpsCoords.map(c => [c.lat, c.lon]);
+  _livePolyline.setLatLngs(latlngs);
+}
+
+function _updateLiveMap(lat, lon) {
+  if (!_liveMap) return;
+  const pos = [lat, lon];
+  if (_liveMarker) _liveMarker.setLatLng(pos);
+  _liveMap.setView(pos, _liveMap.getZoom(), { animate: true, duration: 0.8 });
+  if (_livePolyline) {
+    _livePolyline.addLatLng(pos);
+  }
+}
+
+function _destroyLiveMap() {
+  if (_liveMap) { _liveMap.remove(); _liveMap = null; }
+  _livePolyline = null;
+  _liveMarker   = null;
+}
+
+// ── GPS BADGE UPDATE ──────────────────────────────────────────────
+function _setGpsBadge(ok) {
+  const el = document.getElementById('run-gps-badge');
+  if (!el) return;
+  el.textContent        = ok ? 'GPS ●' : 'GPS ○';
+  el.style.background   = ok ? 'rgba(67,160,90,0.85)' : 'rgba(229,57,53,0.75)';
 }
 
 // ── GPS RUN TRACKER ───────────────────────────────────────────────
@@ -221,31 +348,40 @@ function startRun() {
     return;
   }
 
+  const meta = ACTIVITY_META[_activityType] || ACTIVITY_META.run;
+
   APP.runSession = {
-    startTime:   Date.now(),
-    pausedAt:    null,
-    totalPaused: 0,
-    distance:    0,
-    paused:      false,
+    startTime:    Date.now(),
+    pausedAt:     null,
+    totalPaused:  0,
+    distance:     0,
+    paused:       false,
+    activityType: _activityType,
   };
   APP.gpsCoords   = [];
   _gpsWarmupCount = 0;
   _gpsLastGoodFix = null;
   _saveRunSession();
 
+  // Update active run header label with activity type
+  const labelEl = document.getElementById('run-active-label');
+  if (labelEl) labelEl.textContent = meta.emoji + ' ' + meta.label;
+
   navigator.geolocation.getCurrentPosition(
     () => {
-      document.getElementById('run-idle').classList.add('hidden');
+      // Switch from idle → active (full-screen map layout)
+      document.getElementById('run-idle').style.display = 'none';
       document.getElementById('run-active').classList.remove('hidden');
       _startRunTimerLoop();
+      _initLiveMap();
       startGPS();
       LockScreen.start();
     },
     () => {
-      // GPS permission denied or unavailable — run in time-only mode
-      document.getElementById('run-idle').classList.add('hidden');
+      document.getElementById('run-idle').style.display = 'none';
       document.getElementById('run-active').classList.remove('hidden');
       showToast('GPS unavailable — time-only mode 🕐', 'info');
+      _initLiveMap();
       _startRunTimerLoop();
       LockScreen.start();
     },
@@ -286,25 +422,25 @@ function startGPS() {
       // FIX #2a: Reject inaccurate fixes
       if (accuracy > GPS_MIN_ACCURACY_M) return;
 
+      _setGpsBadge(true);
+
       // FIX #2b: Warmup — skip first N accurate fixes while GPS stabilises
       if (_gpsWarmupCount < GPS_WARMUP_FIXES) {
         _gpsWarmupCount++;
-        // Record position but don't measure distance yet.
-        // This anchors the starting point without accumulating jitter.
         _gpsLastGoodFix = { lat, lon, ts: Date.now() };
+        // Still update map position during warmup so user sees their dot
+        _updateLiveMap(lat, lon);
         return;
       }
 
-      // FIX #2c: Compute distance from last GOOD fix, not from raw array tail
+      // FIX #2c: Compute distance from last GOOD fix
       if (_gpsLastGoodFix) {
         const d = haversine(_gpsLastGoodFix.lat, _gpsLastGoodFix.lon, lat, lon);
         if (d >= GPS_MIN_DISTANCE_KM) {
           APP.runSession.distance += d;
           updateRunDisplay();
-          // FIX #3: save immediately on every meaningful movement
           _saveRunSession();
         }
-        // Only advance the anchor if we actually moved (filters stationary noise)
         if (d >= GPS_MIN_DISTANCE_KM) {
           _gpsLastGoodFix = { lat, lon, ts: Date.now() };
         }
@@ -312,19 +448,19 @@ function startGPS() {
         _gpsLastGoodFix = { lat, lon, ts: Date.now() };
       }
 
-      // Store coord for route map (keep clean accurate points only)
+      // Store coord and update live map
       APP.gpsCoords.push({ lat, lon, ts: Date.now() });
+      _updateLiveMap(lat, lon);
     },
 
-    // ── FIX #5: Error callback (was null — now handles GPS failures) ──
+    // ── FIX #5: Error callback ────────────────────────────────────
     err => {
       if (!APP.runSession || APP.runSession.paused) return;
+      _setGpsBadge(false);
       let msg = 'GPS signal lost.';
       if (err.code === 1) msg = 'Location access denied. Running in time-only mode.';
       else if (err.code === 3) msg = 'GPS timeout — retrying…';
       showToast(msg, 'info');
-
-      // On timeout, retry GPS after a short delay
       if (err.code === 3) {
         setTimeout(() => {
           if (APP.runSession && !APP.runSession.paused) startGPS();
@@ -339,16 +475,21 @@ function startGPS() {
 function updateRunDisplay() {
   const s = APP.runSession;
   if (!s) return;
-  const elapsed = _calcElapsed(s);
+  const elapsed  = _calcElapsed(s);
+  const meta     = ACTIVITY_META[s.activityType || _activityType] || ACTIVITY_META.run;
+  const speedKph = elapsed > 0 ? (s.distance / elapsed * 3600) : 0;
+
   const timerEl = document.getElementById('run-timer');
   const distEl  = document.getElementById('run-dist');
   const paceEl  = document.getElementById('run-pace');
+  const speedEl = document.getElementById('run-speed');
   const calEl   = document.getElementById('run-cal');
+
   if (timerEl) timerEl.textContent = fmtTime(elapsed);
   if (distEl)  distEl.textContent  = s.distance.toFixed(2);
   if (paceEl)  paceEl.textContent  = fmtPace(s.distance, elapsed);
-  // FIX #10: 70 kcal/km (was 60)
-  if (calEl)   calEl.textContent   = Math.round(s.distance * 70);
+  if (speedEl) speedEl.textContent = speedKph.toFixed(1);
+  if (calEl)   calEl.textContent   = Math.round(s.distance * meta.kcalPerKm);
 }
 
 // ── PAUSE / RESUME ────────────────────────────────────────────────
@@ -362,13 +503,14 @@ function togglePauseRun() {
       navigator.geolocation.clearWatch(APP.runWatchId);
       APP.runWatchId = null;
     }
+    _setGpsBadge(false);
   } else {
     if (APP.runSession.pausedAt) {
       APP.runSession.totalPaused += (Date.now() - APP.runSession.pausedAt);
     }
     APP.runSession.pausedAt = null;
     APP.runSession.paused   = false;
-    _gpsWarmupCount = 0;   // fresh warmup after resume (GPS likely drifted)
+    _gpsWarmupCount = 0;
     _gpsLastGoodFix = null;
     startGPS();
   }
@@ -389,13 +531,13 @@ function stopRun() {
     APP.runWatchId = null;
   }
   LockScreen.stop();
+  _destroyLiveMap();
 
   const s       = APP.runSession;
   const elapsed = s ? _calcElapsed(s) : 0;
 
-  // FIX #7: toast when run is too short instead of silent discard
   if (!s || elapsed < 10) {
-    document.getElementById('run-idle').classList.remove('hidden');
+    document.getElementById('run-idle').style.display = 'flex';
     document.getElementById('run-active').classList.add('hidden');
     APP.runSession = null;
     _clearRunSession();
@@ -403,14 +545,24 @@ function stopRun() {
     return;
   }
 
+  const meta     = ACTIVITY_META[s.activityType || _activityType] || ACTIVITY_META.run;
+  const speedKph = elapsed > 0 ? (s.distance / elapsed * 3600) : 0;
   s.finalElapsed = elapsed;
+
+  // Switch active → summary
   document.getElementById('run-active').classList.add('hidden');
   document.getElementById('run-summary').classList.remove('hidden');
-  document.getElementById('sum-dist').textContent = s.distance.toFixed(2) + ' km';
-  document.getElementById('sum-time').textContent = fmtTime(elapsed);
-  document.getElementById('sum-pace').textContent = fmtPace(s.distance, elapsed) + ' /km';
-  // FIX #10: 70 kcal/km
-  document.getElementById('sum-cal').textContent  = Math.round(s.distance * 70) + ' kcal';
+
+  // Update summary header label
+  const sumLabel = document.getElementById('sum-activity-label');
+  if (sumLabel) sumLabel.textContent = meta.emoji + ' ' + meta.label + ' Complete!';
+
+  // Fill stats
+  document.getElementById('sum-dist').textContent  = s.distance.toFixed(2) + ' km';
+  document.getElementById('sum-time').textContent  = fmtTime(elapsed);
+  document.getElementById('sum-pace').textContent  = fmtPace(s.distance, elapsed);
+  document.getElementById('sum-speed').textContent = speedKph.toFixed(1) + ' km/h';
+  document.getElementById('sum-cal').textContent   = Math.round(s.distance * meta.kcalPerKm) + ' kcal';
 
   _renderRunPBBadges(s.distance, elapsed);
   _renderRunRouteMap(APP.gpsCoords);
@@ -422,16 +574,18 @@ function saveRun() {
   const user    = APP.currentUser;
   const elapsed = s.finalElapsed || _calcElapsed(s);
   const ctx     = APP._planRunCtx || null;
+  const meta    = ACTIVITY_META[s.activityType || _activityType] || ACTIVITY_META.run;
 
   const log = {
-    userId:    user.id,
-    email:     user.email,
-    date:      todayStr(),
-    distance:  parseFloat(s.distance.toFixed(3)),
-    duration:  elapsed,
-    pace:      parseFloat((elapsed / 60 / Math.max(s.distance, 0.01)).toFixed(2)),
-    planType:  ctx ? `${ctx.planKey} · Wk${ctx.week} D${ctx.day}` : (APP.selectedPlan || 'Free Run'),
-    timestamp: new Date().toISOString(),
+    userId:       user.id,
+    email:        user.email,
+    date:         todayStr(),
+    distance:     parseFloat(s.distance.toFixed(3)),
+    duration:     elapsed,
+    pace:         parseFloat((elapsed / 60 / Math.max(s.distance, 0.01)).toFixed(2)),
+    activityType: s.activityType || _activityType,
+    planType:     ctx ? `${ctx.planKey} · Wk${ctx.week} D${ctx.day}` : (APP.selectedPlan || 'Free Run'),
+    timestamp:    new Date().toISOString(),
   };
 
   Store.addRunLog(log);
@@ -484,17 +638,23 @@ function discardRun() {
   _gpsLastGoodFix = null;
   _clearRunSession();
   LockScreen.stop();
+  _destroyLiveMap();
+
+  // Destroy summary map too to free memory
+  if (_sumMap) { _sumMap.remove(); _sumMap = null; }
+
   document.getElementById('run-summary')?.classList.add('hidden');
-  document.getElementById('run-idle')?.classList.remove('hidden');
+  document.getElementById('run-active')?.classList.add('hidden');
+  document.getElementById('run-idle').style.display = 'flex';
 }
 
 // ── BACKGROUND / FOREGROUND RECOVERY ─────────────────────────────
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible') return;
   if (!APP.runSession || APP.runSession.paused) return;
-  // Screen came back on — restart GPS (it dies when screen is off on many Androids)
-  _gpsWarmupCount = 0;   // short warmup after screen-on (GPS may have drifted)
+  _gpsWarmupCount = 0;
   _gpsLastGoodFix = null;
+  _setGpsBadge(false);   // will turn green when GPS lock re-acquired
   startGPS();
   updateRunDisplay();
   LockScreen.refresh();
@@ -1166,11 +1326,14 @@ function renderRunHistory() {
 
   if (!container) return;
   container.innerHTML = logs.length
-    ? logs.map(r => `
+    ? logs.map(r => {
+        const type  = r.activityType || 'run';
+        const meta  = ACTIVITY_META[type] || ACTIVITY_META.run;
+        return `
         <div class="card card-sm" style="margin-bottom:8px">
           <div style="display:flex;justify-content:space-between;align-items:flex-start">
             <div>
-              <div style="font-weight:700;font-size:15px">🏃 ${r.planType || 'Free Run'}</div>
+              <div style="font-weight:700;font-size:15px">${meta.emoji} ${r.planType || meta.label}</div>
               <div style="font-size:12px;color:var(--text3);margin-top:2px">${r.date}</div>
             </div>
             <div style="text-align:right">
@@ -1178,8 +1341,9 @@ function renderRunHistory() {
               <div style="font-size:12px;color:var(--text3)">${fmtTime(r.duration||0)} · ${fmtPace(r.distance,r.duration)}/km</div>
             </div>
           </div>
-        </div>`).join('')
-    : '<div class="empty-state"><div class="empty-icon">🏃</div><p>No runs logged yet.<br>Start your first run!</p></div>';
+        </div>`;
+      }).join('')
+    : '<div class="empty-state"><div class="empty-icon">🏃</div><p>No activities logged yet.<br>Start your first one!</p></div>';
 }
 
 // ── HYDRATION & DIET ──────────────────────────────────────────────
@@ -1385,12 +1549,15 @@ function _renderRunPBBadges(distance, elapsed) {
   }
 }
 
-// ── FIX #8: Route map with better scaling + deduplication ─────────
+// ── POST-RUN ROUTE MAP on real tiles (Leaflet) ────────────────────
 function _renderRunRouteMap(coords) {
   const el = document.getElementById('sum-route-map');
   if (!el) return;
 
-  // Filter valid and deduplicated coords
+  // Destroy any previous summary map
+  if (_sumMap) { _sumMap.remove(); _sumMap = null; }
+
+  // Filter and deduplicate coords
   const seen = new Set();
   const pts  = (coords || []).filter(c => {
     if (!c.lat || !c.lon) return false;
@@ -1400,43 +1567,78 @@ function _renderRunRouteMap(coords) {
     return true;
   });
 
-  if (pts.length < 2) { el.innerHTML = ''; return; }
+  const meta = ACTIVITY_META[APP.runSession?.activityType || _activityType] || ACTIVITY_META.run;
 
-  const lats = pts.map(p => p.lat);
-  const lons = pts.map(p => p.lon);
-  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
-  const minLon = Math.min(...lons), maxLon = Math.max(...lons);
+  // No route — show placeholder
+  if (pts.length < 2) {
+    el.style.height     = '120px';
+    el.style.background = 'var(--bg3)';
+    el.style.display    = 'flex';
+    el.style.alignItems = 'center';
+    el.style.justifyContent = 'center';
+    el.innerHTML = `<div style="font-size:13px;color:var(--text3)">No GPS route recorded</div>`;
+    return;
+  }
 
-  // FIX #8: Use 20% padding, ensure minimum range so tiny runs look sensible
-  const latRange = Math.max(maxLat - minLat, 0.0003);
-  const lonRange = Math.max(maxLon - minLon, 0.0003);
-  const padPct   = 0.12;
+  // el is already sized 260px tall via inline style in HTML
+  el.innerHTML = '';
 
-  const W = 340, H = 200;
-  const toX = lon => ((lon - minLon) / lonRange * (1 - 2*padPct) + padPct) * W;
-  const toY = lat => ((1 - (lat - minLat) / latRange) * (1 - 2*padPct) + padPct) * H;
+  _loadLeaflet(() => {
+    const latlngs = pts.map(p => [p.lat, p.lon]);
 
-  const pathD  = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${toX(p.lon).toFixed(1)},${toY(p.lat).toFixed(1)}`).join(' ');
-  const start  = pts[0];
-  const end    = pts[pts.length - 1];
+    _sumMap = L.map(el, {
+      zoomControl:        false,
+      attributionControl: false,
+      dragging:           true,
+      scrollWheelZoom:    false,
+    });
 
-  el.innerHTML = `
-    <div class="card card-sm" style="padding:12px">
-      <div style="font-size:12px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">📍 Your Route</div>
-      <svg viewBox="0 0 ${W} ${H}" width="100%" style="border-radius:8px;background:var(--bg3)">
-        <line x1="0" y1="${H/2}" x2="${W}" y2="${H/2}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
-        <line x1="${W/2}" y1="0" x2="${W/2}" y2="${H}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>
-        <path d="${pathD}" fill="none" stroke="rgba(46,125,70,0.3)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
-        <path d="${pathD}" fill="none" stroke="var(--g4)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-        <circle cx="${toX(start.lon).toFixed(1)}" cy="${toY(start.lat).toFixed(1)}" r="6" fill="var(--g5)" stroke="white" stroke-width="2"/>
-        <circle cx="${toX(end.lon).toFixed(1)}" cy="${toY(end.lat).toFixed(1)}" r="6" fill="var(--accent)" stroke="white" stroke-width="2"/>
-      </svg>
-      <div style="display:flex;gap:16px;margin-top:8px;font-size:11px;color:var(--text3)">
-        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--g5);margin-right:4px;vertical-align:middle"></span>Start</span>
-        <span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--accent);margin-right:4px;vertical-align:middle"></span>Finish</span>
-        <span style="margin-left:auto">${pts.length} GPS points</span>
-      </div>
-    </div>`;
+    // Dark tile layer — same as live map for consistency
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+    }).addTo(_sumMap);
+
+    // Route polyline — activity-colored (orange for run, blue for walk, yellow for cycle)
+    const routeColor = meta.color;
+    L.polyline(latlngs, {
+      color:   routeColor,
+      weight:  5,
+      opacity: 0.95,
+      lineCap: 'round',
+    }).addTo(_sumMap);
+
+    // Start dot — green
+    L.circleMarker(latlngs[0], {
+      radius:      7,
+      fillColor:   '#43a05a',
+      color:       '#fff',
+      weight:      2,
+      fillOpacity: 1,
+    }).bindTooltip('Start', { permanent: false }).addTo(_sumMap);
+
+    // Finish dot — activity color
+    L.circleMarker(latlngs[latlngs.length - 1], {
+      radius:      7,
+      fillColor:   routeColor,
+      color:       '#fff',
+      weight:      2,
+      fillOpacity: 1,
+    }).bindTooltip('Finish', { permanent: false }).addTo(_sumMap);
+
+    // Fit map to route bounds with padding
+    const bounds = L.latLngBounds(latlngs).pad(0.15);
+    _sumMap.fitBounds(bounds);
+
+    // GPS point count label
+    const countDiv = L.control({ position: 'bottomright' });
+    countDiv.onAdd = () => {
+      const d = L.DomUtil.create('div');
+      d.style.cssText = 'background:rgba(7,21,16,0.75);color:rgba(255,255,255,0.6);font-size:10px;padding:3px 8px;border-radius:8px;pointer-events:none';
+      d.textContent   = pts.length + ' GPS points';
+      return d;
+    };
+    countDiv.addTo(_sumMap);
+  });
 }
 
 // ── PLAN COMPLETION CERTIFICATE ───────────────────────────────────
