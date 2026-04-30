@@ -129,7 +129,9 @@ function showToast(msg, type = 'success') {
 }
 
 // ── PAGE ROUTING ─────────────────────────────────────────────────
-const ROOT_PAGES = ['page-login', 'page-dashboard', 'page-admin', 'page-quote', 'page-onboarding', 'page-my-plan'];
+// page-running is a ROOT_PAGE so the global swipe-back gesture never
+// fires while a run is active — map panning was triggering goBack().
+const ROOT_PAGES = ['page-login', 'page-dashboard', 'page-admin', 'page-quote', 'page-onboarding', 'page-my-plan', 'page-running'];
 
 function showPage(id, addToHistory = true) {
   const prev = APP.currentPage;
@@ -292,7 +294,14 @@ window.addEventListener('popstate', e => {
 
 // ── MODAL ─────────────────────────────────────────────────────────
 function openModal(id)  { document.getElementById(id)?.classList.add('open'); }
-function closeModal(id) { document.getElementById(id)?.classList.remove('open'); }
+function closeModal(id) {
+  document.getElementById(id)?.classList.remove('open');
+  // Clean up run detail Leaflet map to free memory
+  if (id === 'modal-run-detail' && typeof _detailMapInst !== 'undefined' && _detailMapInst) {
+    _detailMapInst.remove();
+    _detailMapInst = null;
+  }
+}
 
 // ── BOTTOM NAV — single definition ───────────────────────────────
 function setActiveNav(tab) {
