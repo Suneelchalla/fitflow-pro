@@ -138,7 +138,8 @@ function completeLogin(user) {
 }
 
 // ── SYNC FROM SHEETS (background, non-blocking) ──────────────────
-// Fetches: all admin content edits + user's own workout logs + run logs + plan progress
+// Fetches: content edits + workout logs + run logs + plan progress
+// + custom workouts + achievements + PBs
 async function syncContentFromSheets() {
   const cfg  = Store.getSheetsConfig();
   const user = APP.currentUser;
@@ -146,9 +147,11 @@ async function syncContentFromSheets() {
 
   await Promise.all([
     _syncContent(),
-    user ? _syncUserLogs(user.id)        : Promise.resolve(),
-    user ? _syncUserRunLogs(user.id)     : Promise.resolve(),
-    user ? _syncPlanProgress(user.id)    : Promise.resolve(),
+    user ? _syncUserLogs(user.id)          : Promise.resolve(),
+    user ? _syncUserRunLogs(user.id)        : Promise.resolve(),
+    user ? _syncPlanProgress(user.id)       : Promise.resolve(),
+    user ? _syncCustomWorkouts(user.id)     : Promise.resolve(),
+    user ? _syncAchievementsAndPBs(user.id) : Promise.resolve(),
   ]);
 }
 
@@ -201,16 +204,25 @@ async function _syncUserRunLogs(userId) {
     const local = Store.getRunLogs();
     let changed = false;
     res.logs.forEach(sheetLog => {
-      // Deduplicate by date + planType + distance (close enough for runs)
       const exists = local.find(l =>
-        l.userId   === sheetLog.userId &&
-        l.date     === sheetLog.date   &&
+        l.userId   === sheetLog.userId   &&
+        l.date     === sheetLog.date     &&
         l.planType === sheetLog.planType &&
         Math.abs((l.distance||0) - (sheetLog.distance||0)) < 0.01
       );
       if (!exists) {
         local.push({ ...sheetLog, id: sheetLog.id || 'run_' + Date.now() + Math.random() });
         changed = true;
+      } else {
+        // Patch missing fields on existing local log (activityType, coords)
+        let patched = false;
+        if (!exists.activityType && sheetLog.activityType) {
+          exists.activityType = sheetLog.activityType; patched = true;
+        }
+        if ((!exists.coords || !exists.coords.length) && sheetLog.coords?.length) {
+          exists.coords = sheetLog.coords; patched = true;
+        }
+        if (patched) changed = true;
       }
     });
     if (changed) Store.set('ff_runlogs', local);
@@ -255,6 +267,76 @@ async function _syncPlanProgress(userId) {
     });
   } catch (e) {
     console.warn('Plan progress sync skipped:', e.message);
+  }
+}
+
+// ── SYNC CUSTOM WORKOUTS ──────────────────────────────────────────
+// Backend stores custom workouts in the CustomWorkouts sheet.
+// On login/reinstall we pull them back into localStorage so
+// the user's routines are never lost.
+async function _syncCustomWorkouts(userId) {
+  try {
+    const res = await Sheets.get('getCustomWorkouts', { userId });
+    if (!res?.success || !Array.isArray(res.workouts) || !res.workouts.length) return;
+
+    const key   = 'ff_custom_workouts_' + userId;
+    const local = Store.get(key, []);
+    let changed = false;
+
+    res.workouts.forEach(w => {
+      const exists = local.find(l => l.id === w.id);
+      if (!exists) {
+        local.push(w);
+        changed = true;
+      }
+      // If server version is newer (updatedDate), overwrite local
+      else if (w.updatedDate && exists.updatedDate && w.updatedDate > exists.updatedDate) {
+        const idx = local.indexOf(exists);
+        local[idx] = w;
+        changed = true;
+      }
+    });
+
+    if (changed) Store.set(key, local);
+  } catch (e) {
+    console.warn('Custom workouts sync skipped:', e.message);
+  }
+}
+
+// ── SYNC ACHIEVEMENTS & PBs ───────────────────────────────────────
+// Achievements and Personal Bests are saved to the Content sheet
+// under keys 'achievements_{userId}' and 'pbs_{userId}'.
+// On login we pull them back so badges/PBs survive reinstalls.
+async function _syncAchievementsAndPBs(userId) {
+  try {
+    // Achievements
+    const achRes = await Sheets.get('getContent', { key: 'achievements_' + userId });
+    if (achRes?.success && achRes.content && typeof achRes.content === 'object') {
+      const localKey = 'ff_achievements_' + userId;
+      const local    = Store.get(localKey, {});
+      // Merge — server wins for any key it has that local doesn't
+      let changed = false;
+      Object.entries(achRes.content).forEach(([id, val]) => {
+        if (!local[id]) { local[id] = val; changed = true; }
+      });
+      if (changed) Store.set(localKey, local);
+    }
+
+    // Personal Bests
+    const pbRes = await Sheets.get('getContent', { key: 'pbs_' + userId });
+    if (pbRes?.success && pbRes.content && typeof pbRes.content === 'object') {
+      const localKey = 'ff_pbs_' + userId;
+      const local    = Store.get(localKey, { distance: 0, pace: 9999, duration: 0 });
+      const server   = pbRes.content;
+      let changed = false;
+      // Take the better value for each PB
+      if ((server.distance || 0) > (local.distance || 0)) { local.distance = server.distance; changed = true; }
+      if ((server.pace     || 9999) < (local.pace  || 9999)) { local.pace  = server.pace;  changed = true; }
+      if ((server.duration || 0) > (local.duration || 0)) { local.duration = server.duration; changed = true; }
+      if (changed) Store.set(localKey, local);
+    }
+  } catch (e) {
+    console.warn('Achievements/PBs sync skipped:', e.message);
   }
 }
 
