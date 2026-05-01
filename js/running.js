@@ -763,14 +763,16 @@ function _markPlanDayDone(planKey, week, day, distKm, durSecs) {
   }
   if (distKm > 0 || durSecs > 0) {
     const log = {
-      userId:    user.id,
-      email:     user.email,
-      date:      today,
-      distance:  parseFloat((distKm  || 0).toFixed(3)),
-      duration:  durSecs || 0,
-      pace:      (durSecs && distKm > 0) ? parseFloat((durSecs / 60 / distKm).toFixed(2)) : 0,
-      planType:  `${planKey} · Wk${week} D${day}`,
-      timestamp: new Date().toISOString(),
+      userId:       user.id,
+      email:        user.email,
+      date:         today,
+      distance:     parseFloat((distKm  || 0).toFixed(3)),
+      duration:     durSecs || 0,
+      pace:         (durSecs && distKm > 0) ? parseFloat((durSecs / 60 / distKm).toFixed(2)) : 0,
+      planType:     `${planKey} · Wk${week} D${day}`,
+      timestamp:    new Date().toISOString(),
+      activityType: 'run',  // manual plan entries are always runs
+      coords:       [],     // no GPS data for manual entries
     };
     Store.addRunLog(log);
     sheetsPost('logRun', log);
@@ -1629,14 +1631,28 @@ function renderDietRunning() {
 }
 
 // ── PERSONAL BESTS — per activity type ───────────────────────────
-// Keys: ff_pbs_{userId}_{activityType}  e.g. ff_pbs_u123_run
+// Stored in BOTH localStorage (fast) and Sheets Content (persistent across reinstalls).
+// On reinstall: localStorage is empty, so _getPBs falls back to Store.getContent
+// which is populated by syncContentFromSheets() on login.
 function _getPBs(userId, activityType) {
-  const type = activityType || 'run';
-  return Store.get('ff_pbs_' + userId + '_' + type, { distance: 0, pace: 9999, duration: 0, count: 0 });
+  const type     = activityType || 'run';
+  const localKey = 'ff_pbs_' + userId + '_' + type;
+  const local    = Store.get(localKey);
+  if (local) return local;
+  // Fallback: try Sheets-synced content (populated after login sync)
+  const fromSheets = Store.getContent('pbs_' + userId + '_' + type);
+  if (fromSheets) {
+    // Restore to localStorage for fast future access
+    Store.set(localKey, fromSheets);
+    return fromSheets;
+  }
+  return { distance: 0, pace: 9999, duration: 0, count: 0 };
 }
 function _savePBs(userId, pbs, activityType) {
   const type = activityType || 'run';
+  // Save to both localStorage and content cache so getContent finds it too
   Store.set('ff_pbs_' + userId + '_' + type, pbs);
+  Store.setContent('pbs_' + userId + '_' + type, pbs);
 }
 
 // ── ACHIEVEMENT BADGES ────────────────────────────────────────────
