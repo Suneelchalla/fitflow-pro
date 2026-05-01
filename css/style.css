@@ -699,6 +699,8 @@ textarea.form-input { resize: vertical; min-height: 90px; line-height: 1.5; }
 .cal-day[onclick]:active { transform: scale(0.88); opacity: .75; }
 .history-day-card { transition: transform .12s ease, opacity .12s ease; }
 .history-day-card:active { transform: scale(0.975); opacity: 0.82; }
+.run-history-card { transition: transform .12s ease, opacity .12s ease; }
+.run-history-card:active { transform: scale(0.975); opacity: 0.82; }
 .cal-day.completed.today {
   border: 2px solid var(--accent);
   background: var(--g3);
