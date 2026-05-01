@@ -56,7 +56,7 @@ function renderDashboardStats() {
   if (dayEl)    dayEl.textContent    = dayName() + ', ' + new Date().toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
   if (greetEl)  greetEl.textContent  = getGreeting() + ', ' + user.name.split(' ')[0] + '!';
 
-  const weekTarget  = 5 * 6;
+  const weekTarget  = 7; // target 7 workout sessions per week (1 per day)
   const pct         = Math.min(100, Math.round(thisWeekLogs.length / weekTarget * 100));
   const ring        = document.getElementById('dash-ring');
   const ringPctEl   = document.getElementById('dash-ring-pct');
@@ -323,6 +323,8 @@ function renderAnnouncementBanner() {
 // ── OPEN MODULE ───────────────────────────────────────────────────
 function openModule(moduleId) {
   APP.currentModule = moduleId;
+  // Persist so page refresh can restore the user to this module
+  if (APP.currentUser) Store.set('ff_last_module_' + APP.currentUser.id, moduleId);
   if (moduleId === 'running') {
     showPage('page-running');
     initRunningPage();
@@ -748,9 +750,11 @@ function renderModuleHistory(moduleId) {
 // buildCalendar — rich version with emoji, red marks, today ring
 // logs: array of { date, module } — all activity logs for this user
 // moduleFilter: optional — if set, only show that module's emoji
-function buildCalendar(logs, moduleFilter) {
+// year/month: optional — if set, shows that month (for history nav); defaults to current month
+function buildCalendar(logs, moduleFilter, year, month) {
   const now         = new Date();
-  const year        = now.getFullYear(), month = now.getMonth();
+  if (year  === undefined) year  = now.getFullYear();
+  if (month === undefined) month = now.getMonth();
   const firstDay    = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const todayD      = now.getDate();
@@ -764,6 +768,9 @@ function buildCalendar(logs, moduleFilter) {
     if (!dateMap[d]) dateMap[d] = new Set();
     dateMap[d].add(getModuleEmoji(l.module));
   });
+
+  // Month + Year header inside the calendar card (shown for module-level calendars only)
+  const monthLabel = new Date(year, month, 1).toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
 
   const headers = ['S','M','T','W','T','F','S']
     .map(d => `<div class="cal-day header">${d}</div>`).join('');
@@ -832,36 +839,64 @@ function buildCalendar(logs, moduleFilter) {
       <span><span style="display:inline-block;width:14px;height:14px;border-radius:4px;border:2px solid var(--accent);margin-right:4px;vertical-align:middle"></span>Today</span>
     </div>`;
 
-  return `<div class="cal-grid">${headers}${cells}</div>${legend}`;
+  return `<div style="text-align:center;font-size:13px;font-weight:700;color:var(--text2);margin-bottom:8px;letter-spacing:.04em">${monthLabel}</div><div class="cal-grid">${headers}${cells}</div>${legend}`;
 }
 
 // ── GLOBAL HISTORY ────────────────────────────────────────────────
-function renderGlobalHistory() {
-  const user    = APP.currentUser;
-  const logs    = Store.getUserLogs(user.id).sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
-  const runLogs = Store.getUserRunLogs(user.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+// Track which month/year the calendar is showing
+let _historyYear  = new Date().getFullYear();
+let _historyMonth = new Date().getMonth(); // 0-indexed
 
-  document.getElementById('history-cal').innerHTML    = buildCalendar(logs); // pass full logs for emoji
-  document.getElementById('history-stats').innerHTML  = `
-    <div class="stat-row">
-      <div class="stat-card"><div class="stat-val">${logs.length}</div><div class="stat-label">Total Workouts</div></div>
-      <div class="stat-card"><div class="stat-val">${calcStreak(user.id)}🔥</div><div class="stat-label">Day Streak</div></div>
-      <div class="stat-card"><div class="stat-val">${runLogs.length}</div><div class="stat-label">Runs Logged</div></div>
-      <div class="stat-card"><div class="stat-val">${runLogs.reduce((a, r) => a + (r.distance || 0), 0).toFixed(1)}</div><div class="stat-label">Total km Run</div></div>
-    </div>`;
+function changeHistoryMonth(delta) {
+  _historyMonth += delta;
+  if (_historyMonth > 11) { _historyMonth = 0;  _historyYear++; }
+  if (_historyMonth < 0)  { _historyMonth = 11; _historyYear--; }
+  // Disable next button if we're in the current month
+  const now = new Date();
+  const nextBtn = document.getElementById('history-next-btn');
+  if (nextBtn) {
+    nextBtn.disabled = (_historyYear === now.getFullYear() && _historyMonth >= now.getMonth());
+  }
+  _renderHistoryCalendar();
+}
 
-  // Group logs by date to show multiple activities per day clearly
+function _renderHistoryCalendar() {
+  const user  = APP.currentUser;
+  const logs  = Store.getUserLogs(user.id);
+  const label = document.getElementById('history-month-label');
+  const now   = new Date();
+
+  // Update month label
+  const displayDate = new Date(_historyYear, _historyMonth, 1);
+  const monthName   = displayDate.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+  if (label) label.textContent = monthName;
+
+  // Disable next button if at current month
+  const nextBtn = document.getElementById('history-next-btn');
+  if (nextBtn) {
+    nextBtn.disabled = (_historyYear === now.getFullYear() && _historyMonth >= now.getMonth());
+    nextBtn.style.opacity = nextBtn.disabled ? '0.3' : '1';
+  }
+
+  document.getElementById('history-cal').innerHTML = buildCalendar(logs, null, _historyYear, _historyMonth);
+
+  // Filter activity log to selected month
+  const monthStr = `${_historyYear}-${String(_historyMonth + 1).padStart(2, '0')}`;
+  const monthLogs = logs.filter(l => (l.date || '').startsWith(monthStr));
   const groupedByDate = {};
-  logs.forEach(l => {
+  monthLogs.forEach(l => {
     if (!groupedByDate[l.date]) groupedByDate[l.date] = [];
     groupedByDate[l.date].push(l);
   });
-  const sortedDates = Object.keys(groupedByDate).sort().reverse().slice(0, 20);
+  const sortedDates = Object.keys(groupedByDate).sort().reverse();
+
+  const logTitle = document.getElementById('history-log-title');
+  if (logTitle) logTitle.textContent = `Activity Log — ${monthName}`;
 
   document.getElementById('history-log').innerHTML = sortedDates.length
     ? sortedDates.map(date => {
-        const dayLogs  = groupedByDate[date];
-        const dayLabel = dayLogs[0]?.day || '';
+        const dayLogs    = groupedByDate[date];
+        const dayLabel   = dayLogs[0]?.day || '';
         const activities = dayLogs.map(l =>
           `<span class="badge badge-green" style="margin-right:4px;margin-bottom:4px">
             ${getModuleEmoji(l.module)} ${getModuleName(l.module)}
@@ -881,11 +916,53 @@ function renderGlobalHistory() {
             <div style="display:flex;flex-wrap:wrap">${activities}</div>
           </div>`;
       }).join('')
-    : '<div class="empty-state"><div class="empty-icon">📋</div><p>No activity yet. Start working out!</p></div>';
+    : '<div class="empty-state"><div class="empty-icon">📋</div><p>No activity this month.</p></div>';
 }
 
-function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🤸', running: '🏃', calisthenics: '🤸‍♂️' }[mod] || '💪'; }
-function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics' }[mod] || mod; }
+function renderGlobalHistory() {
+  // Reset to current month whenever we open the history page
+  _historyYear  = new Date().getFullYear();
+  _historyMonth = new Date().getMonth();
+
+  const user    = APP.currentUser;
+  const logs    = Store.getUserLogs(user.id).sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+  const runLogs = Store.getUserRunLogs(user.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+  document.getElementById('history-stats').innerHTML  = `
+    <div class="stat-row">
+      <div class="stat-card"><div class="stat-val">${logs.length}</div><div class="stat-label">Total Workouts</div></div>
+      <div class="stat-card"><div class="stat-val">${calcStreak(user.id)}🔥</div><div class="stat-label">Day Streak</div></div>
+      <div class="stat-card"><div class="stat-val">${runLogs.length}</div><div class="stat-label">Runs Logged</div></div>
+      <div class="stat-card"><div class="stat-val">${runLogs.reduce((a, r) => a + (r.distance || 0), 0).toFixed(1)}</div><div class="stat-label">Total km Run</div></div>
+    </div>`;
+
+  // Render month calendar + activity log for current month
+  _renderHistoryCalendar();
+
+  // Dummy block to keep syntax consistent — actual log rendering is in _renderHistoryCalendar
+  if (false) { const sortedDates = []; sortedDates.map(date => {
+        const dayLogs  = [];
+        const dayLabel = '';
+        const activities = '';
+        return `
+          <div class="card card-sm" style="margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+              <div>
+                <div style="font-weight:700;font-size:14px">${date}</div>
+                <div style="font-size:12px;color:var(--text3)">${dayLabel}</div>
+              </div>
+              <div style="font-family:var(--font-display);font-size:22px;color:var(--g5)">${dayLogs.length}
+                <span style="font-size:12px;color:var(--text3)">activit${dayLogs.length > 1 ? 'ies' : 'y'}</span>
+              </div>
+            </div>
+            <div style="display:flex;flex-wrap:wrap">${activities}</div>
+          </div>`;
+      }).join('');
+  }
+}
+
+function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🤸', running: '🏃', calisthenics: '🤸‍♂️', core: '🔥' }[mod] || '💪'; }
+function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics', core: 'Core & Abs' }[mod] || mod; }
 
 // ════════════════════════════════════════════════════════════════
 // USER PROFILE PAGE
