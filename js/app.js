@@ -381,7 +381,10 @@ function getMonday() {
   return d.toISOString().split('T')[0];
 }
 function calcStreak(uid) {
-  const dates = [...new Set(Store.getUserLogs(uid).map(l => l.date))].sort().reverse();
+  // Merge workout dates AND run dates — a run day counts toward streak
+  const workoutDates = Store.getUserLogs(uid).map(l => l.date);
+  const runDates     = Store.getUserRunLogs(uid).map(r => r.date);
+  const dates = [...new Set([...workoutDates, ...runDates])].sort().reverse();
   if (!dates.length) return 0;
   let streak = 0, cur = new Date();
   for (let i = 0; i < 60; i++) {
@@ -410,6 +413,94 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   window.history.replaceState({ page: 'page-login' }, '', '#page-login');
+
+  // ── OFFLINE INDICATOR ─────────────────────────────────────────────
+  function _updateOnlineStatus() {
+    let bar = document.getElementById('offline-bar');
+    if (navigator.onLine) {
+      if (bar) { bar.style.transform = 'translateY(-100%)'; setTimeout(() => bar?.remove(), 400); }
+    } else {
+      if (!bar) {
+        bar = document.createElement('div');
+        bar.id = 'offline-bar';
+        bar.innerHTML = '📶 No internet — app works offline, sync paused';
+        bar.style.cssText = `position:fixed;top:0;left:0;right:0;z-index:99998;
+          background:rgba(229,57,53,0.92);color:#fff;font-size:12px;font-weight:600;
+          text-align:center;padding:8px 16px;transition:transform .3s ease;
+          transform:translateY(0);letter-spacing:.03em`;
+        document.body.prepend(bar);
+      }
+    }
+  }
+  window.addEventListener('online',  _updateOnlineStatus);
+  window.addEventListener('offline', _updateOnlineStatus);
+  _updateOnlineStatus();
+
+  // ── PWA INSTALL PROMPT ────────────────────────────────────────────
+  let _deferredInstallPrompt = null;
+
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    _deferredInstallPrompt = e;
+    // Show banner after 30s on dashboard (not on first visit, not if already installed)
+    const alreadyDismissed = Store.get('ff_install_dismissed');
+    if (!alreadyDismissed) {
+      setTimeout(() => _showInstallBanner(), 30000);
+    }
+  });
+
+  window.addEventListener('appinstalled', () => {
+    Store.set('ff_install_dismissed', true);
+    const b = document.getElementById('install-banner');
+    if (b) b.remove();
+    showToast('FitFlow Pro installed! 🎉 Find it on your home screen.', 'success');
+  });
+
+  window.showInstallPrompt = async function() {
+    if (!_deferredInstallPrompt) {
+      showToast('Open in Chrome browser to install FitFlow Pro on your home screen.', 'info');
+      return;
+    }
+    _deferredInstallPrompt.prompt();
+    const { outcome } = await _deferredInstallPrompt.userChoice;
+    _deferredInstallPrompt = null;
+    if (outcome === 'accepted') Store.set('ff_install_dismissed', true);
+  };
+
+  function _showInstallBanner() {
+    if (!_deferredInstallPrompt) return;
+    if (Store.get('ff_install_dismissed')) return;
+    if (document.getElementById('install-banner')) return;
+
+    const banner = document.createElement('div');
+    banner.id = 'install-banner';
+    banner.style.cssText = `
+      position:fixed;bottom:90px;left:12px;right:12px;z-index:400;
+      background:linear-gradient(135deg,#0d2a1a,#1a4a28);
+      border:1px solid var(--g3);border-radius:16px;padding:14px 16px;
+      box-shadow:0 8px 32px rgba(0,0,0,0.5);
+      animation:slideUp .3s ease both;max-width:456px;margin:0 auto;
+    `;
+    banner.innerHTML = `
+      <div style="display:flex;align-items:center;gap:12px">
+        <div style="font-size:32px;flex-shrink:0">📲</div>
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:14px;margin-bottom:3px">Add to Home Screen</div>
+          <div style="font-size:12px;color:var(--text2);line-height:1.4">Install FitFlow Pro for quick access — works offline too!</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button onclick="Store.set('ff_install_dismissed',true);document.getElementById('install-banner').remove()"
+          style="flex:1;padding:9px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:13px;cursor:pointer">
+          Not now
+        </button>
+        <button onclick="window.showInstallPrompt()"
+          style="flex:2;padding:9px;border-radius:10px;border:none;background:var(--g4);color:#fff;font-size:13px;font-weight:700;cursor:pointer">
+          📲 Install App
+        </button>
+      </div>`;
+    document.body.appendChild(banner);
+  }
 
   document.querySelectorAll('.modal-overlay').forEach(mo => {
     mo.addEventListener('click', e => { if (e.target === mo) mo.classList.remove('open'); });
