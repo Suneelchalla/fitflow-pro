@@ -1,7 +1,4 @@
 // ── DEFAULT DATA ─────────────────────────────────────────────────
-// Bump this number whenever exercise data changes — triggers auto-seed to Sheets
-const DATA_VERSION = 17;
-
 window.APP_DATA = {
 
   quotes: [
@@ -280,8 +277,6 @@ window.APP_DATA = {
         ],
       }
     },
-  },
-
 
     core: {
       name: "Core & Abs",
@@ -338,6 +333,7 @@ window.APP_DATA = {
         ],
       }
     },
+  },
   running: {
     plans: {
       "5K":  { color:"#43a05a", emoji:"🏃",   weeks:6,  desc:"Beginner-friendly. Build from 2km to 5km in 6 weeks.", schedule:[
