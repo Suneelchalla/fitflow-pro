@@ -559,7 +559,7 @@ function completeDay() {
     btn.textContent = d.slice(0, 3) + (done ? ' ✓' : '');
   });
 
-  sheetsPost('logCompletion', { userId: user.id, email: user.email, module: mod, day, date: todayStr() });
+  sheetsPost('logCompletion', { userId: user.id, module: mod, day, date: todayStr() });
 }
 
 // ── MODULE INNER TABS ─────────────────────────────────────────────
@@ -702,8 +702,16 @@ function renderModuleHistory(moduleId) {
   if (!container) return;
   const user = APP.currentUser;
   const logs = Store.getModuleDayLogs(user.id, moduleId).sort((a, b) => b.date.localeCompare(a.date));
-  // Ensure all logs carry the module field for calendar emoji rendering
   const logsWithModule = logs.map(l => ({ ...l, module: l.module || moduleId }));
+
+  const now = new Date();
+  // Use a module-specific month state
+  if (!APP._moduleCalMonth) APP._moduleCalMonth = {};
+  if (!APP._moduleCalMonth[moduleId]) APP._moduleCalMonth[moduleId] = { y: now.getFullYear(), m: now.getMonth() };
+  const { y, m } = APP._moduleCalMonth[moduleId];
+
+  const monthLabel = new Date(y, m, 1).toLocaleDateString('en-IN', { month:'long', year:'numeric' });
+  const isCurrentMonth = y === now.getFullYear() && m === now.getMonth();
 
   const logsHtml = logs.length
     ? logs.slice(0, 30).map(l => `
@@ -719,154 +727,321 @@ function renderModuleHistory(moduleId) {
 
   container.innerHTML = `
     <div style="padding:16px">
-      <div class="section-title">This Month</div>
-      <div class="card" style="margin-bottom:16px">${buildCalendar(logsWithModule, moduleId)}</div>
-      <div class="section-title">Recent Log</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <button class="btn btn-ghost btn-sm" onclick="changeModuleCalMonth('${moduleId}',-1)" style="font-size:18px;padding:6px 14px">‹</button>
+        <div style="font-weight:700;font-size:14px">${monthLabel}</div>
+        <button class="btn btn-ghost btn-sm" onclick="changeModuleCalMonth('${moduleId}',1)"
+          style="font-size:18px;padding:6px 14px" ${isCurrentMonth?'disabled':''}>›</button>
+      </div>
+      <div class="card" style="margin-bottom:16px">${buildCalendar(logsWithModule, moduleId, y, m, 'module')}</div>
+      <div class="section-title" style="margin-bottom:8px">Recent Log</div>
       <div id="module-history-log">${logsHtml}</div>
     </div>`;
 }
 
-// buildCalendar — rich version with emoji, red marks, today ring
-// logs: array of { date, module } — all activity logs for this user
-// moduleFilter: optional — if set, only show that module's emoji
-function buildCalendar(logs, moduleFilter) {
-  const now         = new Date();
-  const year        = now.getFullYear(), month = now.getMonth();
+function changeModuleCalMonth(moduleId, delta) {
+  if (!APP._moduleCalMonth) APP._moduleCalMonth = {};
+  if (!APP._moduleCalMonth[moduleId]) {
+    const n = new Date();
+    APP._moduleCalMonth[moduleId] = { y: n.getFullYear(), m: n.getMonth() };
+  }
+  let { y, m } = APP._moduleCalMonth[moduleId];
+  m += delta;
+  if (m < 0)  { m = 11; y--; }
+  if (m > 11) { m = 0;  y++; }
+  APP._moduleCalMonth[moduleId] = { y, m };
+  renderModuleHistory(moduleId);
+}
+
+// buildCalendar — month-navigable, tappable cells
+// year/month: 0-based month. context: 'global'|'module' for onclick routing.
+// logs: [{date, module}], moduleFilter: optional string
+function buildCalendar(logs, moduleFilter, year, month, context) {
+  const now      = new Date();
+  if (year  === undefined) year  = now.getFullYear();
+  if (month === undefined) month = now.getMonth();
+
   const firstDay    = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const todayD      = now.getDate();
   const todayStr_   = now.toISOString().split('T')[0];
+  const ctx         = context || 'global';
 
-  // Build a map: dateStr → [emoji, emoji, ...]
+  // Build date → emoji set map
   const dateMap = {};
   logs.forEach(l => {
     const d = l.date || '';
     if (!d) return;
+    const [ly, lm] = d.split('-').map(Number);
+    if (ly !== year || lm !== month + 1) return;  // only current month's dots
     if (!dateMap[d]) dateMap[d] = new Set();
-    dateMap[d].add(getModuleEmoji(l.module));
+    const emoji = l.module === 'running'
+      ? (l.activityType === 'walk' ? '🚶' : l.activityType === 'cycle' ? '🚴' : '🏃')
+      : getModuleEmoji(l.module);
+    dateMap[d].add(emoji);
   });
 
   const headers = ['S','M','T','W','T','F','S']
     .map(d => `<div class="cal-day header">${d}</div>`).join('');
 
   const offset = firstDay === 0 ? 6 : firstDay - 1;
-  let cells = Array(offset).fill('<div class="cal-day" style="background:transparent"></div>').join('');
+  let cells = Array(offset).fill('<div class="cal-day" style="background:transparent;border:none"></div>').join('');
 
   for (let d = 1; d <= daysInMonth; d++) {
-    const dateStr = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    const isToday = dateStr === todayStr_;
-    const isFuture = new Date(dateStr) > now && dateStr !== todayStr_;
-    const emojis  = dateMap[dateStr] ? [...dateMap[dateStr]] : [];
+    const dateStr  = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isToday  = dateStr === todayStr_;
+    const isFuture = dateStr > todayStr_;
+    const emojis   = dateMap[dateStr] ? [...dateMap[dateStr]] : [];
     const hasActivity = emojis.length > 0;
-
-    // Red mark: past day (not today, not future) with no activity
-    const isPast = !isToday && !isFuture;
+    const isPast   = !isToday && !isFuture;
     const isMissed = isPast && !hasActivity;
 
     let cellClass = 'cal-day';
-    let innerHtml  = '';
+    let inner = '';
 
     if (isFuture) {
-      // Future days — neutral, just show number
       cellClass += ' cal-future';
-      innerHtml  = d;
+      inner = d;
     } else if (isToday && !hasActivity) {
-      // Today with no activity — show number with today ring
       cellClass += ' today';
-      innerHtml  = d;
+      inner = d;
     } else if (isToday && hasActivity) {
-      // Today with activity — green + emoji
       cellClass += ' completed today';
-      innerHtml  = emojis[0]; // show first emoji
+      inner = `<span style="font-size:14px;line-height:1">${emojis[0]}</span>`;
     } else if (isMissed) {
-      // Past day, no activity — red mark
       cellClass += ' cal-missed';
-      innerHtml  = `<span style="font-size:9px;opacity:0.7">${d}</span>`;
+      inner = `<span style="font-size:9px;opacity:0.7">${d}</span>`;
     } else if (hasActivity) {
       cellClass += ' completed';
       if (emojis.length === 1) {
-        // Single activity — show emoji nicely
-        innerHtml = `<span style="font-size:14px;line-height:1">${emojis[0]}</span>`;
+        inner = `<span style="font-size:14px;line-height:1">${emojis[0]}</span>`;
       } else if (emojis.length === 2) {
-        // Two activities — show both small
-        innerHtml = `<span style="font-size:10px;line-height:1">${emojis[0]}${emojis[1]}</span>`;
+        inner = `<span style="font-size:10px;line-height:1">${emojis[0]}${emojis[1]}</span>`;
       } else {
-        // 3+ activities — show first emoji + count badge
-        innerHtml = `<span style="font-size:10px;line-height:1">${emojis[0]}<sup style="font-size:8px;font-weight:700">+${emojis.length - 1}</sup></span>`;
+        inner = `<span style="font-size:10px;line-height:1">${emojis[0]}<sup style="font-size:8px;font-weight:700">+${emojis.length-1}</sup></span>`;
       }
     } else {
-      innerHtml = d;
+      inner = d;
     }
 
-    // Add tooltip showing all activities done that day
-    const tooltip = emojis.length > 0
-      ? `${dateStr} — ${emojis.join(' ')}`
-      : dateStr;
-    cells += `<div class="${cellClass}" title="${tooltip}">${innerHtml}</div>`;
+    // Tappable — opens day detail for past/today; noop for future
+    const clickable = !isFuture;
+    const onclick   = clickable ? `onclick="showDayDetail('${dateStr}','${ctx}','${moduleFilter||''}')"` : '';
+    const cursor    = clickable ? 'cursor:pointer;' : '';
+
+    cells += `<div class="${cellClass}" style="${cursor}" ${onclick} title="${dateStr}">${inner}</div>`;
   }
 
-  // Legend
   const legend = `
     <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:12px;font-size:11px;color:var(--text3)">
-      <span><span style="display:inline-block;width:14px;height:14px;border-radius:4px;background:var(--g3);margin-right:4px;vertical-align:middle"></span>Activity done</span>
+      <span><span style="display:inline-block;width:14px;height:14px;border-radius:4px;background:var(--g3);margin-right:4px;vertical-align:middle"></span>Active</span>
       <span><span style="display:inline-block;width:14px;height:14px;border-radius:4px;background:rgba(229,57,53,0.5);margin-right:4px;vertical-align:middle"></span>Missed</span>
       <span><span style="display:inline-block;width:14px;height:14px;border-radius:4px;border:2px solid var(--accent);margin-right:4px;vertical-align:middle"></span>Today</span>
+      <span style="margin-left:auto;font-size:10px">Tap any day for details</span>
     </div>`;
 
   return `<div class="cal-grid">${headers}${cells}</div>${legend}`;
 }
+    const isToday = dateStr === todayStr_;
 
 // ── GLOBAL HISTORY ────────────────────────────────────────────────
+// Month navigation state
+let _historyYear  = null;
+let _historyMonth = null;
+
+function changeHistoryMonth(delta) {
+  if (_historyYear === null) {
+    const n = new Date();
+    _historyYear  = n.getFullYear();
+    _historyMonth = n.getMonth();
+  }
+  _historyMonth += delta;
+  if (_historyMonth < 0)  { _historyMonth = 11; _historyYear--; }
+  if (_historyMonth > 11) { _historyMonth = 0;  _historyYear++; }
+  renderGlobalHistory();
+}
+
 function renderGlobalHistory() {
   const user    = APP.currentUser;
-  const logs    = Store.getUserLogs(user.id).sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
-  const runLogs = Store.getUserRunLogs(user.id).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+  const allLogs = Store.getUserLogs(user.id);
+  const runLogs = Store.getUserRunLogs(user.id);
 
-  document.getElementById('history-cal').innerHTML    = buildCalendar(logs); // pass full logs for emoji
-  document.getElementById('history-stats').innerHTML  = `
+  const now = new Date();
+  if (_historyYear  === null) _historyYear  = now.getFullYear();
+  if (_historyMonth === null) _historyMonth = now.getMonth();
+  const isCurrentMonth = _historyYear === now.getFullYear() && _historyMonth === now.getMonth();
+
+  const monthLabel = new Date(_historyYear, _historyMonth, 1)
+    .toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+  const labelEl = document.getElementById('history-month-label');
+  if (labelEl) labelEl.textContent = monthLabel;
+  const nextBtn = document.getElementById('history-next-btn');
+  if (nextBtn) nextBtn.disabled = isCurrentMonth;
+
+  const totalKm = runLogs.reduce((a, r) => a + (r.distance || 0), 0);
+  document.getElementById('history-stats').innerHTML = `
     <div class="stat-row">
-      <div class="stat-card"><div class="stat-val">${logs.length}</div><div class="stat-label">Total Workouts</div></div>
+      <div class="stat-card"><div class="stat-val">${allLogs.length}</div><div class="stat-label">Total Workouts</div></div>
       <div class="stat-card"><div class="stat-val">${calcStreak(user.id)}🔥</div><div class="stat-label">Day Streak</div></div>
-      <div class="stat-card"><div class="stat-val">${runLogs.length}</div><div class="stat-label">Runs Logged</div></div>
-      <div class="stat-card"><div class="stat-val">${runLogs.reduce((a, r) => a + (r.distance || 0), 0).toFixed(1)}</div><div class="stat-label">Total km Run</div></div>
+      <div class="stat-card"><div class="stat-val">${runLogs.length}</div><div class="stat-label">Activities</div></div>
+      <div class="stat-card"><div class="stat-val">${totalKm.toFixed(1)}</div><div class="stat-label">Total km</div></div>
     </div>`;
 
-  // Group logs by date to show multiple activities per day clearly
+  const combinedForCal = [
+    ...allLogs,
+    ...runLogs.map(r => ({ date: r.date, module: 'running', activityType: r.activityType || 'run' })),
+  ];
+  document.getElementById('history-cal').innerHTML =
+    buildCalendar(combinedForCal, null, _historyYear, _historyMonth, 'global');
+
+  const monthStr      = `${_historyYear}-${String(_historyMonth+1).padStart(2,'0')}`;
+  const monthWorkouts = allLogs.filter(l => (l.date || '').startsWith(monthStr));
+  const monthRuns     = runLogs.filter(r => (r.date || '').startsWith(monthStr));
+
   const groupedByDate = {};
-  logs.forEach(l => {
-    if (!groupedByDate[l.date]) groupedByDate[l.date] = [];
-    groupedByDate[l.date].push(l);
+  monthWorkouts.forEach(l => {
+    if (!groupedByDate[l.date]) groupedByDate[l.date] = { workouts: [], runs: [] };
+    groupedByDate[l.date].workouts.push(l);
   });
-  const sortedDates = Object.keys(groupedByDate).sort().reverse().slice(0, 20);
+  monthRuns.forEach(r => {
+    if (!groupedByDate[r.date]) groupedByDate[r.date] = { workouts: [], runs: [] };
+    groupedByDate[r.date].runs.push(r);
+  });
+
+  const sortedDates  = Object.keys(groupedByDate).sort().reverse();
+  const logTitleEl   = document.getElementById('history-log-title');
+  if (logTitleEl) logTitleEl.textContent = monthLabel + ' — Activity Log';
+
+  const AMETA = { run:{emoji:'🏃',label:'Run',color:'#43a05a'}, walk:{emoji:'🚶',label:'Walk',color:'#1e88e5'}, cycle:{emoji:'🚴',label:'Cycle',color:'#f0c040'} };
 
   document.getElementById('history-log').innerHTML = sortedDates.length
     ? sortedDates.map(date => {
-        const dayLogs  = groupedByDate[date];
-        const dayLabel = dayLogs[0]?.day || '';
-        const activities = dayLogs.map(l =>
-          `<span class="badge badge-green" style="margin-right:4px;margin-bottom:4px">
-            ${getModuleEmoji(l.module)} ${getModuleName(l.module)}
-          </span>`
-        ).join('');
+        const { workouts, runs } = groupedByDate[date];
+        const dateLabel = new Date(date).toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short' });
+        const totalCount = workouts.length + runs.length;
+        const items = [
+          ...workouts.map(l => `
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+              <span style="font-size:20px;width:28px;text-align:center">${getModuleEmoji(l.module)}</span>
+              <div style="flex:1">
+                <div style="font-weight:600;font-size:13px">${getModuleName(l.module)}</div>
+                <div style="font-size:11px;color:var(--text3)">${l.day || 'Workout'}</div>
+              </div>
+              <span class="badge badge-green" style="font-size:10px">✓ Done</span>
+            </div>`),
+          ...runs.map(r => {
+            const m = AMETA[r.activityType||'run'] || AMETA.run;
+            return `
+            <div style="display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border)">
+              <span style="font-size:20px;width:28px;text-align:center">${m.emoji}</span>
+              <div style="flex:1">
+                <div style="font-weight:600;font-size:13px">${m.label} · ${r.planType || 'Free ' + m.label}</div>
+                <div style="font-size:11px;color:var(--text3)">${(r.distance||0).toFixed(2)} km · ${fmtTime(r.duration||0)} · ${fmtPace(r.distance,r.duration)}/km</div>
+              </div>
+              <span class="badge badge-blue" style="font-size:10px">${(r.distance||0).toFixed(2)} km</span>
+            </div>`;
+          }),
+        ].join('');
         return `
-          <div class="card card-sm" style="margin-bottom:8px">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-              <div>
-                <div style="font-weight:700;font-size:14px">${date}</div>
-                <div style="font-size:12px;color:var(--text3)">${dayLabel}</div>
-              </div>
-              <div style="font-family:var(--font-display);font-size:22px;color:var(--g5)">${dayLogs.length}
-                <span style="font-size:12px;color:var(--text3)">activit${dayLogs.length > 1 ? 'ies' : 'y'}</span>
-              </div>
+          <div class="card card-sm" style="margin-bottom:10px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+              <div style="font-weight:700;font-size:14px">${dateLabel}</div>
+              <div style="font-size:12px;color:var(--text3)">${totalCount} activit${totalCount>1?'ies':'y'}</div>
             </div>
-            <div style="display:flex;flex-wrap:wrap">${activities}</div>
+            ${items}
           </div>`;
       }).join('')
-    : '<div class="empty-state"><div class="empty-icon">📋</div><p>No activity yet. Start working out!</p></div>';
+    : `<div class="empty-state"><div class="empty-icon">📋</div><p>No activity in ${monthLabel}.<br>Keep going!</p></div>`;
 }
 
-function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🤸', running: '🏃', calisthenics: '🤸‍♂️' }[mod] || '💪'; }
-function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics' }[mod] || mod; }
+// ── DAY DETAIL MODAL ──────────────────────────────────────────────
+function showDayDetail(dateStr, context, moduleFilter) {
+  const user     = APP.currentUser;
+  const workouts = Store.getUserLogs(user.id).filter(l => l.date === dateStr);
+  const runs     = Store.getUserRunLogs(user.id).filter(r => r.date === dateStr);
+  const dateObj  = new Date(dateStr);
+  const dateLabel = dateObj.toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+
+  const AMETA = {
+    run:   { emoji:'🏃', label:'Run',   color:'#43a05a' },
+    walk:  { emoji:'🚶', label:'Walk',  color:'#1e88e5' },
+    cycle: { emoji:'🚴', label:'Cycle', color:'#f0c040' },
+  };
+
+  const total = workouts.length + runs.length;
+  if (total === 0) {
+    const today = new Date().toISOString().split('T')[0];
+    const msg = dateStr > today ? 'Future date — nothing logged yet.' : 'No activity logged on this day.';
+    document.getElementById('day-detail-content').innerHTML = `
+      <div style="text-align:center;padding:20px">
+        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px">${dateLabel}</div>
+        <div class="empty-icon">📋</div>
+        <p style="color:var(--text3);font-size:13px">${msg}</p>
+      </div>`;
+    openModal('modal-day-detail');
+    return;
+  }
+
+  const items = [
+    ...workouts.map(l => `
+      <div style="display:flex;align-items:center;gap:12px;padding:12px;
+        background:var(--bg3);border-radius:12px;margin-bottom:8px">
+        <div style="width:44px;height:44px;border-radius:12px;background:var(--surface);
+          display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">
+          ${getModuleEmoji(l.module)}
+        </div>
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:14px">${getModuleName(l.module)}</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px">${l.day || 'Workout'} · Completed</div>
+        </div>
+        <span class="badge badge-green">✓ Done</span>
+      </div>`),
+    ...runs.map(r => {
+      const m = AMETA[r.activityType||'run'] || AMETA.run;
+      const speedKph = r.duration > 0 ? (r.distance / r.duration * 3600) : 0;
+      const kcalRates = { run:70, walk:50, cycle:40 };
+      const kcal = Math.round((r.distance||0) * (kcalRates[r.activityType||'run'] || 70));
+      return `
+        <div style="border-radius:14px;overflow:hidden;margin-bottom:8px;border:1px solid ${m.color}33">
+          <div style="background:${m.color}18;padding:12px 14px;display:flex;align-items:center;gap:10px">
+            <div style="width:44px;height:44px;border-radius:12px;background:${m.color}22;
+              display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0">
+              ${m.emoji}
+            </div>
+            <div>
+              <div style="font-weight:700;font-size:14px;color:var(--text)">${m.label} · ${r.planType || 'Free '+m.label}</div>
+              <div style="font-size:12px;color:var(--text3);margin-top:2px">
+                ${r.timestamp ? new Date(r.timestamp).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',hour12:true}) : ''}
+              </div>
+            </div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border)">
+            ${[
+              ['Distance',  (r.distance||0).toFixed(2)+' km'],
+              ['Time',      fmtTime(r.duration||0)],
+              ['Avg Pace',  fmtPace(r.distance,r.duration)+'/km'],
+              ['Avg Speed', speedKph.toFixed(1)+' km/h'],
+              ['Calories',  kcal+' kcal'],
+              ['Activity',  m.label],
+            ].map(([lbl,val]) => `
+              <div style="background:var(--surface);padding:10px 12px">
+                <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px">${lbl}</div>
+                <div style="font-size:15px;font-weight:700;color:var(--text)">${val}</div>
+              </div>`).join('')}
+          </div>
+        </div>`;
+    }),
+  ].join('');
+
+  document.getElementById('day-detail-content').innerHTML = `
+    <div style="font-size:13px;color:var(--text3);margin-bottom:14px;font-weight:600">${dateLabel}</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:12px">${total} activit${total>1?'ies':'y'}</div>
+    ${items}`;
+
+  openModal('modal-day-detail');
+}
+
+function getModuleEmoji(mod) { return { cardio:'🏠', gym:'🏋️', yoga:'🧘', stretching:'🤸', running:'🏃', calisthenics:'🤸‍♂️' }[mod] || '💪'; }
+function getModuleName(mod)  { return { cardio:'Home Cardio', gym:'Gym Workouts', yoga:'Yoga', stretching:'Stretching', running:'Running', calisthenics:'Calisthenics' }[mod] || mod; }
 
 // ════════════════════════════════════════════════════════════════
 // USER PROFILE PAGE
@@ -1037,9 +1212,32 @@ function renderProfilePage() {
 }
 
 // ── PROFILE MENU ──────────────────────────────────────────────────
-// NOTE: toggleProfileMenu is defined in index.html inline script (loads last,
-// wins). That version also calls updateReminderBtn() and is the authoritative
-// one. Do not redefine it here.
+function toggleProfileMenu() {
+  const menu = document.getElementById('profile-menu');
+  if (!menu) return;
+  const isOpen = menu.style.display !== 'none';
+  menu.style.display = isOpen ? 'none' : 'block';
+  // Update profile name/email in menu
+  if (!isOpen && APP.currentUser) {
+    const el = document.getElementById('profile-menu-name');
+    const em = document.getElementById('profile-menu-email');
+    if (el) el.textContent = APP.currentUser.name;
+    if (em) em.textContent = APP.currentUser.email;
+  }
+  // Close menu when clicking outside
+  if (!isOpen) {
+    setTimeout(() => {
+      document.addEventListener('click', function handler(e) {
+        const menu = document.getElementById('profile-menu');
+        const btn  = document.getElementById('profile-btn');
+        if (menu && btn && !menu.contains(e.target) && !btn.contains(e.target)) {
+          menu.style.display = 'none';
+          document.removeEventListener('click', handler);
+        }
+      });
+    }, 10);
+  }
+}
 
 function openEditBodyStats() {
   const user = APP.currentUser;
@@ -1124,10 +1322,28 @@ function saveBodyStatsFromModal() {
   renderProfilePage();
 }
 
-// NOTE: openFeedbackModal, toggleNotificationSetting are defined in the
-// index.html inline script (loads last, wins). Those versions handle the
-// full rating UI, updateReminderBtn, and async PUSH checks. Do not
-// redefine them here.
+function openFeedbackModal() {
+  const menu = document.getElementById('profile-menu');
+  if (menu) menu.style.display = 'none';
+  openModal('modal-feedback');
+}
+
+function toggleNotificationSetting() {
+  const menu = document.getElementById('profile-menu');
+  if (menu) menu.style.display = 'none';
+  if (typeof PUSH !== 'undefined' && PUSH.isSupported()) {
+    PUSH.isSubscribed().then(subscribed => {
+      if (subscribed) {
+        PUSH.unsubscribe();
+        showToast('Daily reminders disabled', 'info');
+      } else {
+        acceptPushNotifications();
+      }
+    });
+  } else {
+    showToast('Push notifications not supported on this device', 'error');
+  }
+}
 
 // ── CUSTOM WORKOUTS & WEEKLY REPORT RELAY ────────────────────────
 // These ensure the pages work even if their scripts load after the click
@@ -1408,7 +1624,7 @@ function completeCaliDay() {
   });
   if (!logged) { showToast('Already logged today!', 'info'); return; }
   showToast('🎉 ' + day + ' calisthenics complete! 💪', 'success');
-  sheetsPost('logCompletion', { userId: user.id, email: user.email, module: 'calisthenics', day, date: todayStr() });
+  sheetsPost('logCompletion', { userId: user.id, module: 'calisthenics', day, date: todayStr() });
   updateCaliCompleteBtn();
 }
 
