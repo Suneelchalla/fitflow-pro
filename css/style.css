@@ -211,6 +211,12 @@ textarea.form-input { resize: vertical; min-height: 90px; line-height: 1.5; }
   scrollbar-width: none;
 }
 .tab-strip::-webkit-scrollbar { display: none; }
+
+/* Rest timer / auto-pause slide-up animation */
+@keyframes slideUp {
+  from { transform: translateX(-50%) translateY(20px); opacity: 0; }
+  to   { transform: translateX(-50%) translateY(0);    opacity: 1; }
+}
 .tab-btn {
   flex-shrink: 0; padding: 8px 18px; border-radius: 50px;
   font-size: 13px; font-weight: 600; letter-spacing: 0.03em;
@@ -414,6 +420,18 @@ textarea.form-input { resize: vertical; min-height: 90px; line-height: 1.5; }
   to   { background-position: 200% 0; }
 }
 .animate-in { animation: fadeUp 0.4s cubic-bezier(0.4,0,0.2,1) both; }
+@keyframes slideUp {
+  from { transform: translateX(-50%) translateY(20px); opacity: 0; }
+  to   { transform: translateX(-50%) translateY(0);    opacity: 1; }
+}
+@keyframes fadeDown {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(10px); }
+}
+@keyframes confettiFall {
+  0%   { transform: translateY(-10px) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+}
 .animate-in-1 { animation-delay: 0.05s; }
 .animate-in-2 { animation-delay: 0.10s; }
 .animate-in-3 { animation-delay: 0.15s; }
