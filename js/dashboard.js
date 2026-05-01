@@ -1097,10 +1097,8 @@ function _renderDayActivityLog(allLogs) {
         .findIndex(r => r.date === _selectedHistoryDate) : -1;
 
       return `
-        <div class="card" style="margin-bottom:10px;cursor:pointer;transition:transform .15s,opacity .15s;active:transform:scale(0.98)"
-          onclick="${isRun && runIdx >= 0 ? `_showHistoryRunDetail(${runIdx})` : `_showHistoryWorkoutDetail('${l.module}','${l.date}','${l.day || ''}')`}"
-          ontouchstart="this.style.transform='scale(0.97)';this.style.opacity='.85'"
-          ontouchend="this.style.transform='';this.style.opacity=''">
+        <div class="card history-day-card" style="margin-bottom:10px;cursor:pointer"
+          onclick="${isRun && runIdx >= 0 ? '_showHistoryRunDetail(' + runIdx + ')' : '_showHistoryWorkoutDetail(\'' + l.module + '\',\'' + l.date + '\',\'' + (l.day || '') + '\')'}">
           <div style="display:flex;align-items:center;gap:12px">
             <div style="width:46px;height:46px;border-radius:14px;flex-shrink:0;
               background:${isRun ? 'rgba(67,160,90,0.15)' : 'rgba(46,125,70,0.12)'};
