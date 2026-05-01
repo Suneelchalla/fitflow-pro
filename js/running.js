@@ -44,25 +44,31 @@ let _liveMarker   = null;
 let _sumMap       = null;
 let _userPanned   = false;   // true when user has manually panned — stops auto-recentering
 
-// ── SCREEN WAKE LOCK — keeps GPS alive when screen locks ──────────
-let _wakeLock = null;
+// ── SCREEN WAKE LOCK + GPS KEEP-ALIVE (multi-layer) ───────────────
+// Android Chrome throttles GPS when screen locks. We use 4 strategies:
+// 1. Screen Wake Lock API (prevents CPU sleep — best when granted)
+// 2. Silent looping audio (tricks OS into keeping app "active")
+// 3. Periodic no-op geolocation query (keeps GPS subsystem warm)
+// 4. Re-request wake lock + restart GPS on visibilitychange→visible
+
+let _wakeLock       = null;
+let _gpsKeepAlive   = null;   // setInterval handle for GPS ping
 
 async function _requestWakeLock() {
-  // Screen Wake Lock API — prevents CPU throttling of GPS on Android
   if ('wakeLock' in navigator) {
     try {
       _wakeLock = await navigator.wakeLock.request('screen');
       _wakeLock.addEventListener('release', () => {
-        // Re-request if released unexpectedly (e.g. tab hidden then restored)
+        // Re-request immediately if released while run is active
         if (APP.runSession && !APP.runSession.paused) {
-          setTimeout(_requestWakeLock, 500);
+          setTimeout(_requestWakeLock, 200);
         }
       });
     } catch (e) {
-      // Wake lock denied — fall through to audio keepalive only
       console.warn('Wake lock denied:', e.message);
     }
   }
+  _startGpsKeepAlive();
 }
 
 function _releaseWakeLock() {
@@ -70,6 +76,26 @@ function _releaseWakeLock() {
     _wakeLock.release().catch(() => {});
     _wakeLock = null;
   }
+  _stopGpsKeepAlive();
+}
+
+// Strategy 3: Ping GPS every 10s to prevent OS from suspending the location subsystem
+function _startGpsKeepAlive() {
+  _stopGpsKeepAlive();
+  _gpsKeepAlive = setInterval(() => {
+    if (!APP.runSession || APP.runSession.paused) return;
+    // A 0-timeout getCurrentPosition keeps the GPS subsystem warm on Android
+    // without interfering with the main watchPosition accuracy
+    navigator.geolocation.getCurrentPosition(
+      () => {},
+      () => {},
+      { enableHighAccuracy: true, timeout: 3000, maximumAge: 5000 }
+    );
+  }, 10000);
+}
+
+function _stopGpsKeepAlive() {
+  if (_gpsKeepAlive) { clearInterval(_gpsKeepAlive); _gpsKeepAlive = null; }
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -93,6 +119,7 @@ const LockScreen = {
 
   stop() {
     this._stopSilentAudio();
+    this._stopSilentAudioCtx?.();
     if (this._metaInterval) { clearInterval(this._metaInterval); this._metaInterval = null; }
     if (!('mediaSession' in navigator)) return;
     navigator.mediaSession.metadata      = null;
@@ -109,11 +136,30 @@ const LockScreen = {
 
   _startSilentAudio() {
     if (this._audio) return;
+    // Primary: HTML Audio loop — keeps app "audible" so OS won't throttle it
     const audio  = new Audio(SILENT_WAV_B64);
     audio.loop   = true;
     audio.volume = 0.001;
     this._audio  = audio;
-    audio.play().catch(() => {});
+    audio.play().catch(() => {
+      // Fallback: Web Audio API oscillator at inaudible frequency
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        gain.gain.value = 0.0001;  // essentially silent
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        this._audioCtx = ctx;
+        this._osc = osc;
+      } catch {}
+    });
+  },
+
+  _stopSilentAudioCtx() {
+    if (this._osc)      { try { this._osc.stop(); } catch {} this._osc = null; }
+    if (this._audioCtx) { try { this._audioCtx.close(); } catch {} this._audioCtx = null; }
   },
 
   _stopSilentAudio() {
@@ -536,7 +582,7 @@ function startGPS() {
       }
     },
 
-    { enableHighAccuracy: true, maximumAge: 1500, timeout: 15000 }
+    { enableHighAccuracy: true, maximumAge: 3000, timeout: 30000 }
   );
 }
 
@@ -717,15 +763,42 @@ function discardRun() {
   // Destroy summary map too to free memory
   if (_sumMap) { _sumMap.remove(); _sumMap = null; }
 
+  // Reset activity type to 'run' so next session doesn't inherit previous selection
+  _activityType = 'run';
+  document.querySelectorAll('.activity-pill').forEach(p => p.classList.remove('active'));
+  const runPill = document.querySelector('.activity-pill[data-type="run"]');
+  if (runPill) runPill.classList.add('active');
+  const emojiEl = document.getElementById('run-idle-emoji');
+  const labelEl = document.getElementById('run-idle-label');
+  if (emojiEl) emojiEl.textContent = '🏃';
+  if (labelEl) labelEl.textContent = 'START A RUN';
+
   document.getElementById('run-summary')?.classList.add('hidden');
   document.getElementById('run-active')?.classList.add('hidden');
   document.getElementById('run-idle').style.display = 'flex';
+
+  // Reset activity type to 'run' after saving — clean slate for next session
+  _activityType = 'run';
+  document.querySelectorAll('.activity-pill').forEach(p => p.classList.remove('active'));
+  const runPill = document.querySelector('.activity-pill[data-type="run"]');
+  if (runPill) runPill.classList.add('active');
+  const emojiEl2 = document.getElementById('run-idle-emoji');
+  const labelEl2 = document.getElementById('run-idle-label');
+  if (emojiEl2) emojiEl2.textContent = '🏃';
+  if (labelEl2) labelEl2.textContent = 'START A RUN';
 }
 
 // ── BACKGROUND / FOREGROUND RECOVERY ─────────────────────────────
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState !== 'visible') return;
+  if (document.visibilityState === 'hidden') {
+    // Screen locked/app backgrounded — ensure session is saved
+    if (APP.runSession) _saveRunSession();
+    return;
+  }
+  // Screen unlocked / app back to foreground
   if (!APP.runSession || APP.runSession.paused) return;
+  // Re-request wake lock (it gets released when screen locks on some Android versions)
+  _requestWakeLock();
   _gpsWarmupCount = 0;
   _gpsLastGoodFix = null;
   _setGpsBadge(false);   // will turn green when GPS lock re-acquired
@@ -763,16 +836,14 @@ function _markPlanDayDone(planKey, week, day, distKm, durSecs) {
   }
   if (distKm > 0 || durSecs > 0) {
     const log = {
-      userId:       user.id,
-      email:        user.email,
-      date:         today,
-      distance:     parseFloat((distKm  || 0).toFixed(3)),
-      duration:     durSecs || 0,
-      pace:         (durSecs && distKm > 0) ? parseFloat((durSecs / 60 / distKm).toFixed(2)) : 0,
-      planType:     `${planKey} · Wk${week} D${day}`,
-      timestamp:    new Date().toISOString(),
-      activityType: 'run',  // manual plan entries are always runs
-      coords:       [],     // no GPS data for manual entries
+      userId:    user.id,
+      email:     user.email,
+      date:      today,
+      distance:  parseFloat((distKm  || 0).toFixed(3)),
+      duration:  durSecs || 0,
+      pace:      (durSecs && distKm > 0) ? parseFloat((durSecs / 60 / distKm).toFixed(2)) : 0,
+      planType:  `${planKey} · Wk${week} D${day}`,
+      timestamp: new Date().toISOString(),
     };
     Store.addRunLog(log);
     sheetsPost('logRun', log);
@@ -1631,28 +1702,14 @@ function renderDietRunning() {
 }
 
 // ── PERSONAL BESTS — per activity type ───────────────────────────
-// Stored in BOTH localStorage (fast) and Sheets Content (persistent across reinstalls).
-// On reinstall: localStorage is empty, so _getPBs falls back to Store.getContent
-// which is populated by syncContentFromSheets() on login.
+// Keys: ff_pbs_{userId}_{activityType}  e.g. ff_pbs_u123_run
 function _getPBs(userId, activityType) {
-  const type     = activityType || 'run';
-  const localKey = 'ff_pbs_' + userId + '_' + type;
-  const local    = Store.get(localKey);
-  if (local) return local;
-  // Fallback: try Sheets-synced content (populated after login sync)
-  const fromSheets = Store.getContent('pbs_' + userId + '_' + type);
-  if (fromSheets) {
-    // Restore to localStorage for fast future access
-    Store.set(localKey, fromSheets);
-    return fromSheets;
-  }
-  return { distance: 0, pace: 9999, duration: 0, count: 0 };
+  const type = activityType || 'run';
+  return Store.get('ff_pbs_' + userId + '_' + type, { distance: 0, pace: 9999, duration: 0, count: 0 });
 }
 function _savePBs(userId, pbs, activityType) {
   const type = activityType || 'run';
-  // Save to both localStorage and content cache so getContent finds it too
   Store.set('ff_pbs_' + userId + '_' + type, pbs);
-  Store.setContent('pbs_' + userId + '_' + type, pbs);
 }
 
 // ── ACHIEVEMENT BADGES ────────────────────────────────────────────
@@ -1862,6 +1919,12 @@ function _renderRunPBBadges(distance, elapsed) {
           <div style="font-size:13px;color:var(--text2);line-height:1.5">${next.msg}</div>
         </div>`;
     }
+    // CRITICAL FIX: Save ALL baseline stats on first session, not just count
+    // Without this, pbs.distance=0 and pbs.duration=0 after first session,
+    // making every subsequent session trigger false "NEW PB" badges
+    newPbs.distance = distance;
+    newPbs.pace     = pace < 9999 ? pace : 9999;
+    newPbs.duration = elapsed;
     _savePBs(user.id, newPbs, actType);
     sheetsPost('saveContent', { key: 'pbs_' + user.id + '_' + actType, value: newPbs });
     el.innerHTML = html;
@@ -1883,23 +1946,48 @@ function _renderRunPBBadges(distance, elapsed) {
   }
 
   const pbBadges = [];
-  if (distance > 0 && distance > (pbs.distance || 0)) {
-    pbBadges.push(`<div style="background:${meta.color};color:white;font-size:12px;font-weight:700;
-      padding:6px 14px;border-radius:20px">🏆 NEW PB — Longest ${meta.label}!</div>`);
+  // Minimum thresholds: distance must be meaningful to qualify as a PB
+  // (avoids 0.02km "test walks" beating 1km genuine sessions)
+  const MIN_PB_DISTANCE = 0.1;   // at least 100m to earn a distance/pace PB
+  const MIN_PB_DURATION = 60;    // at least 60 seconds to earn a time PB
+
+  if (distance >= MIN_PB_DISTANCE && distance > (pbs.distance || 0)) {
     newPbs.distance = distance;
   }
-  if (distance >= 0.5 && pace < (pbs.pace || 9999)) {
-    pbBadges.push(`<div style="background:rgba(30,136,229,0.85);color:white;font-size:12px;font-weight:700;
-      padding:6px 14px;border-radius:20px">⚡ NEW PB — Fastest Pace!</div>`);
+  if (distance >= MIN_PB_DISTANCE && pace < (pbs.pace || 9999)) {
     newPbs.pace = pace;
   }
-  if (elapsed > (pbs.duration || 0)) {
-    pbBadges.push(`<div style="background:rgba(67,160,90,0.85);color:white;font-size:12px;font-weight:700;
-      padding:6px 14px;border-radius:20px">⏱ NEW PB — Longest Time!</div>`);
+  if (elapsed >= MIN_PB_DURATION && elapsed > (pbs.duration || 0)) {
     newPbs.duration = elapsed;
   }
+
+  if (newPbs.distance > (pbs.distance || 0)) {
+    pbBadges.push({ type: 'distance', label: `Longest ${meta.label}`, value: `${distance.toFixed(2)} km`, prev: `${(pbs.distance||0).toFixed(2)} km`, color: meta.color, icon: '📏' });
+  }
+  if (newPbs.pace < (pbs.pace || 9999) && distance >= MIN_PB_DISTANCE) {
+    pbBadges.push({ type: 'pace', label: 'Fastest Pace', value: fmtPace(distance, elapsed) + ' /km', prev: pbs.pace < 9999 ? fmtPace(1, pbs.pace * 60) + ' /km' : '--:--', color: '#1e88e5', icon: '⚡' });
+  }
+  if (newPbs.duration > (pbs.duration || 0)) {
+    pbBadges.push({ type: 'time', label: 'Longest Time', value: fmtTime(elapsed), prev: fmtTime(pbs.duration || 0), color: '#43a05a', icon: '⏱' });
+  }
+
   if (pbBadges.length) {
-    html += `<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:10px">${pbBadges.join('')}</div>`;
+    html += pbBadges.map(pb => `
+      <div style="background:linear-gradient(135deg,${pb.color}20,${pb.color}08);
+        border:1px solid ${pb.color}40;border-radius:14px;padding:14px 16px;
+        display:flex;align-items:center;gap:12px;margin-bottom:8px">
+        <div style="font-size:28px;flex-shrink:0">${pb.icon}</div>
+        <div style="flex:1">
+          <div style="font-size:11px;font-weight:700;color:${pb.color};text-transform:uppercase;
+            letter-spacing:.08em;margin-bottom:2px">NEW PERSONAL BEST</div>
+          <div style="font-size:15px;font-weight:700;color:var(--text)">${pb.label}</div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:4px">
+            <span style="font-size:18px;font-weight:700;color:${pb.color}">${pb.value}</span>
+            <span style="font-size:11px;color:var(--text3)">prev ${pb.prev}</span>
+          </div>
+        </div>
+        <div style="font-size:22px">🏅</div>
+      </div>`).join('');
   }
 
   if (!pbBadges.length && !hitMilestone) {
