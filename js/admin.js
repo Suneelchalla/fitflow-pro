@@ -312,6 +312,7 @@ function renderModuleEditor() {
     stretching:   { name: 'Stretching',    emoji: '🤸' },
     running:      { name: 'Running',       emoji: '🏃' },
     calisthenics: { name: 'Calisthenics',  emoji: '🤸‍♂️' },
+    core:         { name: 'Core & Abs',    emoji: '🔥' },
   }[AdminEdit.module] || { name: AdminEdit.module, emoji: '💪' };
 
   document.getElementById('editor-module-title').textContent = info.emoji + ' ' + info.name;
@@ -1200,8 +1201,8 @@ async function testSheetsConnection() {
 }
 
 // ── MODULE HELPERS (shared with dashboard) ────────────────────────
-function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🤸', running: '🏃', calisthenics: '🤸‍♂️' }[mod] || '💪'; }
-function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics' }[mod] || mod; }
+function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🤸', running: '🏃', calisthenics: '🤸‍♂️', core: '🔥' }[mod] || '💪'; }
+function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics', core: 'Core & Abs' }[mod] || mod; }
 
 // ── QUOTES TAB (inline in Admin Panel, not editor page) ───────────
 
