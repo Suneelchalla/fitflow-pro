@@ -1250,8 +1250,8 @@ async function testSheetsConnection() {
 }
 
 // ── MODULE HELPERS (shared with dashboard) ────────────────────────
-function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🤸', running: '🏃', calisthenics: '🤸‍♂️' }[mod] || '💪'; }
-function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics' }[mod] || mod; }
+function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🙆', running: '🏃', calisthenics: '🤸‍♂️', core: '🔥' }[mod] || '💪'; }
+function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics', core: 'Core & Abs' }[mod] || mod; }
 
 // ── QUOTES TAB (inline in Admin Panel, not editor page) ───────────
 
