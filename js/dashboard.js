@@ -559,7 +559,7 @@ function completeDay() {
     btn.textContent = d.slice(0, 3) + (done ? ' ✓' : '');
   });
 
-  sheetsPost('logCompletion', { userId: user.id, module: mod, day, date: todayStr() });
+  sheetsPost('logCompletion', { userId: user.id, email: user.email, module: mod, day, date: todayStr() });
 }
 
 // ── MODULE INNER TABS ─────────────────────────────────────────────
@@ -645,13 +645,36 @@ function renderHydrationTab(moduleId) {
 function logWater(ml) {
   const user  = APP.currentUser;
   const today = todayStr();
-  Store.setHydration(user.id, today, Store.getHydration(user.id, today) + ml);
+  const newMl = Store.getHydration(user.id, today) + ml;
+  Store.setHydration(user.id, today, newMl);
   showToast(`+${ml}ml logged! 💧`, 'success');
   renderHydrationTab(APP.currentModule);
+  // Sync to Sheets — store glasses done as ml value, target from module data
+  const override = Store.getContent('hydration_' + APP.currentModule);
+  const data     = override || (window.APP_DATA_DEFAULT||window.APP_DATA).hydration?.[APP.currentModule] || {};
+  const targets  = data.targets || { training: 3.5 };
+  const targetMl = (targets.training || 3.5) * 1000;
+  sheetsPost('saveHydrationLog', {
+    userId:        user.id,
+    email:         user.email,
+    date:          today,
+    glassesTarget: Math.round(targetMl),
+    glassesDone:   Math.round(newMl),
+  });
 }
+
 function resetWater() {
-  Store.setHydration(APP.currentUser.id, todayStr(), 0);
+  const user  = APP.currentUser;
+  const today = todayStr();
+  Store.setHydration(user.id, today, 0);
   renderHydrationTab(APP.currentModule);
+  sheetsPost('saveHydrationLog', {
+    userId:      user.id,
+    email:       user.email,
+    date:        today,
+    glassesTarget: 3500,
+    glassesDone:   0,
+  });
 }
 
 // ── DIET TAB ──────────────────────────────────────────────────────
@@ -1624,7 +1647,7 @@ function completeCaliDay() {
   });
   if (!logged) { showToast('Already logged today!', 'info'); return; }
   showToast('🎉 ' + day + ' calisthenics complete! 💪', 'success');
-  sheetsPost('logCompletion', { userId: user.id, module: 'calisthenics', day, date: todayStr() });
+  sheetsPost('logCompletion', { userId: user.id, email: user.email, module: 'calisthenics', day, date: todayStr() });
   updateCaliCompleteBtn();
 }
 
