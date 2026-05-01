@@ -370,7 +370,15 @@ function completeCWWorkout(workoutId) {
   const user = APP.currentUser;
   const w    = CW.getById(user.id, workoutId);
   if (!w) return;
-  Store.addLog({ userId:user.id, module:'custom_'+workoutId, day:dayName(), date:todayStr(), timestamp:new Date().toISOString() });
+  Store.addLog({ userId: user.id, module: 'custom_' + workoutId, day: dayName(), date: todayStr(), timestamp: new Date().toISOString() });
+  // Sync completion to Sheets so it appears in admin history and survives reinstall
+  sheetsPost('logCompletion', {
+    userId: user.id,
+    email:  user.email,
+    module: 'custom_' + workoutId,
+    day:    dayName(),
+    date:   todayStr(),
+  });
   showToast('🎉 ' + w.name + ' complete! Great work!', 'success');
   updateCWCompleteBtn(w);
   refreshDashboard();
