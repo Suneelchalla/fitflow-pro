@@ -42,7 +42,9 @@ function renderDashboardStats() {
   const monday = getMonday();
 
   const streak        = calcStreak(user.id);
-  const thisWeekLogs  = logs.filter(l => l.date >= monday);
+  // Count both workout completions AND runs toward the weekly ring
+  const _weekRuns     = Store.getUserRunLogs(user.id).filter(r => r.date >= monday);
+  const thisWeekLogs  = [...logs.filter(l => l.date >= monday), ..._weekRuns];
 
   const streakEl  = document.getElementById('dash-streak');
   const totalEl   = document.getElementById('dash-total');
@@ -871,8 +873,26 @@ function changeHistoryMonth(delta) {
 
 function _renderHistoryCalendar() {
   const user = APP.currentUser;
-  const logs = Store.getUserLogs(user.id);
   const now  = new Date();
+
+  // Merge workout logs + run logs into one unified list for calendar + activity display
+  const workoutLogs = Store.getUserLogs(user.id);
+  const runEntries  = Store.getUserRunLogs(user.id).map(r => ({
+    userId:    r.userId,
+    module:    'running',
+    day:       r.date ? new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' }) : '',
+    date:      r.date   || '',
+    timestamp: r.timestamp || r.date || '',
+    _isRun:    true,
+    _runKm:    r.distance || 0,
+  }));
+  // Combine: use a Set to avoid double-counting if a run was also logged as workout
+  const logs = [...workoutLogs];
+  runEntries.forEach(r => {
+    if (r.date && !logs.find(l => l.module === 'running' && l.date === r.date)) {
+      logs.push(r);
+    }
+  });
 
   const label = document.getElementById('history-month-label');
   const monthName = new Date(_historyYear, _historyMonth, 1)
@@ -906,7 +926,7 @@ function _renderHistoryCalendar() {
         const dayLabel   = dayLogs[0]?.day || '';
         const activities = dayLogs.map(l =>
           `<span class="badge badge-green" style="margin-right:4px;margin-bottom:4px">
-            ${getModuleEmoji(l.module)} ${getModuleName(l.module)}
+            ${getModuleEmoji(l.module)} ${getModuleName(l.module)}${l._runKm ? ' ' + l._runKm.toFixed(1) + 'km' : ''}
           </span>`
         ).join('');
         return `
