@@ -981,14 +981,6 @@ window.addEventListener('DOMContentLoaded', function() {
         <label class="form-label">Confirm Password</label>
         <input id="arp-confirm-pass" type="text" class="form-input" placeholder="Re-enter password" autocomplete="off">
       </div>
-      <!-- Force change on login toggle (Fix 6) -->
-      <div style="display:flex;align-items:center;gap:10px;padding:12px;background:rgba(46,125,70,0.1);border-radius:10px;border:1px solid rgba(46,125,70,0.25)">
-        <input type="checkbox" id="arp-force-change" checked style="width:18px;height:18px;accent-color:var(--g4);flex-shrink:0">
-        <div>
-          <div style="font-size:13px;font-weight:600">Force change on login</div>
-          <div style="font-size:12px;color:var(--text3);margin-top:2px">User will be prompted to set their own password when they next log in</div>
-        </div>
-      </div>
       <div id="arp-error" style="color:#ef9a9a;font-size:13px;min-height:16px"></div>
       <div style="display:flex;gap:10px">
         <button class="btn btn-outline btn-full" onclick="closeModal('modal-admin-reset-password')">Cancel</button>
@@ -1186,29 +1178,27 @@ window.addEventListener('DOMContentLoaded', function() {
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <!-- SCRIPTS                                                          -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- Force kill old service workers before loading any scripts -->
+<!-- Clear OLD service worker caches (keeps current fitflow-v17) -->
 <script>
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.getRegistrations().then(function(regs) {
-      regs.forEach(function(r) { r.unregister(); });
-    });
-    if (window.caches) {
-      caches.keys().then(function(keys) {
-        keys.forEach(function(k) { caches.delete(k); });
+  if ('serviceWorker' in navigator && window.caches) {
+    caches.keys().then(function(keys) {
+      keys.forEach(function(k) {
+        // Only delete caches that are NOT the current version
+        if (k !== 'fitflow-v17') caches.delete(k);
       });
-    }
+    });
   }
 </script>
-<script src="js/data.js?v=14"></script>
-<script src="js/data-cali.js?v=14"></script>
-<script src="js/app.js?v=14"></script>
-<script src="js/auth.js?v=14"></script>
-<script src="js/dashboard.js?v=14"></script>
-<script src="js/running.js?v=14"></script>
-<script src="js/admin.js?v=14"></script>
-<script src="push.js?v=14"></script>
-<script src="js/custom-workouts.js?v=14"></script>
-<script src="js/weekly-report.js?v=14"></script>
+<script src="js/data.js?v=17"></script>
+<script src="js/data-cali.js?v=17"></script>
+<script src="js/app.js?v=17"></script>
+<script src="js/auth.js?v=17"></script>
+<script src="js/dashboard.js?v=17"></script>
+<script src="js/running.js?v=17"></script>
+<script src="js/admin.js?v=17"></script>
+<script src="push.js?v=17"></script>
+<script src="js/custom-workouts.js?v=17"></script>
+<script src="js/weekly-report.js?v=17"></script>
 <script>
 
 // ── PROFILE DROPDOWN ──────────────────────────────────────────
@@ -1351,7 +1341,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (custom && custom.length) APP_DATA.quotes = custom;
 
   // Patch exercises with admin-saved overrides
-  ['cardio','gym','yoga','stretching'].forEach(mod => {
+  ['cardio','gym','yoga','stretching','core'].forEach(mod => {
     const saved = Store.getContent('exercises_' + mod);
     if (saved && saved.days && APP_DATA.modules[mod]) {
       APP_DATA.modules[mod].days = saved.days;
