@@ -267,7 +267,12 @@ function _applyToAppData(key, value) {
       // Only apply if Sheets data has actual exercises (not empty)
       const hasContent = Object.values(value.days).some(d => Array.isArray(d) && d.length > 0);
       if (hasContent && APP_DATA.modules[exMatch[1]]) {
-        APP_DATA.modules[exMatch[1]].days = value.days;
+        // Safety: don't overwrite built-in data if Sheets has dramatically fewer exercises
+        const sheetTotal   = Object.values(value.days).reduce((s, d) => s + (Array.isArray(d) ? d.length : 0), 0);
+        const builtinTotal = Object.values(APP_DATA.modules[exMatch[1]].days || {}).reduce((s, d) => s + (Array.isArray(d) ? d.length : 0), 0);
+        if (sheetTotal > 0 && (builtinTotal === 0 || sheetTotal >= builtinTotal * 0.5)) {
+          APP_DATA.modules[exMatch[1]].days = value.days;
+        }
       }
     }
     const wuMatch = key.match(/^warmup_(.+)$/);
@@ -294,7 +299,7 @@ async function _autoSeedIfVersionChanged(user) {
     if (storedVersion === currentVersion) return;
 
     // Clear stale localStorage exercise/warmup/cooldown cache before seeding
-    ['cardio','gym','yoga','stretching','running','calisthenics'].forEach(mod => {
+    ['cardio','gym','yoga','stretching','running','calisthenics','core'].forEach(mod => {
       Store.remove('ff_content_exercises_' + mod);
       Store.remove('ff_content_warmup_' + mod);
       Store.remove('ff_content_cooldown_' + mod);
@@ -303,7 +308,7 @@ async function _autoSeedIfVersionChanged(user) {
     // Version mismatch — push all module data to Sheets
     console.log('[FitFlow] Data version changed to', currentVersion, '— seeding Sheets...');
 
-    const modules = ['cardio', 'gym', 'yoga', 'stretching'];
+    const modules = ['cardio', 'gym', 'yoga', 'stretching', 'core'];
     const seedPromises = [];
 
     // Seed exercises for each module
@@ -336,7 +341,7 @@ async function _autoSeedIfVersionChanged(user) {
     });
 
     // Seed warmups
-    const warmupMods = ['cardio','gym','yoga','running','stretching','calisthenics'];
+    const warmupMods = ['cardio','gym','yoga','running','stretching','calisthenics','core'];
     warmupMods.forEach(mod => {
       const wu = APP_DATA.warmups?.[mod];
       if (wu?.length) {
