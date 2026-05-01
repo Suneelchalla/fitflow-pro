@@ -56,7 +56,7 @@ function renderDashboardStats() {
   if (dayEl)    dayEl.textContent    = dayName() + ', ' + new Date().toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
   if (greetEl)  greetEl.textContent  = getGreeting() + ', ' + user.name.split(' ')[0] + '!';
 
-  const weekTarget  = 5 * 6;
+  const weekTarget  = 7; // 7 sessions/week = 100% (1 per day)
   const pct         = Math.min(100, Math.round(thisWeekLogs.length / weekTarget * 100));
   const ring        = document.getElementById('dash-ring');
   const ringPctEl   = document.getElementById('dash-ring-pct');
@@ -74,7 +74,7 @@ const ALL_MODULES = [
   { id: 'gym',          name: 'Gym Workouts',      emoji: '🏋️',   color: 'grad-gym',     sub: '8 exercises · 6 days' },
   { id: 'yoga',         name: 'Yoga',              emoji: '🧘',    color: 'grad-yoga',    sub: '8-12 poses · 6 days' },
   { id: 'running',      name: 'Running & Walking', emoji: '🏃',    color: 'grad-running', sub: 'GPS tracker + plans' },
-  { id: 'stretching',   name: 'Stretching',        emoji: '🤸',    color: 'grad-stretch', sub: '6 stretches · 6 days' },
+  { id: 'stretching',   name: 'Stretching',        emoji: '🙆',    color: 'grad-stretch', sub: '6 stretches · 6 days' },
   { id: 'calisthenics', name: 'Calisthenics',      emoji: '🤸‍♂️', color: 'grad-cali',    sub: '3 levels · skill tree' },
   { id: 'core',         name: 'Core & Abs',        emoji: '🔥',    color: 'grad-core',    sub: '6 exercises · 6 days' },
 ];
@@ -323,6 +323,8 @@ function renderAnnouncementBanner() {
 // ── OPEN MODULE ───────────────────────────────────────────────────
 function openModule(moduleId) {
   APP.currentModule = moduleId;
+  // Persist so page refresh can restore the user to this module
+  if (APP.currentUser) Store.set('ff_last_module_' + APP.currentUser.id, moduleId);
   if (moduleId === 'running') {
     showPage('page-running');
     initRunningPage();
@@ -429,7 +431,7 @@ function renderExercises(moduleId, day) {
     if (ex._section !== prevSection) {
       prevSection = ex._section;
       if (ex._section === 'warmup')   hdr = secHeader('Warm-Up', 'rgba(30,136,229,0.35)', '🔥');
-      if (ex._section === 'main')     hdr = secHeader(moduleId==='yoga' ? 'Practice Sequence' : moduleId==='stretching' ? 'Stretch Sequence' : 'Main Workout', moduleId==='yoga' ? 'rgba(103,58,183,0.4)' : moduleId==='stretching' ? 'rgba(103,58,183,0.25)' : 'rgba(46,125,70,0.4)', moduleId==='yoga' ? '🧘' : moduleId==='stretching' ? '🤸' : '💪');
+      if (ex._section === 'main')     hdr = secHeader(moduleId==='yoga' ? 'Practice Sequence' : moduleId==='stretching' ? 'Stretch Sequence' : 'Main Workout', moduleId==='yoga' ? 'rgba(103,58,183,0.4)' : moduleId==='stretching' ? 'rgba(103,58,183,0.25)' : 'rgba(46,125,70,0.4)', moduleId==='yoga' ? '🧘' : moduleId==='stretching' ? '🙆' : '💪');
       if (ex._section === 'cooldown') hdr = secHeader(isHoldBased ? 'Closing Practice' : 'Cool-Down & Stretches', 'rgba(103,58,183,0.35)', isHoldBased ? '✨' : '🧘');
     }
 
@@ -578,7 +580,7 @@ function completeDay() {
     btn.textContent = d.slice(0, 3) + (done ? ' ✓' : '');
   });
 
-  sheetsPost('logCompletion', { userId: user.id, module: mod, day, date: todayStr() });
+  sheetsPost('logCompletion', { userId: user.id, email: user.email, module: mod, day, date: todayStr() });
 }
 
 // ── MODULE INNER TABS ─────────────────────────────────────────────
@@ -664,13 +666,24 @@ function renderHydrationTab(moduleId) {
 function logWater(ml) {
   const user  = APP.currentUser;
   const today = todayStr();
-  Store.setHydration(user.id, today, Store.getHydration(user.id, today) + ml);
+  const newMl = Store.getHydration(user.id, today) + ml;
+  Store.setHydration(user.id, today, newMl);
   showToast(`+${ml}ml logged! 💧`, 'success');
   renderHydrationTab(APP.currentModule);
+  // Sync to Sheets (250ml ≈ 1 glass, target 8 glasses = 2000ml)
+  Sheets.post('saveHydrationLog', {
+    userId: user.id, email: user.email, date: today,
+    glassesTarget: 8, glassesDone: Math.round(newMl / 250),
+  }).catch(() => {});
 }
 function resetWater() {
-  Store.setHydration(APP.currentUser.id, todayStr(), 0);
+  const user  = APP.currentUser;
+  const today = todayStr();
+  Store.setHydration(user.id, today, 0);
   renderHydrationTab(APP.currentModule);
+  Sheets.post('saveHydrationLog', {
+    userId: user.id, email: user.email, date: today, glassesTarget: 8, glassesDone: 0,
+  }).catch(() => {});
 }
 
 // ── DIET TAB ──────────────────────────────────────────────────────
@@ -846,12 +859,11 @@ function changeHistoryMonth(delta) {
   _historyMonth += delta;
   if (_historyMonth > 11) { _historyMonth = 0;  _historyYear++; }
   if (_historyMonth < 0)  { _historyMonth = 11; _historyYear--; }
-  // Disable next button when already at current month
   const now = new Date();
   const nextBtn = document.getElementById('history-next-btn');
   if (nextBtn) {
     const atCurrent = _historyYear === now.getFullYear() && _historyMonth >= now.getMonth();
-    nextBtn.disabled     = atCurrent;
+    nextBtn.disabled      = atCurrent;
     nextBtn.style.opacity = atCurrent ? '0.3' : '1';
   }
   _renderHistoryCalendar();
@@ -862,13 +874,11 @@ function _renderHistoryCalendar() {
   const logs = Store.getUserLogs(user.id);
   const now  = new Date();
 
-  // Update the label element (shows current month/year)
   const label = document.getElementById('history-month-label');
   const monthName = new Date(_historyYear, _historyMonth, 1)
     .toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
   if (label) label.textContent = monthName;
 
-  // Next button disabled when at current month
   const nextBtn = document.getElementById('history-next-btn');
   if (nextBtn) {
     const atCurrent = _historyYear === now.getFullYear() && _historyMonth >= now.getMonth();
@@ -876,10 +886,8 @@ function _renderHistoryCalendar() {
     nextBtn.style.opacity = atCurrent ? '0.3' : '1';
   }
 
-  // Render calendar for selected month
   document.getElementById('history-cal').innerHTML = buildCalendar(logs, null, _historyYear, _historyMonth);
 
-  // Filter activity log to selected month
   const monthStr  = `${_historyYear}-${String(_historyMonth + 1).padStart(2, '0')}`;
   const monthLogs = logs.filter(l => (l.date || '').startsWith(monthStr));
   const groupedByDate = {};
@@ -919,7 +927,6 @@ function _renderHistoryCalendar() {
 }
 
 function renderGlobalHistory() {
-  // Reset to current month when opening history page
   _historyYear  = new Date().getFullYear();
   _historyMonth = new Date().getMonth();
 
@@ -935,11 +942,10 @@ function renderGlobalHistory() {
       <div class="stat-card"><div class="stat-val">${runLogs.reduce((a, r) => a + (r.distance || 0), 0).toFixed(1)}</div><div class="stat-label">Total km Run</div></div>
     </div>`;
 
-  // Render calendar and log for current month
   _renderHistoryCalendar();
 }
 
-function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🤸', running: '🏃', calisthenics: '🤸‍♂️', core: '🔥' }[mod] || '💪'; }
+function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🙆', running: '🏃', calisthenics: '🤸‍♂️', core: '🔥' }[mod] || '💪'; }
 function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics', core: 'Core & Abs' }[mod] || mod; }
 
 // ════════════════════════════════════════════════════════════════
@@ -1523,7 +1529,7 @@ function completeCaliDay() {
   });
   if (!logged) { showToast('Already logged today!', 'info'); return; }
   showToast('🎉 ' + day + ' calisthenics complete! 💪', 'success');
-  sheetsPost('logCompletion', { userId: user.id, module: 'calisthenics', day, date: todayStr() });
+  sheetsPost('logCompletion', { userId: user.id, email: user.email, module: 'calisthenics', day, date: todayStr() });
   updateCaliCompleteBtn();
 }
 
