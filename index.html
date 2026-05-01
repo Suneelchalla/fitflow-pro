@@ -981,6 +981,14 @@ window.addEventListener('DOMContentLoaded', function() {
         <label class="form-label">Confirm Password</label>
         <input id="arp-confirm-pass" type="text" class="form-input" placeholder="Re-enter password" autocomplete="off">
       </div>
+      <!-- Force change on login (admin fix) -->
+      <div style="display:flex;align-items:center;gap:10px;padding:12px;background:rgba(46,125,70,0.1);border-radius:10px;border:1px solid rgba(46,125,70,0.25)">
+        <input type="checkbox" id="arp-force-change" checked style="width:18px;height:18px;accent-color:var(--g4);flex-shrink:0">
+        <div>
+          <div style="font-size:13px;font-weight:600">Force change on login</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px">User will be prompted to set their own password when they next log in</div>
+        </div>
+      </div>
       <div id="arp-error" style="color:#ef9a9a;font-size:13px;min-height:16px"></div>
       <div style="display:flex;gap:10px">
         <button class="btn btn-outline btn-full" onclick="closeModal('modal-admin-reset-password')">Cancel</button>
