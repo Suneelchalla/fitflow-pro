@@ -31,14 +31,14 @@ let _deferredInstallPrompt = null;
 window.addEventListener('beforeinstallprompt', e => {
   e.preventDefault();
   _deferredInstallPrompt = e;
-  // Show install banner after 30s on dashboard if not already installed
+  // Show install banner after 60s ONLY when on dashboard, not during a run
   setTimeout(() => {
     if (!_deferredInstallPrompt) return;
-    const dismissed = Store.get('ff_install_dismissed');
-    if (dismissed) return;
+    if (Store.get('ff_install_dismissed')) return;
+    if (APP.currentPage !== 'page-dashboard') return; // never show on other pages
     const banner = document.getElementById('install-banner');
     if (banner) { banner.classList.remove('hidden'); banner.style.display = 'block'; }
-  }, 30000);
+  }, 60000);
 });
 
 function triggerInstallPrompt() {
