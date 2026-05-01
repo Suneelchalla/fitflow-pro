@@ -1217,27 +1217,27 @@ window.addEventListener('DOMContentLoaded', function() {
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <!-- SCRIPTS                                                          -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- Clear OLD service worker caches (keeps current fitflow-v17) -->
+<!-- Clear OLD service worker caches (keeps current fitflow-v18) -->
 <script>
   if ('serviceWorker' in navigator && window.caches) {
     caches.keys().then(function(keys) {
       keys.forEach(function(k) {
         // Only delete caches that are NOT the current version
-        if (k !== 'fitflow-v17') caches.delete(k);
+        if (k !== 'fitflow-v18') caches.delete(k);
       });
     });
   }
 </script>
-<script src="js/data.js?v=17"></script>
-<script src="js/data-cali.js?v=17"></script>
-<script src="js/app.js?v=17"></script>
-<script src="js/auth.js?v=17"></script>
-<script src="js/dashboard.js?v=17"></script>
-<script src="js/running.js?v=17"></script>
-<script src="js/admin.js?v=17"></script>
-<script src="push.js?v=17"></script>
-<script src="js/custom-workouts.js?v=17"></script>
-<script src="js/weekly-report.js?v=17"></script>
+<script src="js/data.js?v=19"></script>
+<script src="js/data-cali.js?v=19"></script>
+<script src="js/app.js?v=19"></script>
+<script src="js/auth.js?v=19"></script>
+<script src="js/dashboard.js?v=19"></script>
+<script src="js/running.js?v=19"></script>
+<script src="js/admin.js?v=19"></script>
+<script src="push.js?v=19"></script>
+<script src="js/custom-workouts.js?v=19"></script>
+<script src="js/weekly-report.js?v=19"></script>
 <script>
 
 // ── PROFILE DROPDOWN ──────────────────────────────────────────
