@@ -2226,8 +2226,7 @@ function shareRun() {
     navigator.clipboard?.writeText(text).then(() => {
       showToast('Activity stats copied to clipboard! 📋', 'success');
     }).catch(() => {
-      showToast(text.split('
-').join(' | '), 'info');
+      showToast(text.split('\n').join(' | '), 'info');
     });
   }
 }
