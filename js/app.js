@@ -143,8 +143,6 @@ function showPage(id, addToHistory = true) {
   const pg = document.getElementById(id);
   if (pg) { pg.classList.add('active'); APP.currentPage = id; pg.scrollTop = 0; }
   window.history.pushState({ page: id }, '', '#' + id);
-  // Persist last page so refresh can restore it
-  if (APP.currentUser) Store.set('ff_last_page_' + APP.currentUser.id, id);
 }
 
 function goBack() {
@@ -188,28 +186,52 @@ window.addEventListener('popstate', e => {
 });
 
 // ── SWIPE-LEFT → BACK ─────────────────────────────────────────────
-// Tracks peak vertical movement during the touch to distinguish
-// a real horizontal swipe from a finger lifting off after a scroll.
+// Tracks peak vertical movement AND whether touch started inside a
+// horizontally-scrollable container (tab-strip, run tabs, etc.).
+// If the user is scrolling a scrollable row, we never fire goBack().
 (function () {
-  let sx = 0, sy = 0, maxDy = 0;
+  let sx = 0, sy = 0, maxDy = 0, maxDx = 0, insideHScroll = false;
+
+  function isHorizontallyScrollable(el) {
+    // Walk up the DOM — if any ancestor can actually scroll horizontally, abort swipe-back
+    while (el && el !== document.body) {
+      const style    = window.getComputedStyle(el);
+      const overflow = style.overflowX;
+      const canScroll = overflow === 'auto' || overflow === 'scroll';
+      if (canScroll && el.scrollWidth > el.clientWidth + 2) return true;
+      el = el.parentElement;
+    }
+    return false;
+  }
+
   document.addEventListener('touchstart', e => {
     sx    = e.touches[0].clientX;
     sy    = e.touches[0].clientY;
     maxDy = 0;
+    maxDx = 0;
+    // Record whether touch origin is inside a horizontally scrollable element
+    insideHScroll = isHorizontallyScrollable(e.target);
   }, { passive: true });
+
   document.addEventListener('touchmove', e => {
-    // Track the highest vertical displacement seen during this gesture
     const dy = Math.abs(e.touches[0].clientY - sy);
+    const dx = Math.abs(e.touches[0].clientX - sx);
     if (dy > maxDy) maxDy = dy;
+    if (dx > maxDx) maxDx = dx;
   }, { passive: true });
+
   document.addEventListener('touchend', e => {
     const dx = e.changedTouches[0].clientX - sx;
     const dy = Math.abs(e.changedTouches[0].clientY - sy);
-    // If the finger traveled more than 30px vertically at ANY point during
-    // the gesture, treat it as a scroll — never trigger swipe-back.
+
+    // Never fire if touch started inside a horizontally-scrollable container
+    // (e.g. tab strips, run tabs, day strips) — user was scrolling those, not navigating back
+    if (insideHScroll) return;
+
+    // If finger moved more than 30px vertically at any point → it was a scroll
     if (maxDy > 30) return;
-    // Horizontal swipe must be > 80px, final vertical drift < 40px,
-    // and horizontal movement must be at least 2x the vertical movement.
+
+    // Swipe-back: left swipe > 80px, horizontal dominates vertical, not a root page
     if (dx < -80 && dy < 40 && Math.abs(dx) > dy * 2 && !ROOT_PAGES.includes(APP.currentPage)) {
       goBack();
     }
@@ -410,71 +432,28 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Restore to correct page INSTANTLY before any rendering
     // This prevents the login page flash on pull-down / reload
-    const savedLastPage = Store.get('ff_last_page_' + session.id);
-    const basePage = session.role === 'ADMIN'
+    const targetPage = session.role === 'ADMIN'
       ? 'page-admin'
       : Store.get('ff_quote_' + session.id) === todayStr()
         ? 'page-dashboard'
         : 'page-quote';
-
-    // Use saved page if it's a valid restorable page; otherwise use basePage
-    const restorablePages = ['page-dashboard', 'page-history-global', 'page-module',
-      'page-profile', 'page-custom-workouts', 'page-weekly-report', 'page-running',
-      'page-calisthenics', 'page-my-plan', 'page-admin'];
-    const targetPage = (savedLastPage && restorablePages.includes(savedLastPage) && session.role !== 'ADMIN')
-      ? savedLastPage
-      : basePage;
 
     // Show target page immediately (no animation, no flash)
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     const targetEl = document.getElementById(targetPage);
     if (targetEl) { targetEl.classList.add('active'); APP.currentPage = targetPage; }
 
-    // Restore last module so refresh lands back on the same module page
-    const savedModule = Store.get('ff_last_module_' + session.id);
-    if (savedModule) APP.currentModule = savedModule;
-
-    // Render immediately from local data, then re-render after sync for accuracy
+    // Then render content
+    syncContentFromSheets();
     initDashboard();
 
     if (session.role === 'ADMIN') {
       renderAdminPanel();
     } else if (targetPage === 'page-quote') {
       renderQuote();
-    } else if (targetPage === 'page-module' && APP.currentModule) {
-      // Restore module page content on refresh
-      if (typeof renderModulePage === 'function') renderModulePage(APP.currentModule);
-      setActiveNav('home');
-    } else if (targetPage === 'page-history-global') {
-      if (typeof renderGlobalHistory === 'function') renderGlobalHistory();
-      setActiveNav('history');
-    } else if (targetPage === 'page-running') {
-      if (typeof initRunningPage === 'function') initRunningPage();
-      setActiveNav('running');
-    } else if (targetPage === 'page-calisthenics') {
-      if (typeof initCalisthenicsPage === 'function') initCalisthenicsPage();
-      setActiveNav('home');
-    } else if (targetPage === 'page-custom-workouts') {
-      if (typeof renderCustomWorkoutsList === 'function') renderCustomWorkoutsList();
-      setActiveNav('home');
-    } else if (targetPage === 'page-weekly-report') {
-      if (typeof renderWeeklyReport === 'function') renderWeeklyReport();
-      setActiveNav('home');
-    } else if (targetPage === 'page-profile') {
-      if (typeof renderProfilePage === 'function') renderProfilePage();
-      setActiveNav('home');
     } else {
       setActiveNav('home');
     }
-
-    // Sync from Sheets then re-render dashboard stats so ring/streak are accurate
-    syncContentFromSheets().then(() => {
-      if (typeof refreshDashboard === 'function') refreshDashboard();
-      // If on module page, also re-render exercises in case admin updated content
-      if (APP.currentPage === 'page-module' && APP.currentModule) {
-        if (typeof renderExercises === 'function') renderExercises(APP.currentModule, APP.currentDay || (new Date()).toLocaleDateString('en-US', { weekday: 'long' }));
-      }
-    });
 
     // Init push for non-admin on session restore (page reload)
     if (session.role !== 'ADMIN' && typeof initPushNotifications === 'function') {
