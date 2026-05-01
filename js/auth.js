@@ -152,6 +152,7 @@ async function syncContentFromSheets() {
     user ? _syncPlanProgress(user.id)       : Promise.resolve(),
     user ? _syncCustomWorkouts(user.id)     : Promise.resolve(),
     user ? _syncAchievementsAndPBs(user.id) : Promise.resolve(),
+    user ? _syncHydrationLogs(user.id)      : Promise.resolve(),
   ]);
 }
 
@@ -337,6 +338,29 @@ async function _syncAchievementsAndPBs(userId) {
     }
   } catch (e) {
     console.warn('Achievements/PBs sync skipped:', e.message);
+  }
+}
+
+// ── SYNC HYDRATION LOGS ───────────────────────────────────────────
+// Hydration daily data: key = ff_h_{userId}_{date} → { done, target }
+// We only sync the last 30 days to keep it light.
+async function _syncHydrationLogs(userId) {
+  try {
+    const res = await Sheets.get('getHydrationLogs', { userId });
+    if (!res?.success || !Array.isArray(res.logs) || !res.logs.length) return;
+    let changed = false;
+    res.logs.forEach(l => {
+      const key   = `ff_h_${userId}_${l.date}`;
+      const local = Store.get(key);
+      // Only overwrite if server has more glasses done (trust the higher value)
+      if (!local || (l.glassesDone > (local.done || 0))) {
+        Store.set(key, { done: l.glassesDone, target: l.glassesTarget, date: l.date });
+        changed = true;
+      }
+    });
+    if (changed && typeof renderHydrationWidget === 'function') renderHydrationWidget();
+  } catch (e) {
+    console.warn('Hydration sync skipped:', e.message);
   }
 }
 
