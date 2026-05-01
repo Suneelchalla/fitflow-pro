@@ -26,6 +26,46 @@ const ACTIVITY_META = {
 };
 let _activityType = 'run';   // selected on idle screen, saved with run
 
+// ── PWA INSTALL PROMPT (Fix 12) ───────────────────────────────────
+let _deferredInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', e => {
+  e.preventDefault();
+  _deferredInstallPrompt = e;
+  // Show install banner after 30s on dashboard if not already installed
+  setTimeout(() => {
+    if (!_deferredInstallPrompt) return;
+    const dismissed = Store.get('ff_install_dismissed');
+    if (dismissed) return;
+    const banner = document.getElementById('install-banner');
+    if (banner) { banner.classList.remove('hidden'); banner.style.display = 'block'; }
+  }, 30000);
+});
+
+function triggerInstallPrompt() {
+  const banner = document.getElementById('install-banner');
+  if (banner) { banner.classList.add('hidden'); banner.style.display = 'none'; }
+  if (_deferredInstallPrompt) {
+    _deferredInstallPrompt.prompt();
+    _deferredInstallPrompt.userChoice.then(r => {
+      if (r.outcome === 'accepted') showToast('FitFlow Pro installed! 🎉', 'success');
+      _deferredInstallPrompt = null;
+    });
+  }
+}
+
+function dismissInstallBanner() {
+  const banner = document.getElementById('install-banner');
+  if (banner) { banner.classList.add('hidden'); banner.style.display = 'none'; }
+  Store.set('ff_install_dismissed', true);
+}
+
+window.addEventListener('appinstalled', () => {
+  _deferredInstallPrompt = null;
+  const banner = document.getElementById('install-banner');
+  if (banner) { banner.classList.add('hidden'); banner.style.display = 'none'; }
+  showToast('FitFlow Pro is now installed! 🎉', 'success');
+});
+
 function selectActivityType(type, el) {
   _activityType = type;
   document.querySelectorAll('.activity-pill').forEach(p => p.classList.remove('active'));
@@ -450,6 +490,8 @@ const GPS_MIN_DISTANCE_KM = 0.005; // ignore movement < 5 m (standing still jitt
 
 let _gpsWarmupCount = 0;          // counts received fixes during warmup phase
 let _gpsLastGoodFix = null;       // last confirmed-accurate position
+let _stillSince     = null;       // timestamp when user stopped moving (for auto-pause)
+const AUTO_PAUSE_STILL_MS = 60000; // suggest auto-pause after 60s of no movement
 
 function startRun() {
   if (!navigator.geolocation) {
@@ -518,6 +560,32 @@ function _startRunTimerLoop() {
 }
 
 // ── FIX #2 + #5: GPS watch with warm-up filter and error handler ──
+function _showAutoPausePrompt() {
+  if (document.getElementById('auto-pause-prompt')) return; // already showing
+  const el = document.createElement('div');
+  el.id = 'auto-pause-prompt';
+  el.style.cssText = `position:fixed;bottom:160px;left:50%;transform:translateX(-50%);
+    background:rgba(7,21,16,0.97);border:1px solid var(--accent);border-radius:20px;
+    padding:16px 20px;z-index:500;min-width:260px;max-width:340px;
+    box-shadow:0 8px 32px rgba(0,0,0,0.6);text-align:center;animation:slideUp .25s ease`;
+  el.innerHTML = `
+    <div style="font-size:24px;margin-bottom:8px">🛑</div>
+    <div style="font-weight:700;font-size:14px;margin-bottom:4px">You've been still for 1 min</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px">Timer is still running. Auto-pause?</div>
+    <div style="display:flex;gap:10px">
+      <button onclick="document.getElementById('auto-pause-prompt')?.remove()"
+        style="flex:1;padding:10px;border-radius:12px;border:1px solid var(--border);
+          background:var(--surface);color:var(--text);cursor:pointer;font-size:13px">Keep Going</button>
+      <button onclick="togglePauseRun();document.getElementById('auto-pause-prompt')?.remove()"
+        style="flex:1;padding:10px;border-radius:12px;border:none;
+          background:var(--accent);color:#fff;cursor:pointer;font-size:13px;font-weight:700">⏸ Pause</button>
+    </div>`;
+  document.body.appendChild(el);
+  navigator.vibrate && navigator.vibrate([100, 50, 100]);
+  // Auto-dismiss after 15s if no action taken
+  setTimeout(() => document.getElementById('auto-pause-prompt')?.remove(), 15000);
+}
+
 function startGPS() {
   if (APP.runWatchId != null) {
     navigator.geolocation.clearWatch(APP.runWatchId);
@@ -560,6 +628,18 @@ function startGPS() {
         }
       } else {
         _gpsLastGoodFix = { lat, lon, ts: Date.now() };
+      }
+
+      // Auto-pause detection: if speed < 0.5 km/h for AUTO_PAUSE_STILL_MS, prompt user
+      const _speedNow = pos.coords.speed != null ? pos.coords.speed * 3.6 : null;
+      if (_speedNow !== null && _speedNow < 0.5) {
+        if (!_stillSince) _stillSince = Date.now();
+        else if (Date.now() - _stillSince > AUTO_PAUSE_STILL_MS && !APP.runSession.paused) {
+          _stillSince = null;  // reset so we don't prompt again immediately
+          _showAutoPausePrompt();
+        }
+      } else {
+        _stillSince = null;
       }
 
       // Store coord and update live map
@@ -608,6 +688,7 @@ function updateRunDisplay() {
 
 // ── PAUSE / RESUME ────────────────────────────────────────────────
 function togglePauseRun() {
+  _stillSince = null; // reset auto-pause detector on manual pause/resume
   if (!APP.runSession) return;
 
   if (!APP.runSession.paused) {
@@ -2129,6 +2210,39 @@ function showPlanCertificate(planKey) {
       </div>
     </div>`;
   openModal('modal-plan-complete');
+}
+
+// ── SHARE RUN ─────────────────────────────────────────────────────
+function shareRun() {
+  const s       = APP.runSession;
+  if (!s) return;
+  const elapsed = s.finalElapsed || 0;
+  const meta    = ACTIVITY_META[s.activityType || 'run'] || ACTIVITY_META.run;
+  const pace    = fmtPace(s.distance, elapsed);
+  const cal     = Math.round(s.distance * meta.kcalPerKm);
+
+  const lines = [
+    `${meta.emoji} ${meta.label} Complete! — FitFlow Pro`,
+    `📏 Distance: ${s.distance.toFixed(2)} km`,
+    `⏱ Time: ${fmtTime(elapsed)}`,
+    `⚡ Pace: ${pace} /km`,
+    `🔥 Calories: ${cal} kcal`,
+    `💪 Tracked with FitFlow Pro`,
+  ];
+  const text = lines.join('
+');
+
+  if (navigator.share) {
+    navigator.share({ title: `FitFlow Pro — ${meta.label} Complete!`, text }).catch(() => {});
+  } else {
+    // Clipboard fallback
+    navigator.clipboard?.writeText(text).then(() => {
+      showToast('Activity stats copied to clipboard! 📋', 'success');
+    }).catch(() => {
+      showToast(text.split('
+').join(' | '), 'info');
+    });
+  }
 }
 
 function sharePlanCertificate() {
