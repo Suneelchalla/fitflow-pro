@@ -30,6 +30,9 @@ window.APP_DATA = {
     running: [
       { name:"Pre-Run Warm-Up", sets:1, reps:"5 min", desc:"Brisk walk 2 min → slow high knees 30 sec → ankle circles 10 each → hip flexor lunge 30 sec each → leg swings 10 each. Essential before every run to prevent injury.", image:"", demo:"https://www.youtube.com/results?search_query=running+warm+up+routine", tag:"warmup" },
     ],
+    core: [
+      { name:"Core Activation Warm-Up", sets:1, reps:"5 min", desc:"Diaphragmatic breathing 1 min → pelvic tilts 15 reps → cat-cow 10 rounds → dead bug 5 each side → bird dog 5 each side. Activates deep core stabilisers before loading the abs.", image:"", demo:"https://www.youtube.com/results?search_query=core+warm+up+activation", tag:"warmup" },
+    ],
   },
 
     cooldowns: {
@@ -44,6 +47,9 @@ window.APP_DATA = {
     ],
     running: [
       { name:"Post-Run Cool-Down", sets:1, reps:"5 min", desc:"Easy walk 3 min → standing calf stretch 45 sec each → quad stretch 30 sec each → IT band stretch 45 sec each → seated hamstring & glute stretch 60 sec each. Critical for runner recovery.", image:"", demo:"https://www.youtube.com/results?search_query=post+run+cool+down+stretches", tag:"cooldown" },
+    ],
+    core: [
+      { name:"Core Cool-Down Stretch", sets:1, reps:"5 min", desc:"Child's pose 60 sec → supine knees-to-chest 60 sec → lying spinal twist 45 sec each side → cobra stretch 30 sec × 3 → diaphragmatic breathing 2 min. Releases lower back and hip flexors after intense core work.", image:"", demo:"https://www.youtube.com/results?search_query=ab+workout+cool+down+stretch", tag:"cooldown" },
     ],
   },
 
@@ -273,6 +279,62 @@ window.APP_DATA = {
     },
   },
 
+
+    core: {
+      name: "Core & Abs",
+      emoji: "🔥",
+      color: "grad-core",
+      days: {
+        Monday: [
+          { name:"Plank Hold", sets:4, reps:"45 sec", desc:"Forearms flat, body in straight line from head to heels. Squeeze glutes, brace abs hard. Don't let hips sag or pike up. Build to 60 sec per set.", image:"", demo:"https://www.youtube.com/results?search_query=plank+hold+proper+form" },
+          { name:"Crunches", sets:3, reps:"20 reps", desc:"Lie on back, knees bent. Hands behind ears — don't pull neck. Curl shoulders up, exhale at top. Slow and controlled. Feel the upper abs contract.", image:"", demo:"https://www.youtube.com/results?search_query=crunches+proper+form" },
+          { name:"Leg Raises", sets:3, reps:"15 reps", desc:"Lie on back, hands under lower back. Raise straight legs to 90°, lower slowly without touching floor. Targets lower abs intensely.", image:"", demo:"https://www.youtube.com/results?search_query=leg+raises+exercise+core" },
+          { name:"Russian Twists", sets:3, reps:"20 reps (10 each side)", desc:"Sit at 45°, feet off floor. Rotate torso side to side touching hands to the floor. Hold a weight for more intensity.", image:"", demo:"https://www.youtube.com/results?search_query=russian+twists+exercise" },
+          { name:"Mountain Climbers", sets:3, reps:"40 sec", desc:"High plank position. Drive alternating knees to chest rapidly. Keep hips level. Great cardio-core combo.", image:"", demo:"https://www.youtube.com/results?search_query=mountain+climbers+exercise+core" },
+          { name:"Dead Bug", sets:3, reps:"10 reps (each side)", desc:"On back, arms to ceiling, knees at 90°. Lower opposite arm and leg simultaneously while pressing lower back to floor. Best deep core stability exercise.", image:"", demo:"https://www.youtube.com/results?search_query=dead+bug+exercise+core" },
+        ],
+        Tuesday: [
+          { name:"Side Plank (Left)", sets:3, reps:"30 sec", desc:"Left forearm down, stack feet or stagger for balance. Body forms a straight diagonal line. Obliques do the work — don't let hips drop.", image:"", demo:"https://www.youtube.com/results?search_query=side+plank+form" },
+          { name:"Side Plank (Right)", sets:3, reps:"30 sec", desc:"Right forearm down, same as left. Keep core braced, breathe normally. Elevate top arm for extra challenge.", image:"", demo:"https://www.youtube.com/results?search_query=side+plank+form" },
+          { name:"Bicycle Crunches", sets:3, reps:"30 reps (15 each side)", desc:"Lie on back, hands behind head. Alternate bringing elbow to opposite knee while extending other leg. Best exercise for obliques per EMG studies.", image:"", demo:"https://www.youtube.com/results?search_query=bicycle+crunches+proper+form" },
+          { name:"Reverse Crunches", sets:3, reps:"15 reps", desc:"Lie on back, hands at sides. Bring knees to chest, then lift hips off floor. Lower slowly. Targets lower abs effectively.", image:"", demo:"https://www.youtube.com/results?search_query=reverse+crunch+exercise" },
+          { name:"Flutter Kicks", sets:3, reps:"40 sec", desc:"Lie on back, lift legs 6 inches off floor. Alternate small up-down kicks like swimming. Keep lower back pressed to ground.", image:"", demo:"https://www.youtube.com/results?search_query=flutter+kicks+exercise+abs" },
+          { name:"Hollow Body Hold", sets:3, reps:"20 sec", desc:"Lie on back, arms overhead. Lift shoulder blades and legs off floor, pressing lower back down. Advanced isometric core exercise.", image:"", demo:"https://www.youtube.com/results?search_query=hollow+body+hold+exercise" },
+        ],
+        Wednesday: [
+          { name:"Ab Wheel Rollout", sets:3, reps:"10 reps", desc:"Kneel behind wheel, roll forward keeping core rigid. Go as far as you can without hips dropping. Roll back using abs, not arms. Extremely demanding.", image:"", demo:"https://www.youtube.com/results?search_query=ab+wheel+rollout+form" },
+          { name:"V-Ups", sets:3, reps:"12 reps", desc:"Lie flat, arms overhead. Simultaneously lift upper body and straight legs to form a V shape. Reach hands toward feet at top. Control the descent.", image:"", demo:"https://www.youtube.com/results?search_query=v+ups+exercise" },
+          { name:"Heel Taps", sets:3, reps:"30 reps (15 each side)", desc:"Lie on back, knees bent at 90°. Crunch to the side to tap each heel alternately. Targets obliques with low joint stress.", image:"", demo:"https://www.youtube.com/results?search_query=heel+taps+exercise+obliques" },
+          { name:"Plank Hip Dips", sets:3, reps:"20 reps (10 each side)", desc:"Forearm plank. Rotate hips to dip toward the floor alternately. Targets obliques while maintaining core bracing.", image:"", demo:"https://www.youtube.com/results?search_query=plank+hip+dips+obliques" },
+          { name:"Scissor Kicks", sets:3, reps:"30 sec", desc:"On back, hands under hips. Raise both legs to 45°. Alternate crossing legs over each other like scissors. Strong lower abs burn.", image:"", demo:"https://www.youtube.com/results?search_query=scissor+kicks+exercise+abs" },
+          { name:"Bird Dog", sets:3, reps:"10 reps (each side)", desc:"On all fours, extend opposite arm and leg simultaneously. Hold 2 sec. Return and switch. Builds core stability and spinal control.", image:"", demo:"https://www.youtube.com/results?search_query=bird+dog+exercise+core" },
+        ],
+        Thursday: [
+          { name:"Long Lever Plank", sets:3, reps:"30 sec", desc:"Standard plank but with hands further forward. Far harder than regular plank. Demand on core dramatically increases.", image:"", demo:"https://www.youtube.com/results?search_query=long+lever+plank+advanced" },
+          { name:"Tuck Crunches", sets:3, reps:"20 reps", desc:"Lie on back, lift legs and crunch simultaneously bringing elbows to knees. Engages full rectus abdominis from top to bottom.", image:"", demo:"https://www.youtube.com/results?search_query=tuck+crunch+exercise" },
+          { name:"Windshield Wipers", sets:3, reps:"10 reps (each side)", desc:"Lie on back, arms wide for support. Raise legs to 90°. Rotate legs to one side, stop before touching floor, return. Extreme oblique work.", image:"", demo:"https://www.youtube.com/results?search_query=windshield+wipers+exercise+abs" },
+          { name:"Boat Pose Hold", sets:3, reps:"30 sec", desc:"Sit with knees bent, lean back slightly, lift feet off floor. Extend arms forward parallel to ground. Yoga-based core hold.", image:"", demo:"https://www.youtube.com/results?search_query=boat+pose+core+exercise" },
+          { name:"Cross-Body Mountain Climbers", sets:3, reps:"30 sec", desc:"High plank. Drive right knee toward left elbow and alternate. Slower than standard mountain climbers — rotational focus.", image:"", demo:"https://www.youtube.com/results?search_query=cross+body+mountain+climbers" },
+          { name:"Toe Touches", sets:3, reps:"15 reps", desc:"Lie on back, legs straight to ceiling. Crunch up and try to touch toes. Full contraction of upper abs at end range.", image:"", demo:"https://www.youtube.com/results?search_query=toe+touches+exercise+abs" },
+        ],
+        Friday: [
+          { name:"Hanging Knee Raises", sets:3, reps:"15 reps", desc:"Hang from bar, bring knees to chest using abs (not hip flexors). Pause at top. Lower slowly. Add leg straightening for more intensity.", image:"", demo:"https://www.youtube.com/results?search_query=hanging+knee+raises+exercise" },
+          { name:"Dragon Flag Negative", sets:3, reps:"5 reps", desc:"Lie on bench, grip behind head. Lift body to vertical, then lower slowly as one rigid unit. Bruce Lee's signature move. Extreme core strength.", image:"", demo:"https://www.youtube.com/results?search_query=dragon+flag+exercise" },
+          { name:"Oblique Crunches", sets:3, reps:"15 reps each side", desc:"Lie on side, top hand behind ear. Crunch upward laterally. Squeeze oblique at top. Rotate to other side.", image:"", demo:"https://www.youtube.com/results?search_query=oblique+crunches+side" },
+          { name:"Plank Shoulder Taps", sets:3, reps:"20 taps (10 each)", desc:"High plank. Alternate lifting each hand to tap opposite shoulder. Minimise hip rotation — challenge anti-rotation stability.", image:"", demo:"https://www.youtube.com/results?search_query=plank+shoulder+taps" },
+          { name:"Seated Ab Circles", sets:3, reps:"10 each direction", desc:"Sit on floor, lean back at 45°, feet off floor. Make large circles with torso. Targets entire core in continuous motion.", image:"", demo:"https://www.youtube.com/results?search_query=seated+ab+circles+exercise" },
+          { name:"Superman Hold", sets:3, reps:"30 sec", desc:"Lie face down, arms extended overhead. Lift arms, chest and legs simultaneously. Targets lower back — critical balance to strong abs.", image:"", demo:"https://www.youtube.com/results?search_query=superman+hold+exercise+back" },
+        ],
+        Saturday: [
+          { name:"6-Minute Ab Circuit", sets:1, reps:"6 min non-stop", desc:"Rotate through: 45 sec plank → 15 sec rest → 45 sec crunches → 15 sec rest → 45 sec leg raises → 15 sec rest → 45 sec Russian twists → 15 sec rest → 45 sec bicycle crunches → 15 sec rest. One circuit = 6 min.", image:"", demo:"https://www.youtube.com/results?search_query=6+minute+ab+workout+circuit" },
+          { name:"Plank Progression Ladder", sets:1, reps:"4 levels", desc:"Level 1: Standard plank 30 sec → Level 2: Plank to push-up 10 reps → Level 3: Side plank 20 sec each → Level 4: Single-leg plank 20 sec each. Go through all 4.", image:"", demo:"https://www.youtube.com/results?search_query=plank+progression+workout" },
+          { name:"100 Rep Ab Challenge", sets:1, reps:"100 total reps", desc:"25 crunches + 25 leg raises + 25 bicycle crunches + 25 Russian twists. Rest only when needed. Track your time each week to measure improvement.", image:"", demo:"https://www.youtube.com/results?search_query=100+ab+challenge+workout" },
+          { name:"L-Sit Attempt", sets:3, reps:"10 sec hold", desc:"On parallel bars or between two sturdy chairs, straighten legs forward parallel to floor. Advanced move — keep working at it. Even a tuck hold counts.", image:"", demo:"https://www.youtube.com/results?search_query=l+sit+exercise+tutorial" },
+          { name:"Turkish Get-Up (Core)", sets:2, reps:"3 each side", desc:"From lying to standing with one arm extended overhead. Slow, deliberate movement. Demands total-body stability with core as the anchor.", image:"", demo:"https://www.youtube.com/results?search_query=turkish+get+up+exercise" },
+          { name:"Breathing Reset", sets:1, reps:"5 min", desc:"Lie on back, knees bent. Deep belly breathing — inhale 4 sec, hold 2 sec, exhale 6 sec. Activates parasympathetic system for recovery.", image:"", demo:"https://www.youtube.com/results?search_query=diaphragmatic+breathing+exercise" },
+        ],
+      }
+    },
   running: {
     plans: {
       "5K":  { color:"#43a05a", emoji:"🏃",   weeks:6,  desc:"Beginner-friendly. Build from 2km to 5km in 6 weeks.", schedule:[
@@ -454,6 +516,14 @@ window.APP_DATA = {
 
     diet: {
     modules: {
+      core:       { title:"Core & Abs Diet Plan",   meals:[
+        { time:"Pre-Workout",  name:"Light Fuel",          items:"Banana or 3-4 dates + black coffee", cal:140, notes:"30 min before — easy to digest, quick energy" },
+        { time:"Post-Workout", name:"Protein Recovery",    items:"Whey protein shake or 3 boiled eggs + 1 banana", cal:280, notes:"Within 30 min — repair micro-tears in core muscles" },
+        { time:"Breakfast",    name:"Balanced Start",      items:"Oats + chia seeds + berries + Greek yogurt", cal:420, notes:"Complex carbs + protein for sustained energy" },
+        { time:"Lunch",        name:"High-Protein Meal",   items:"Grilled chicken/fish + brown rice + mixed vegetables", cal:550, notes:"Adequate protein (1.6-2g/kg body weight daily)" },
+        { time:"Evening Snack",name:"Clean Carbs",         items:"Sweet potato + cottage cheese or peanut butter", cal:230, notes:"Fuel for recovery without excess fat" },
+        { time:"Dinner",       name:"Lean Recovery Meal",  items:"Dal/lentils + 2 chapati + salad with olive oil", cal:480, notes:"Include anti-inflammatory foods like turmeric" },
+      ]},
       cardio:     { title:"Cardio Day Diet Plan",   meals:[
         { time:"Pre-Workout",  name:"Energy Boost",     items:"Banana + black coffee or green tea", cal:150, notes:"30-45 min before session" },
         { time:"Post-Workout", name:"Recovery Meal",    items:"2 boiled eggs + 1 slice whole wheat toast", cal:220, notes:"Within 30 min after" },
