@@ -98,7 +98,11 @@ function completeLogin(user) {
   try {
     APP.currentUser = user;
     Store.saveSession(user);
-    syncContentFromSheets();
+    // Sync then re-render so data appears immediately after login (not stale empty state)
+    syncContentFromSheets().then(() => {
+      if (typeof refreshDashboard === 'function') refreshDashboard();
+      if (APP.currentPage === 'page-history-global' && typeof renderGlobalHistory === 'function') renderGlobalHistory();
+    });
     _autoSeedIfVersionChanged(user);
 
     if (user.role === 'ADMIN') {
@@ -225,12 +229,19 @@ async function _syncUserRunLogs(userId) {
     const local = Store.getRunLogs();
     let changed = false;
     res.logs.forEach(sheetLog => {
-      // Deduplicate by date + planType + distance (close enough for runs)
+      // Primary: match by log ID (most reliable)
+      // Fallback: match by userId + date + distance (within 0.01km) + duration (within 10s)
+      // Deliberately NOT matching planType — it can differ between client and server
       const exists = local.find(l =>
-        l.userId   === sheetLog.userId &&
-        l.date     === sheetLog.date   &&
-        l.planType === sheetLog.planType &&
-        Math.abs((l.distance||0) - (sheetLog.distance||0)) < 0.01
+        // ID match (best)
+        (sheetLog.id && l.id === sheetLog.id) ||
+        // Fuzzy match — same user, same day, same distance, same duration
+        (
+          l.userId === sheetLog.userId &&
+          l.date   === sheetLog.date   &&
+          Math.abs((l.distance||0) - (sheetLog.distance||0)) < 0.01 &&
+          Math.abs((l.duration||0) - (sheetLog.duration||0)) < 10
+        )
       );
       if (!exists) {
         local.push({ ...sheetLog, id: sheetLog.id || 'run_' + Date.now() + Math.random() });
