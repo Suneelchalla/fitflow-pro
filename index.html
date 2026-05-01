@@ -739,10 +739,28 @@ window.addEventListener('DOMContentLoaded', function() {
     </div>
     <div class="container" style="padding-top:16px">
       <div id="history-stats" style="margin-bottom:20px"></div>
-      <div class="section-title">This Month</div>
+
+      <!-- Month navigation -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <button class="btn btn-ghost btn-sm" onclick="changeHistoryMonth(-1)" style="font-size:18px;padding:6px 14px">‹</button>
+        <div id="history-month-label" class="section-title" style="margin:0"></div>
+        <button class="btn btn-ghost btn-sm" onclick="changeHistoryMonth(1)" id="history-next-btn" style="font-size:18px;padding:6px 14px">›</button>
+      </div>
+
       <div class="card" style="margin-bottom:16px" id="history-cal"></div>
-      <div class="section-title">Activity Log</div>
+      <div class="section-title" style="margin-bottom:10px" id="history-log-title">Activity Log</div>
       <div id="history-log"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Day Detail Modal -->
+<div id="modal-day-detail" class="modal-overlay">
+  <div class="modal-sheet" style="max-height:80vh;overflow-y:auto;padding:0">
+    <div class="modal-handle" style="margin:12px auto 0"></div>
+    <div id="day-detail-content" style="padding:16px 16px 8px"></div>
+    <div style="padding:0 16px 16px">
+      <button class="btn btn-outline btn-full" onclick="closeModal('modal-day-detail')">Close</button>
     </div>
   </div>
 </div>
@@ -1173,16 +1191,16 @@ window.addEventListener('DOMContentLoaded', function() {
     }
   }
 </script>
-<script src="js/data.js?v=13"></script>
-<script src="js/data-cali.js?v=13"></script>
-<script src="js/app.js?v=13"></script>
-<script src="js/auth.js?v=13"></script>
-<script src="js/dashboard.js?v=13"></script>
-<script src="js/running.js?v=13"></script>
-<script src="js/admin.js?v=13"></script>
-<script src="push.js?v=13"></script>
-<script src="js/custom-workouts.js?v=13"></script>
-<script src="js/weekly-report.js?v=13"></script>
+<script src="js/data.js?v=14"></script>
+<script src="js/data-cali.js?v=14"></script>
+<script src="js/app.js?v=14"></script>
+<script src="js/auth.js?v=14"></script>
+<script src="js/dashboard.js?v=14"></script>
+<script src="js/running.js?v=14"></script>
+<script src="js/admin.js?v=14"></script>
+<script src="push.js?v=14"></script>
+<script src="js/custom-workouts.js?v=14"></script>
+<script src="js/weekly-report.js?v=14"></script>
 <script>
 
 // ── PROFILE DROPDOWN ──────────────────────────────────────────
