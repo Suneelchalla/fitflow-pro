@@ -518,9 +518,13 @@ document.addEventListener('DOMContentLoaded', () => {
       setActiveNav('home');
     }
 
-    // Sync from Sheets THEN re-render stats so ring/streak reflect latest data
+    // Sync from Sheets THEN re-render so data appears after cache clear
     syncContentFromSheets().then(() => {
       if (typeof refreshDashboard === 'function') refreshDashboard();
+      // Re-render history page so run logs appear after sync
+      if (APP.currentPage === 'page-history-global' && typeof renderGlobalHistory === 'function') {
+        renderGlobalHistory();
+      }
       if (APP.currentPage === 'page-module' && APP.currentModule) {
         if (typeof renderExercises === 'function') renderExercises(APP.currentModule, APP.currentDay || (new Date()).toLocaleDateString('en-US',{weekday:'long'}));
       }
