@@ -139,6 +139,10 @@ function showPage(id, addToHistory = true) {
     APP.pageHistory.push(prev);
     if (APP.pageHistory.length > 20) APP.pageHistory.shift();
   }
+  // Clear any floating overlays that might block the new page
+  document.getElementById('rest-timer-overlay')?.remove();
+  document.getElementById('auto-pause-prompt')?.remove();
+
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const pg = document.getElementById(id);
   if (pg) { pg.classList.add('active'); APP.currentPage = id; pg.scrollTop = 0; }
@@ -437,70 +441,8 @@ document.addEventListener('DOMContentLoaded', () => {
   _updateOnlineStatus();
 
   // ── PWA INSTALL PROMPT ────────────────────────────────────────────
-  let _deferredInstallPrompt = null;
-
-  window.addEventListener('beforeinstallprompt', e => {
-    e.preventDefault();
-    _deferredInstallPrompt = e;
-    // Show banner after 30s on dashboard (not on first visit, not if already installed)
-    const alreadyDismissed = Store.get('ff_install_dismissed');
-    if (!alreadyDismissed) {
-      setTimeout(() => _showInstallBanner(), 30000);
-    }
-  });
-
-  window.addEventListener('appinstalled', () => {
-    Store.set('ff_install_dismissed', true);
-    const b = document.getElementById('install-banner');
-    if (b) b.remove();
-    showToast('FitFlow Pro installed! 🎉 Find it on your home screen.', 'success');
-  });
-
-  window.showInstallPrompt = async function() {
-    if (!_deferredInstallPrompt) {
-      showToast('Open in Chrome browser to install FitFlow Pro on your home screen.', 'info');
-      return;
-    }
-    _deferredInstallPrompt.prompt();
-    const { outcome } = await _deferredInstallPrompt.userChoice;
-    _deferredInstallPrompt = null;
-    if (outcome === 'accepted') Store.set('ff_install_dismissed', true);
-  };
-
-  function _showInstallBanner() {
-    if (!_deferredInstallPrompt) return;
-    if (Store.get('ff_install_dismissed')) return;
-    if (document.getElementById('install-banner')) return;
-
-    const banner = document.createElement('div');
-    banner.id = 'install-banner';
-    banner.style.cssText = `
-      position:fixed;bottom:90px;left:12px;right:12px;z-index:400;
-      background:linear-gradient(135deg,#0d2a1a,#1a4a28);
-      border:1px solid var(--g3);border-radius:16px;padding:14px 16px;
-      box-shadow:0 8px 32px rgba(0,0,0,0.5);
-      animation:slideUp .3s ease both;max-width:456px;margin:0 auto;
-    `;
-    banner.innerHTML = `
-      <div style="display:flex;align-items:center;gap:12px">
-        <div style="font-size:32px;flex-shrink:0">📲</div>
-        <div style="flex:1">
-          <div style="font-weight:700;font-size:14px;margin-bottom:3px">Add to Home Screen</div>
-          <div style="font-size:12px;color:var(--text2);line-height:1.4">Install FitFlow Pro for quick access — works offline too!</div>
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;margin-top:12px">
-        <button onclick="Store.set('ff_install_dismissed',true);document.getElementById('install-banner').remove()"
-          style="flex:1;padding:9px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:13px;cursor:pointer">
-          Not now
-        </button>
-        <button onclick="window.showInstallPrompt()"
-          style="flex:2;padding:9px;border-radius:10px;border:none;background:var(--g4);color:#fff;font-size:13px;font-weight:700;cursor:pointer">
-          📲 Install App
-        </button>
-      </div>`;
-    document.body.appendChild(banner);
-  }
+  // Handled entirely by running.js (uses #install-banner from index.html)
+  // No duplicate handler here to avoid creating a blocking overlay
 
   document.querySelectorAll('.modal-overlay').forEach(mo => {
     mo.addEventListener('click', e => { if (e.target === mo) mo.classList.remove('open'); });
