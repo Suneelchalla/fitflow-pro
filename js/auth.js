@@ -145,7 +145,35 @@ async function syncContentFromSheets() {
     user ? _syncUserLogs(user.id)        : Promise.resolve(),
     user ? _syncUserRunLogs(user.id)     : Promise.resolve(),
     user ? _syncPlanProgress(user.id)    : Promise.resolve(),
+    user ? _syncCustomWorkouts(user.id)  : Promise.resolve(),  // ← Fix 4: restore custom workouts
   ]);
+}
+
+// ── SYNC CUSTOM WORKOUTS FROM SHEETS ─────────────────────────────
+// Restores user-created custom workouts after reinstall / cache clear.
+// Only adds workouts that don't already exist locally — never overwrites.
+async function _syncCustomWorkouts(userId) {
+  try {
+    const res = await Sheets.get('getCustomWorkouts', { userId });
+    if (!res?.success || !Array.isArray(res.workouts) || !res.workouts.length) return;
+    // CW object is defined in custom-workouts.js — guard in case it loads late
+    if (typeof CW === 'undefined') return;
+    const local = CW.getAll(userId);
+    let changed = false;
+    res.workouts.forEach(w => {
+      if (!local.find(l => l.id === w.id)) {
+        local.push(w);
+        changed = true;
+      }
+    });
+    if (changed) {
+      CW.save(userId, local);
+      // Refresh the custom workouts badge on dashboard if visible
+      if (typeof refreshDashboardBadges === 'function') refreshDashboardBadges();
+    }
+  } catch (e) {
+    console.warn('Custom workouts sync skipped:', e.message);
+  }
 }
 
 async function _syncContent() {
@@ -267,12 +295,7 @@ function _applyToAppData(key, value) {
       // Only apply if Sheets data has actual exercises (not empty)
       const hasContent = Object.values(value.days).some(d => Array.isArray(d) && d.length > 0);
       if (hasContent && APP_DATA.modules[exMatch[1]]) {
-        // Safety: don't overwrite built-in data if Sheets has dramatically fewer exercises
-        const sheetTotal   = Object.values(value.days).reduce((s, d) => s + (Array.isArray(d) ? d.length : 0), 0);
-        const builtinTotal = Object.values(APP_DATA.modules[exMatch[1]].days || {}).reduce((s, d) => s + (Array.isArray(d) ? d.length : 0), 0);
-        if (sheetTotal > 0 && (builtinTotal === 0 || sheetTotal >= builtinTotal * 0.5)) {
-          APP_DATA.modules[exMatch[1]].days = value.days;
-        }
+        APP_DATA.modules[exMatch[1]].days = value.days;
       }
     }
     const wuMatch = key.match(/^warmup_(.+)$/);
@@ -299,7 +322,7 @@ async function _autoSeedIfVersionChanged(user) {
     if (storedVersion === currentVersion) return;
 
     // Clear stale localStorage exercise/warmup/cooldown cache before seeding
-    ['cardio','gym','yoga','stretching','running','calisthenics','core'].forEach(mod => {
+    ['cardio','gym','yoga','stretching','running','calisthenics'].forEach(mod => {
       Store.remove('ff_content_exercises_' + mod);
       Store.remove('ff_content_warmup_' + mod);
       Store.remove('ff_content_cooldown_' + mod);
@@ -308,7 +331,7 @@ async function _autoSeedIfVersionChanged(user) {
     // Version mismatch — push all module data to Sheets
     console.log('[FitFlow] Data version changed to', currentVersion, '— seeding Sheets...');
 
-    const modules = ['cardio', 'gym', 'yoga', 'stretching', 'core'];
+    const modules = ['cardio', 'gym', 'yoga', 'stretching'];
     const seedPromises = [];
 
     // Seed exercises for each module
@@ -341,7 +364,7 @@ async function _autoSeedIfVersionChanged(user) {
     });
 
     // Seed warmups
-    const warmupMods = ['cardio','gym','yoga','running','stretching','calisthenics','core'];
+    const warmupMods = ['cardio','gym','yoga','running','stretching','calisthenics'];
     warmupMods.forEach(mod => {
       const wu = APP_DATA.warmups?.[mod];
       if (wu?.length) {
