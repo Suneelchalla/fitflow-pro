@@ -295,7 +295,12 @@ function _applyToAppData(key, value) {
       // Only apply if Sheets data has actual exercises (not empty)
       const hasContent = Object.values(value.days).some(d => Array.isArray(d) && d.length > 0);
       if (hasContent && APP_DATA.modules[exMatch[1]]) {
-        APP_DATA.modules[exMatch[1]].days = value.days;
+        // Guard: don't overwrite built-in data if Sheets has dramatically fewer exercises
+        const sheetTotal   = Object.values(value.days).reduce((s, d) => s + (Array.isArray(d) ? d.length : 0), 0);
+        const builtinTotal = Object.values(APP_DATA.modules[exMatch[1]].days || {}).reduce((s, d) => s + (Array.isArray(d) ? d.length : 0), 0);
+        if (sheetTotal > 0 && (builtinTotal === 0 || sheetTotal >= builtinTotal * 0.5)) {
+          APP_DATA.modules[exMatch[1]].days = value.days;
+        }
       }
     }
     const wuMatch = key.match(/^warmup_(.+)$/);
@@ -364,7 +369,7 @@ async function _autoSeedIfVersionChanged(user) {
     });
 
     // Seed warmups
-    const warmupMods = ['cardio','gym','yoga','running','stretching','calisthenics'];
+    const warmupMods = ['cardio','gym','yoga','running','stretching','calisthenics','core'];
     warmupMods.forEach(mod => {
       const wu = APP_DATA.warmups?.[mod];
       if (wu?.length) {
