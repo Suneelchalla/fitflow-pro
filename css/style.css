@@ -443,28 +443,25 @@ textarea.form-input { resize: vertical; min-height: 90px; line-height: 1.5; }
 .leaflet-bottom       { z-index: 2 !important; }
 .leaflet-control      { z-index: 2 !important; }
 
-/* The map container itself must NOT capture pointer events —
-   our Pause/Stop buttons sit in a sibling div above it.
-   Individual Leaflet panes that need interaction get pointer-events
-   restored via the selectors below. */
-#run-live-map         { pointer-events: none; }
-#run-live-map .leaflet-tile-pane,
-#run-live-map .leaflet-overlay-pane,
-#run-live-map .leaflet-marker-pane,
-#run-live-map .leaflet-popup-pane { pointer-events: none; }
-/* Re-enable drag pane so map is still pannable / pinch-zoomable */
-#run-live-map .leaflet-drag-pane  { pointer-events: auto; }
+/* Live map container: pointer-events ON — map handles its own touches.
+   The stats panel sits in a sibling with z-index:20 and pointer-events:auto,
+   so button taps reach the buttons. Map gets everything else. */
+#run-live-map { pointer-events: auto; }
+
+/* Summary map: also fully interactive */
+#run-detail-map { pointer-events: auto; }
 
 /* Zoom buttons overlay on live map */
 .run-zoom-btn {
-  width: 36px; height: 36px;
-  background: rgba(7,21,16,0.82);
-  border: 1px solid rgba(255,255,255,0.18);
+  width: 40px; height: 40px;
+  background: rgba(7,21,16,0.88);
+  border: 1px solid rgba(255,255,255,0.2);
   border-radius: 10px;
-  color: #fff; font-size: 20px; font-weight: 700;
+  color: #fff; font-size: 22px; font-weight: 700;
   display: flex; align-items: center; justify-content: center;
-  cursor: pointer; user-select: none;
-  backdrop-filter: blur(6px);
+  cursor: pointer; user-select: none; touch-action: manipulation;
+  backdrop-filter: blur(8px);
+  -webkit-tap-highlight-color: transparent;
 }
 
 /* ── SCROLLABLE CONTENT ────────────────────────────────────────── */
