@@ -205,6 +205,9 @@ textarea.form-input { resize: vertical; min-height: 90px; line-height: 1.5; }
 /* ── TABS ──────────────────────────────────────────────────────── */
 .tab-strip {
   display: flex; gap: 4px; overflow-x: auto; padding: 0 0 4px;
+  touch-action: pan-x;        /* tells browser this scrolls horizontally — prevents accidental swipe-back */
+  -webkit-overflow-scrolling: touch; /* smooth momentum scroll on iOS */
+  overscroll-behavior-x: contain;   /* stops horizontal scroll from bubbling to page navigation */
   scrollbar-width: none;
 }
 .tab-strip::-webkit-scrollbar { display: none; }
