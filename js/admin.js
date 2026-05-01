@@ -242,12 +242,13 @@ function renderContentHome() {
   const container = document.getElementById('content-links-list');
   const connected = !!Store.getSheetsConfig().webAppUrl;
   const modules   = [
-    { id: 'cardio',        name: 'Home Cardio',    emoji: '🏠',    hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
-    { id: 'gym',           name: 'Gym Workouts',   emoji: '🏋️',   hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
-    { id: 'yoga',          name: 'Yoga',           emoji: '🧘',    hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
-    { id: 'stretching',    name: 'Stretching',     emoji: '🤸',    hasSections: ['exercises','hydration','diet'] },
-    { id: 'running',       name: 'Running',        emoji: '🏃',    hasSections: ['warmup','cooldown','hydration','diet'] },
-    { id: 'calisthenics',  name: 'Calisthenics',   emoji: '🤸‍♂️', hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
+    { id: 'cardio',       name: 'Home Cardio',    emoji: '🏠',    hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
+    { id: 'gym',          name: 'Gym Workouts',   emoji: '🏋️',   hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
+    { id: 'yoga',         name: 'Yoga',           emoji: '🧘',    hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
+    { id: 'stretching',   name: 'Stretching',     emoji: '🤸',    hasSections: ['exercises','hydration','diet'] },
+    { id: 'running',      name: 'Running',        emoji: '🏃',    hasSections: ['warmup','cooldown','hydration','diet'] },
+    { id: 'calisthenics', name: 'Calisthenics',   emoji: '🤸‍♂️', hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
+    { id: 'core',         name: 'Core & Abs',     emoji: '🔥',    hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
   ];
 
   container.innerHTML = `
