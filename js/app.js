@@ -143,6 +143,8 @@ function showPage(id, addToHistory = true) {
   const pg = document.getElementById(id);
   if (pg) { pg.classList.add('active'); APP.currentPage = id; pg.scrollTop = 0; }
   window.history.pushState({ page: id }, '', '#' + id);
+  // Persist last page so refresh can restore it
+  if (APP.currentUser) Store.set('ff_last_page_' + APP.currentUser.id, id);
 }
 
 function goBack() {
@@ -408,28 +410,71 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Restore to correct page INSTANTLY before any rendering
     // This prevents the login page flash on pull-down / reload
-    const targetPage = session.role === 'ADMIN'
+    const savedLastPage = Store.get('ff_last_page_' + session.id);
+    const basePage = session.role === 'ADMIN'
       ? 'page-admin'
       : Store.get('ff_quote_' + session.id) === todayStr()
         ? 'page-dashboard'
         : 'page-quote';
+
+    // Use saved page if it's a valid restorable page; otherwise use basePage
+    const restorablePages = ['page-dashboard', 'page-history-global', 'page-module',
+      'page-profile', 'page-custom-workouts', 'page-weekly-report', 'page-running',
+      'page-calisthenics', 'page-my-plan', 'page-admin'];
+    const targetPage = (savedLastPage && restorablePages.includes(savedLastPage) && session.role !== 'ADMIN')
+      ? savedLastPage
+      : basePage;
 
     // Show target page immediately (no animation, no flash)
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     const targetEl = document.getElementById(targetPage);
     if (targetEl) { targetEl.classList.add('active'); APP.currentPage = targetPage; }
 
-    // Then render content
-    syncContentFromSheets();
+    // Restore last module so refresh lands back on the same module page
+    const savedModule = Store.get('ff_last_module_' + session.id);
+    if (savedModule) APP.currentModule = savedModule;
+
+    // Render immediately from local data, then re-render after sync for accuracy
     initDashboard();
 
     if (session.role === 'ADMIN') {
       renderAdminPanel();
     } else if (targetPage === 'page-quote') {
       renderQuote();
+    } else if (targetPage === 'page-module' && APP.currentModule) {
+      // Restore module page content on refresh
+      if (typeof renderModulePage === 'function') renderModulePage(APP.currentModule);
+      setActiveNav('home');
+    } else if (targetPage === 'page-history-global') {
+      if (typeof renderGlobalHistory === 'function') renderGlobalHistory();
+      setActiveNav('history');
+    } else if (targetPage === 'page-running') {
+      if (typeof initRunningPage === 'function') initRunningPage();
+      setActiveNav('running');
+    } else if (targetPage === 'page-calisthenics') {
+      if (typeof initCalisthenicsPage === 'function') initCalisthenicsPage();
+      setActiveNav('home');
+    } else if (targetPage === 'page-custom-workouts') {
+      if (typeof renderCustomWorkoutsList === 'function') renderCustomWorkoutsList();
+      setActiveNav('home');
+    } else if (targetPage === 'page-weekly-report') {
+      if (typeof renderWeeklyReport === 'function') renderWeeklyReport();
+      setActiveNav('home');
+    } else if (targetPage === 'page-profile') {
+      if (typeof renderProfilePage === 'function') renderProfilePage();
+      setActiveNav('home');
     } else {
       setActiveNav('home');
     }
+
+    // Sync from Sheets then re-render dashboard stats so ring/streak are accurate
+    syncContentFromSheets().then(() => {
+      if (typeof refreshDashboard === 'function') refreshDashboard();
+      // If on module page, also re-render exercises in case admin updated content
+      if (APP.currentPage === 'page-module' && APP.currentModule) {
+        if (typeof renderExercises === 'function') renderExercises(APP.currentModule, APP.currentDay || (new Date()).toLocaleDateString('en-US', { weekday: 'long' }));
+      }
+    });
 
     // Init push for non-admin on session restore (page reload)
     if (session.role !== 'ADMIN' && typeof initPushNotifications === 'function') {
