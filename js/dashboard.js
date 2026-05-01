@@ -947,7 +947,7 @@ function renderModuleHistory(moduleId) {
 // buildCalendar — rich version with emoji, red marks, today ring
 // logs: array of { date, module } — all activity logs for this user
 // moduleFilter: optional — if set, only show that module's emoji
-function buildCalendar(logs, moduleFilter, year, month) {
+function buildCalendar(logs, moduleFilter, year, month, context) {
   const now = new Date();
   if (year  === undefined || year  === null) year  = now.getFullYear();
   if (month === undefined || month === null) month = now.getMonth();
@@ -1021,7 +1021,11 @@ function buildCalendar(logs, moduleFilter, year, month) {
     const tooltip = emojis.length > 0
       ? `${dateStr} — ${emojis.join(' ')}`
       : dateStr;
-    cells += `<div class="${cellClass}" title="${tooltip}">${innerHtml}</div>`;
+    const isClickable = (context === 'global') && !isFuture;
+    const cellOnClick  = isClickable ? `onclick="selectHistoryDay('${dateStr}',this)"` : '';
+    const selectedStyle = (context === 'global' && dateStr === _selectedHistoryDate && !isFuture)
+      ? 'outline:2px solid var(--accent);outline-offset:2px;' : '';
+    cells += `<div class="${cellClass}" title="${tooltip}" ${cellOnClick} style="cursor:${isClickable?'pointer':'default'};${selectedStyle}">${innerHtml}</div>`;
   }
 
   // Legend
@@ -1038,8 +1042,9 @@ function buildCalendar(logs, moduleFilter, year, month) {
 
 // ── GLOBAL HISTORY ────────────────────────────────────────────────
 // Month navigation state
-let _historyYear  = new Date().getFullYear();
-let _historyMonth = new Date().getMonth();
+let _historyYear         = new Date().getFullYear();
+let _historyMonth        = new Date().getMonth();
+let _selectedHistoryDate = todayStr(); // currently selected day in history calendar
 
 function changeHistoryMonth(delta) {
   _historyMonth += delta;
@@ -1090,49 +1095,242 @@ function _renderHistoryCalendar() {
     nextBtn.style.opacity = atCurrent ? '0.3' : '1';
   }
 
-  document.getElementById('history-cal').innerHTML = buildCalendar(logs, null, _historyYear, _historyMonth);
+  document.getElementById('history-cal').innerHTML = buildCalendar(logs, null, _historyYear, _historyMonth, 'global');
 
-  const monthStr  = `${_historyYear}-${String(_historyMonth + 1).padStart(2, '0')}`;
-  const monthLogs = logs.filter(l => (l.date || '').startsWith(monthStr));
-  const groupedByDate = {};
-  monthLogs.forEach(l => {
-    if (!groupedByDate[l.date]) groupedByDate[l.date] = [];
-    groupedByDate[l.date].push(l);
+  // Show only the SELECTED day's logs (default: today)
+  _renderDayActivityLog(logs);
+}
+
+// ── SELECT A DAY IN HISTORY CALENDAR ─────────────────────────────
+function selectHistoryDay(dateStr, el) {
+  _selectedHistoryDate = dateStr;
+  // Re-render calendar to update selected highlight
+  const user = APP.currentUser;
+  const workoutLogs = Store.getUserLogs(user.id);
+  const runEntries  = Store.getUserRunLogs(user.id).map(r => ({
+    userId: r.userId, module: 'running',
+    day:    r.date ? new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' }) : '',
+    date:   r.date || '', timestamp: r.timestamp || r.date || '',
+    _isRun: true, _runKm: r.distance || 0,
+  }));
+  const logs = [...workoutLogs];
+  runEntries.forEach(r => {
+    if (r.date && !logs.find(l => l.module === 'running' && l.date === r.date)) logs.push(r);
   });
-  const sortedDates = Object.keys(groupedByDate).sort().reverse();
+  document.getElementById('history-cal').innerHTML = buildCalendar(logs, null, _historyYear, _historyMonth, 'global');
+  _renderDayActivityLog(logs);
+  navigator.vibrate && navigator.vibrate(20);
+}
 
-  const logTitle = document.getElementById('history-log-title');
-  if (logTitle) logTitle.textContent = `Activity Log — ${monthName}`;
+// ── RENDER ACTIVITY LOG FOR SELECTED DAY ─────────────────────────
+function _renderDayActivityLog(allLogs) {
+  const logTitle  = document.getElementById('history-log-title');
+  const logEl     = document.getElementById('history-log');
+  if (!logEl) return;
 
-  document.getElementById('history-log').innerHTML = sortedDates.length
-    ? sortedDates.map(date => {
-        const dayLogs    = groupedByDate[date];
-        const dayLabel   = dayLogs[0]?.day || '';
-        const activities = dayLogs.map(l =>
-          `<span class="badge badge-green" style="margin-right:4px;margin-bottom:4px">
-            ${getModuleEmoji(l.module)} ${getModuleName(l.module)}${l._runKm ? ' ' + l._runKm.toFixed(1) + 'km' : ''}
-          </span>`
-        ).join('');
-        return `
-          <div class="card card-sm" style="margin-bottom:8px">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
-              <div>
-                <div style="font-weight:700;font-size:14px">${date}</div>
-                <div style="font-size:12px;color:var(--text3)">${dayLabel}</div>
-              </div>
-              <div style="font-family:var(--font-display);font-size:22px;color:var(--g5)">${dayLogs.length}
-                <span style="font-size:12px;color:var(--text3)">activit${dayLogs.length > 1 ? 'ies' : 'y'}</span>
+  const dateObj   = new Date(_selectedHistoryDate + 'T12:00:00');
+  const dateLabel = dateObj.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  if (logTitle) logTitle.textContent = dateLabel;
+
+  const dayLogs = allLogs.filter(l => l.date === _selectedHistoryDate);
+
+  if (!dayLogs.length) {
+    const isToday  = _selectedHistoryDate === todayStr();
+    const isFuture = _selectedHistoryDate > todayStr();
+    logEl.innerHTML = `
+      <div style="text-align:center;padding:28px 16px">
+        <div style="font-size:40px;margin-bottom:10px">${isFuture ? '🗓️' : isToday ? '💪' : '😴'}</div>
+        <div style="font-weight:700;font-size:15px;margin-bottom:6px">
+          ${isFuture ? 'Future date' : isToday ? 'No activity yet today' : 'Rest day'}
+        </div>
+        <div style="font-size:13px;color:var(--text3)">
+          ${isFuture ? 'Come back on this date!' : isToday ? 'Get your first workout in!' : 'Recovery is part of progress.'}
+        </div>
+      </div>`;
+    return;
+  }
+
+  // Group runs separately for richer display
+  const user = APP.currentUser;
+  const runLogs = Store.getUserRunLogs(user.id).filter(r => r.date === _selectedHistoryDate);
+
+  logEl.innerHTML = `
+    <div style="font-size:13px;color:var(--text3);margin-bottom:10px">
+      ${dayLogs.length} activit${dayLogs.length > 1 ? 'ies' : 'y'} — tap any to view details
+    </div>
+    ${dayLogs.map((l, idx) => {
+      const isRun   = l._isRun || l.module === 'running';
+      const runLog  = isRun ? runLogs[0] : null; // match first run for this date
+      const runIdx  = isRun ? Store.getUserRunLogs(user.id)
+        .sort((a,b) => (b.timestamp||b.date||'').localeCompare(a.timestamp||a.date||''))
+        .findIndex(r => r.date === _selectedHistoryDate) : -1;
+
+      return `
+        <div class="card" style="margin-bottom:10px;cursor:pointer;transition:transform .15s,opacity .15s;active:transform:scale(0.98)"
+          onclick="${isRun && runIdx >= 0 ? `_showHistoryRunDetail(${runIdx})` : `_showHistoryWorkoutDetail('${l.module}','${l.date}','${l.day || ''}')`}"
+          ontouchstart="this.style.transform='scale(0.97)';this.style.opacity='.85'"
+          ontouchend="this.style.transform='';this.style.opacity=''">
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="width:46px;height:46px;border-radius:14px;flex-shrink:0;
+              background:${isRun ? 'rgba(67,160,90,0.15)' : 'rgba(46,125,70,0.12)'};
+              border:1.5px solid ${isRun ? 'rgba(67,160,90,0.4)' : 'rgba(46,125,70,0.3)'};
+              display:flex;align-items:center;justify-content:center;font-size:22px">
+              ${getModuleEmoji(l.module)}
+            </div>
+            <div style="flex:1;min-width:0">
+              <div style="font-weight:700;font-size:15px">${getModuleName(l.module)}</div>
+              <div style="font-size:12px;color:var(--text3);margin-top:2px">
+                ${l.day || ''}${isRun && l._runKm ? ' · ' + l._runKm.toFixed(2) + ' km' : ''}
               </div>
             </div>
-            <div style="display:flex;flex-wrap:wrap">${activities}</div>
-          </div>`;
-      }).join('')
-    : '<div class="empty-state"><div class="empty-icon">📋</div><p>No activity this month.</p></div>';
+            <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+              <span class="badge badge-green">✓ Done</span>
+              <span style="color:var(--text3);font-size:16px">›</span>
+            </div>
+          </div>
+          ${isRun && runLog ? `
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-top:10px;
+            background:var(--bg3);border-radius:10px;padding:10px">
+            <div style="text-align:center">
+              <div style="font-family:var(--font-display);font-size:18px;color:var(--g5)">${(runLog.distance||0).toFixed(2)}</div>
+              <div style="font-size:10px;color:var(--text3)">km</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-family:var(--font-display);font-size:18px;color:var(--g5)">${fmtTime(runLog.duration||0)}</div>
+              <div style="font-size:10px;color:var(--text3)">time</div>
+            </div>
+            <div style="text-align:center">
+              <div style="font-family:var(--font-display);font-size:18px;color:var(--g5)">${fmtPace(runLog.distance, runLog.duration)}</div>
+              <div style="font-size:10px;color:var(--text3)">pace</div>
+            </div>
+          </div>` : ''}
+        </div>`;
+    }).join('')}`;
+}
+
+// ── HISTORY: RUN DETAIL (reuses modal-run-detail from running.js) ─
+function _showHistoryRunDetail(idx) {
+  // _showRunDetail lives in running.js — call it directly
+  if (typeof _showRunDetail === 'function') {
+    _showRunDetail(idx);
+  }
+}
+
+// ── HISTORY: WORKOUT DETAIL CARD ─────────────────────────────────
+function _showHistoryWorkoutDetail(moduleId, date, day) {
+  const modData = (window.APP_DATA_DEFAULT||window.APP_DATA).modules[moduleId];
+  const modName = getModuleName(moduleId);
+  const modEmoji = getModuleEmoji(moduleId);
+
+  // Get the exercises done that day from session data
+  const user       = APP.currentUser;
+  const sessionKey = `sess_${user.id}_${moduleId}_${day}_${date}`;
+  const sessionData = Store.get(sessionKey, {});
+
+  // Get exercise list for that day
+  const exOverride    = Store.getContent('exercises_' + moduleId);
+  const dayExercises  = exOverride?.days?.[day] || modData?.days?.[day] || [];
+  const warmups       = Store.getContent('warmup_' + moduleId)   || (window.APP_DATA_DEFAULT||window.APP_DATA).warmups?.[moduleId]   || [];
+  const cooldowns     = Store.getContent('cooldown_' + moduleId) || (window.APP_DATA_DEFAULT||window.APP_DATA).cooldowns?.[moduleId] || [];
+  const allExercises  = [
+    ...warmups.map(e => ({...e, _section:'warmup'})),
+    ...dayExercises.map(e => ({...e, _section:'main'})),
+    ...cooldowns.map(e => ({...e, _section:'cooldown'})),
+  ];
+
+  const dateObj  = new Date(date + 'T12:00:00');
+  const dateStr  = dateObj.toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+
+  // Count completed sets
+  const totalSets = allExercises.reduce((a, ex) => a + (parseInt(ex.sets) || 1), 0);
+  const doneSets  = Object.values(sessionData).flat().length;
+  const pct       = totalSets > 0 ? Math.round(doneSets / totalSets * 100) : 0;
+
+  const sectionLabels = { warmup: '🔥 Warm-Up', main: '💪 Main Workout', cooldown: '🧘 Cool-Down' };
+  let prevSection = '';
+  const exerciseRows = allExercises.map((ex, i) => {
+    const isDone   = sessionData[i] && sessionData[i].length >= (parseInt(ex.sets) || 1);
+    const checkedCount = (sessionData[i] || []).length;
+    let sectionHdr = '';
+    if (ex._section !== prevSection) {
+      prevSection = ex._section;
+      sectionHdr = `<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;
+        letter-spacing:.08em;margin:12px 0 6px;padding:6px 10px;background:var(--bg3);border-radius:8px">
+        ${sectionLabels[ex._section] || ex._section}</div>`;
+    }
+    return `${sectionHdr}
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
+        <div style="width:28px;height:28px;border-radius:8px;flex-shrink:0;
+          background:${isDone ? 'var(--g3)' : 'var(--bg3)'};
+          display:flex;align-items:center;justify-content:center;font-size:13px;color:${isDone ? '#fff' : 'var(--text3)'}">
+          ${isDone ? '✓' : '○'}
+        </div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;${isDone ? '' : 'color:var(--text3)'}">${ex.name || ''}</div>
+          <div style="font-size:11px;color:var(--text3)">${ex.sets || 1} sets · ${ex.reps || ''}</div>
+        </div>
+        <div style="font-size:11px;color:var(--text3);flex-shrink:0">${checkedCount}/${parseInt(ex.sets)||1}</div>
+      </div>`;
+  }).join('');
+
+  const el = document.getElementById('day-detail-content');
+  if (!el) return;
+
+  el.innerHTML = `
+    <!-- Header -->
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
+      <div style="width:52px;height:52px;border-radius:16px;
+        background:rgba(46,125,70,0.15);border:2px solid rgba(46,125,70,0.35);
+        display:flex;align-items:center;justify-content:center;font-size:28px;flex-shrink:0">
+        ${modEmoji}
+      </div>
+      <div>
+        <div style="font-size:18px;font-weight:700">${modName}</div>
+        <div style="font-size:13px;color:var(--text3);margin-top:2px">${dateStr}</div>
+      </div>
+    </div>
+
+    <!-- Completion ring -->
+    <div style="background:linear-gradient(135deg,var(--g1),var(--bg3));border-radius:14px;
+      padding:14px 16px;margin-bottom:14px;display:flex;align-items:center;gap:14px">
+      <div style="position:relative;width:56px;height:56px;flex-shrink:0">
+        <svg width="56" height="56" viewBox="0 0 56 56">
+          <circle cx="28" cy="28" r="24" fill="none" stroke="var(--bg3)" stroke-width="5"/>
+          <circle cx="28" cy="28" r="24" fill="none" stroke="var(--g4)" stroke-width="5"
+            stroke-linecap="round"
+            stroke-dasharray="${2*Math.PI*24}"
+            stroke-dashoffset="${2*Math.PI*24*(1-pct/100)}"
+            style="transform:rotate(-90deg);transform-origin:28px 28px"/>
+        </svg>
+        <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+          font-size:12px;font-weight:700;color:var(--g5)">${pct}%</div>
+      </div>
+      <div>
+        <div style="font-weight:700;font-size:15px">
+          ${pct === 100 ? '🎉 Full Workout Complete!' : pct > 0 ? '⚡ Partial Workout' : '📋 Logged'}
+        </div>
+        <div style="font-size:13px;color:var(--text3);margin-top:3px">
+          ${doneSets} of ${totalSets} sets completed · Day: ${day}
+        </div>
+      </div>
+    </div>
+
+    <!-- Exercise list -->
+    ${allExercises.length > 0 ? `
+    <div style="font-size:12px;font-weight:700;color:var(--text3);text-transform:uppercase;
+      letter-spacing:.08em;margin-bottom:4px">Exercises</div>
+    <div>${exerciseRows}</div>` :
+    `<div style="text-align:center;padding:16px;color:var(--text3);font-size:13px">
+      No exercise data available for this session.</div>`}
+  `;
+
+  openModal('modal-day-detail');
 }
 
 function renderGlobalHistory() {
-  _historyYear  = new Date().getFullYear();
-  _historyMonth = new Date().getMonth();
+  _historyYear         = new Date().getFullYear();
+  _historyMonth        = new Date().getMonth();
+  _selectedHistoryDate = todayStr(); // always open on today
 
   const user    = APP.currentUser;
   const logs    = Store.getUserLogs(user.id);
