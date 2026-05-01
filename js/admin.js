@@ -171,6 +171,9 @@ function openAdminResetPassword(userId, userName) {
   document.getElementById('arp-error').textContent      = '';
   document.getElementById('arp-new-pass').value         = '';
   document.getElementById('arp-confirm-pass').value     = '';
+  // Default to temp password mode (forces user to change on login)
+  const forceChangeEl = document.getElementById('arp-force-change');
+  if (forceChangeEl) forceChangeEl.checked = true;
   document.getElementById('arp-submit-btn').dataset.userId = userId;
   openModal('modal-admin-reset-password');
 }
@@ -181,6 +184,9 @@ async function submitAdminResetPassword() {
   const errEl       = document.getElementById('arp-error');
   const btn         = document.getElementById('arp-submit-btn');
   const userId      = btn.dataset.userId;
+  // If "force change on login" is checked, set as tempPassword so user must change it
+  const forceChangeEl = document.getElementById('arp-force-change');
+  const forceChange   = forceChangeEl ? forceChangeEl.checked : false;
 
   errEl.textContent = '';
   if (!newPass)               { errEl.textContent = 'Please enter a new password.'; return; }
@@ -189,7 +195,14 @@ async function submitAdminResetPassword() {
 
   btn.disabled = true; btn.textContent = 'Saving…';
 
-  const res = await Sheets.post('changePassword', { userId, newPassword: newPass });
+  let res;
+  if (forceChange) {
+    // Set as temp password — user sees "set your own password" prompt on next login
+    res = await Sheets.post('setTempPassword', { userId, tempPassword: newPass });
+  } else {
+    // Set as permanent password directly
+    res = await Sheets.post('changePassword', { userId, newPassword: newPass });
+  }
 
   btn.disabled = false; btn.textContent = 'Reset Password';
 
@@ -199,7 +212,12 @@ async function submitAdminResetPassword() {
   }
 
   closeModal('modal-admin-reset-password');
-  showToast('Password reset successfully! 🔑', 'success');
+  showToast(
+    forceChange
+      ? 'Temp password set! User will be prompted to change it on login. 🔑'
+      : 'Password reset successfully! 🔑',
+    'success'
+  );
 }
 
 function openAddUser() {
@@ -312,7 +330,6 @@ function renderModuleEditor() {
     stretching:   { name: 'Stretching',    emoji: '🤸' },
     running:      { name: 'Running',       emoji: '🏃' },
     calisthenics: { name: 'Calisthenics',  emoji: '🤸‍♂️' },
-    core:         { name: 'Core & Abs',    emoji: '🔥' },
   }[AdminEdit.module] || { name: AdminEdit.module, emoji: '💪' };
 
   document.getElementById('editor-module-title').textContent = info.emoji + ' ' + info.name;
@@ -1099,25 +1116,44 @@ function renderAllHistory() {
 }
 
 // ── ADMIN: VIEW ALL CUSTOM WORKOUTS ──────────────────────────────
-function renderAdminCustomWorkouts() {
+async function renderAdminCustomWorkouts() {
   const container = document.getElementById('admin-custom-workouts-list');
   if (!container) return;
 
-  // Gather all custom workouts from all users
-  const users = JSON.parse(localStorage.getItem('ff_local_users') || '[]');
+  // Show loading state
+  container.innerHTML = `<div style="text-align:center;padding:32px;color:var(--text3)">
+    <div class="loader" style="margin:0 auto 12px"></div>Loading custom workouts…</div>`;
+
+  // Fetch from Sheets (authoritative — works across all devices/browsers)
+  let allWorkouts = [];
   const allLogs = Store.getLogs().filter(l => l.module.startsWith('custom_'));
 
-  // Collect all custom workouts from localStorage for each known user
-  let allWorkouts = [];
-  // Get all ff_custom_workouts_ keys
-  for (let i = 0; i < localStorage.length; i++) {
-    const key = localStorage.key(i);
-    if (key && key.startsWith('ff_custom_workouts_')) {
-      const userId = key.replace('ff_custom_workouts_', '');
-      try {
-        const wos = JSON.parse(localStorage.getItem(key) || '[]');
-        wos.forEach(w => allWorkouts.push({ ...w, userId }));
-      } catch {}
+  try {
+    const res = await Sheets.get('getAllCustomWorkouts');
+    if (res?.success && Array.isArray(res.workouts)) {
+      allWorkouts = res.workouts;
+    } else {
+      throw new Error(res?.error || 'No data');
+    }
+  } catch (e) {
+    // Fallback: scan localStorage for this device's data
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('ff_custom_workouts_')) {
+        const userId = key.replace('ff_custom_workouts_', '');
+        try {
+          const wos = JSON.parse(localStorage.getItem(key) || '[]');
+          wos.forEach(w => allWorkouts.push({ ...w, userId }));
+        } catch {}
+      }
+    }
+    if (!allWorkouts.length) {
+      container.innerHTML = `<div class="card" style="background:rgba(240,192,64,0.08);border-color:rgba(240,192,64,0.25);text-align:center;padding:20px">
+        <div style="font-size:28px;margin-bottom:8px">⚠️</div>
+        <div style="font-weight:700;margin-bottom:6px">Could not load from Sheets</div>
+        <div style="font-size:13px;color:var(--text2)">Check your Sheets connection. ${e.message}</div>
+      </div>`;
+      return;
     }
   }
 
@@ -1126,24 +1162,37 @@ function renderAdminCustomWorkouts() {
     return;
   }
 
-  container.innerHTML = allWorkouts.map(w => {
-    const completions = allLogs.filter(l => l.userId === w.userId && l.module === 'custom_' + w.id).length;
-    return `
-      <div class="card card-sm" style="margin-bottom:10px">
-        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
-          <div>
-            <div style="font-weight:700;font-size:15px">${w.name}</div>
-            <div style="font-size:12px;color:var(--text3)">By: ${w.userId} · Created: ${w.createdDate||'—'}</div>
+  // Group by user for cleaner display
+  const byUser = {};
+  allWorkouts.forEach(w => {
+    const key = w.userId || 'unknown';
+    if (!byUser[key]) byUser[key] = { email: w.email || w.userId, workouts: [] };
+    byUser[key].workouts.push(w);
+  });
+
+  container.innerHTML = Object.entries(byUser).map(([userId, group]) => {
+    const userHeader = `<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin:12px 0 6px">${group.email}</div>`;
+    const workoutCards = group.workouts.map(w => {
+      const completions = allLogs.filter(l => l.userId === w.userId && l.module === 'custom_' + w.id).length;
+      return `
+        <div class="card card-sm" style="margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+            <div>
+              <div style="font-weight:700;font-size:15px">${w.name}</div>
+              <div style="font-size:12px;color:var(--text3)">${w.exercises?.length || 0} exercises · Created: ${w.createdDate||'—'}</div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-family:var(--font-display);font-size:24px;color:var(--g5)">${completions}</div>
+              <div style="font-size:11px;color:var(--text3)">sessions</div>
+            </div>
           </div>
-          <div style="text-align:right">
-            <div style="font-family:var(--font-display);font-size:24px;color:var(--g5)">${completions}</div>
-            <div style="font-size:11px;color:var(--text3)">sessions</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px">
+            ${(w.exercises||[]).slice(0,6).map(e => `<span style="font-size:12px;background:var(--bg3);color:var(--text2);padding:2px 10px;border-radius:50px">${e.name}</span>`).join('')}
+            ${(w.exercises||[]).length > 6 ? `<span style="font-size:12px;color:var(--text3);padding:2px 6px">+${w.exercises.length - 6} more</span>` : ''}
           </div>
-        </div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px">
-          ${(w.exercises||[]).map(e => `<span style="font-size:12px;background:var(--bg3);color:var(--text2);padding:2px 10px;border-radius:50px">${e.name}</span>`).join('')}
-        </div>
-      </div>`;
+        </div>`;
+    }).join('');
+    return userHeader + workoutCards;
   }).join('');
 }
 
@@ -1201,8 +1250,8 @@ async function testSheetsConnection() {
 }
 
 // ── MODULE HELPERS (shared with dashboard) ────────────────────────
-function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🤸', running: '🏃', calisthenics: '🤸‍♂️', core: '🔥' }[mod] || '💪'; }
-function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics', core: 'Core & Abs' }[mod] || mod; }
+function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🤸', running: '🏃', calisthenics: '🤸‍♂️' }[mod] || '💪'; }
+function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics' }[mod] || mod; }
 
 // ── QUOTES TAB (inline in Admin Panel, not editor page) ───────────
 
