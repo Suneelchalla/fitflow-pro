@@ -111,7 +111,9 @@ function getModuleOrder(userId) {
 }
 
 function saveModuleOrder(userId, modules) {
-  Store.set('ff_module_order_' + userId, modules.map(m => m.id));
+  const order = modules.map(m => m.id);
+  Store.set('ff_module_order_' + userId, order);
+  sheetsPost('saveContent', { key: 'module_order_' + userId, value: order });
 }
 
 function renderDashboardTiles() {
@@ -613,7 +615,10 @@ Leave blank to clear`, current);
   const history = plData.history || [];
   history.push({ date: todayStr(), weight: kg });
   if (history.length > 30) history.splice(0, history.length - 30);
-  Store.set(plKey, { weight: kg, history, updatedAt: new Date().toISOString() });
+  const plVal = { weight: kg, history, updatedAt: new Date().toISOString() };
+  Store.set(plKey, plVal);
+  // Sync to Sheets so weight history survives reinstall
+  sheetsPost('saveContent', { key: plKey.replace('ff_', ''), value: plVal });
   if (triggerEl) triggerEl.textContent = `⚖️ ${kg}kg`;
   showToast(`Weight logged: ${kg}kg for ${exName} 💪`, 'success');
   navigator.vibrate && navigator.vibrate(30);
@@ -1296,7 +1301,10 @@ const WORKOUT_ACHIEVEMENTS = [
 ];
 
 function _getWorkoutAchievements(userId) { return Store.get('ff_w_achievements_' + userId, {}); }
-function _saveWorkoutAchievements(userId, data) { Store.set('ff_w_achievements_' + userId, data); }
+function _saveWorkoutAchievements(userId, data) {
+  Store.set('ff_w_achievements_' + userId, data);
+  sheetsPost('saveContent', { key: 'w_achievements_' + userId, value: data });
+}
 
 function _buildWorkoutStats(userId) {
   const logs = Store.getUserLogs(userId);
@@ -1720,14 +1728,15 @@ function _logWeightEntry(userId, weightKg) {
   const key  = 'ff_weight_log_' + userId;
   const log  = Store.get(key, []);
   const today = todayStr();
-  // Update if already logged today, otherwise append
   const todayIdx = log.findIndex(e => e.date === today);
   if (todayIdx >= 0) log[todayIdx].weight = weightKg;
   else log.push({ date: today, weight: weightKg });
-  // Keep last 90 days
   const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 90);
   const cutStr = cutoff.toISOString().split('T')[0];
-  Store.set(key, log.filter(e => e.date >= cutStr));
+  const trimmed = log.filter(e => e.date >= cutStr);
+  Store.set(key, trimmed);
+  // Sync weight history to Sheets
+  sheetsPost('saveContent', { key: 'weight_log_' + userId, value: trimmed });
 }
 
 function _renderWeightChart(userId, container) {
@@ -1781,7 +1790,10 @@ function saveBodyStatsFromModal() {
     return el && el.style.background !== 'var(--surface)' && el.style.background !== '';
   }) || null;
 
-  saveBodyProfile(user.id, { age, weight, height, gender, fitnessLevel });
+  const bodyData = { age, weight, height, gender, fitnessLevel };
+  saveBodyProfile(user.id, bodyData);
+  // Sync body stats to Sheets so it survives cache clear / reinstall
+  sheetsPost('saveContent', { key: 'body_profile_' + user.id, value: bodyData });
   // Log weight entry for chart history
   if (weight) _logWeightEntry(user.id, weight);
   document.getElementById('body-stats-modal')?.remove();
@@ -2168,6 +2180,7 @@ function toggleSkillStep(skillKey, stepId) {
   const progress = Store.get(key, {});
   progress[stepId] = !progress[stepId];
   Store.set(key, progress);
+  sheetsPost('saveContent', { key: 'cali_skill_' + user.id + '_' + skillKey, value: progress });
   if (progress[stepId]) showToast('Step completed! Great progress! 💪', 'success');
   renderCaliSkillTree();
 }
@@ -2217,6 +2230,7 @@ function toggleChallengeDay(dayNum) {
   const progress = Store.get(key, {});
   progress[dayNum] = !progress[dayNum];
   Store.set(key, progress);
+  sheetsPost('saveContent', { key: 'cali_challenge_' + user.id, value: progress });
   if (progress[dayNum]) showToast(`Day ${dayNum} complete! 🔥`, 'success');
   renderCaliChallenge();
 }
