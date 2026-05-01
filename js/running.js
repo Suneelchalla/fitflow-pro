@@ -857,16 +857,6 @@ function discardRun() {
   document.getElementById('run-summary')?.classList.add('hidden');
   document.getElementById('run-active')?.classList.add('hidden');
   document.getElementById('run-idle').style.display = 'flex';
-
-  // Reset activity type to 'run' after saving — clean slate for next session
-  _activityType = 'run';
-  document.querySelectorAll('.activity-pill').forEach(p => p.classList.remove('active'));
-  const runPill = document.querySelector('.activity-pill[data-type="run"]');
-  if (runPill) runPill.classList.add('active');
-  const emojiEl2 = document.getElementById('run-idle-emoji');
-  const labelEl2 = document.getElementById('run-idle-label');
-  if (emojiEl2) emojiEl2.textContent = '🏃';
-  if (labelEl2) labelEl2.textContent = 'START A RUN';
 }
 
 // ── BACKGROUND / FOREGROUND RECOVERY ─────────────────────────────
@@ -1575,10 +1565,8 @@ function renderRunHistory() {
     const hasMap   = r.coords && r.coords.length >= 2;
 
     return `
-      <div class="card" style="margin-bottom:12px;cursor:pointer;transition:transform .15s,box-shadow .15s"
-        onclick="_showRunDetail(${idx})"
-        onmousedown="this.style.transform='scale(0.98)'" onmouseup="this.style.transform=''"
-        ontouchstart="this.style.transform='scale(0.98)'" ontouchend="this.style.transform=''">
+      <div class="card run-history-card" style="margin-bottom:12px;cursor:pointer"
+        onclick="_showRunDetail(${idx})">
 
         <!-- Activity header -->
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
@@ -2229,8 +2217,7 @@ function shareRun() {
     `🔥 Calories: ${cal} kcal`,
     `💪 Tracked with FitFlow Pro`,
   ];
-  const text = lines.join('
-');
+  const text = lines.join('\n');
 
   if (navigator.share) {
     navigator.share({ title: `FitFlow Pro — ${meta.label} Complete!`, text }).catch(() => {});
