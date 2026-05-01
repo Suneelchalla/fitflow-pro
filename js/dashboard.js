@@ -391,6 +391,78 @@ function selectDay(day, btn) {
 }
 
 // ── RENDER EXERCISES ──────────────────────────────────────────────
+// ── REST TIMER ───────────────────────────────────────────────────
+let _restTimer = { active: false, interval: null, remaining: 0, total: 0 };
+
+function _startRestTimer(seconds) {
+  if (_restTimer.interval) { clearInterval(_restTimer.interval); }
+  _restTimer = { active: true, remaining: seconds, total: seconds, interval: null };
+
+  // Create floating overlay
+  const overlay = document.createElement('div');
+  overlay.id = 'rest-timer-overlay';
+  overlay.style.cssText = `
+    position:fixed;bottom:90px;left:50%;transform:translateX(-50%);z-index:500;
+    background:rgba(7,21,16,0.97);border:1px solid var(--g3);border-radius:20px;
+    padding:16px 24px;text-align:center;min-width:220px;
+    box-shadow:0 8px 32px rgba(0,0,0,0.6);backdrop-filter:blur(12px);
+    animation:fadeUp .3s ease both;
+  `;
+  overlay.innerHTML = `
+    <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Rest Timer</div>
+    <div id="rest-countdown" style="font-family:var(--font-display);font-size:48px;color:var(--g5);line-height:1">${seconds}</div>
+    <div style="margin:10px 0 0;height:4px;background:var(--bg3);border-radius:2px;overflow:hidden">
+      <div id="rest-bar" style="height:100%;width:100%;background:var(--g4);border-radius:2px;transition:width .9s linear"></div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button onclick="_skipRestTimer()" style="flex:1;padding:8px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:13px;cursor:pointer">Skip</button>
+      <button onclick="_addRestTime(15)" style="flex:1;padding:8px;border-radius:10px;border:1px solid var(--g3);background:rgba(46,125,70,0.15);color:var(--g5);font-size:13px;cursor:pointer">+15s</button>
+    </div>
+  `;
+  document.getElementById('rest-timer-overlay')?.remove();
+  document.body.appendChild(overlay);
+  navigator.vibrate && navigator.vibrate([30]);
+
+  _restTimer.interval = setInterval(() => {
+    _restTimer.remaining--;
+    const el  = document.getElementById('rest-countdown');
+    const bar = document.getElementById('rest-bar');
+    if (el) {
+      el.textContent = _restTimer.remaining;
+      el.style.color = _restTimer.remaining <= 3 ? 'var(--accent)' : 'var(--g5)';
+    }
+    if (bar) bar.style.width = (_restTimer.remaining / _restTimer.total * 100) + '%';
+
+    if (_restTimer.remaining <= 0) {
+      _stopRestTimer();
+      navigator.vibrate && navigator.vibrate([100, 50, 100, 50, 200]);
+      showToast("💪 Rest done — next set!", 'success');
+    }
+  }, 1000);
+  // Trigger bar transition on next frame
+  requestAnimationFrame(() => {
+    const bar = document.getElementById('rest-bar');
+    if (bar) bar.style.width = ((seconds - 1) / seconds * 100) + '%';
+  });
+}
+
+function _stopRestTimer() {
+  if (_restTimer.interval) { clearInterval(_restTimer.interval); _restTimer.interval = null; }
+  _restTimer.active = false;
+  const overlay = document.getElementById('rest-timer-overlay');
+  if (overlay) {
+    overlay.style.animation = 'fadeDown .3s ease forwards';
+    setTimeout(() => overlay.remove(), 300);
+  }
+}
+
+function _skipRestTimer() { _stopRestTimer(); }
+
+function _addRestTime(sec) {
+  _restTimer.remaining += sec;
+  _restTimer.total     += sec;
+}
+
 function renderExercises(moduleId, day) {
   if (!moduleId || !day) return;
   const mod = (window.APP_DATA_DEFAULT||window.APP_DATA).modules[moduleId];
@@ -470,6 +542,12 @@ function renderExercises(moduleId, day) {
           </div>`;
         }).join('');
 
+    // Progressive overload: load last logged weight for gym exercises
+    const isGym = moduleId === 'gym';
+    const plKey = `ff_pl_${user.id}_${moduleId}_${(ex.name||'').replace(/\s+/g,'_')}`;
+    const plData = isGym ? Store.get(plKey) : null;
+    const lastWeight = plData?.weight || null;
+
     // Meta line differs for yoga vs others
     const metaHtml = isHoldBased
       ? `<div class="exercise-meta">
@@ -480,6 +558,9 @@ function renderExercises(moduleId, day) {
       : `<div class="exercise-meta">
            <span>🔄 ${ex.sets || 1} sets</span>
            <span>💪 ${ex.reps || ''}</span>
+           ${isGym ? `<span style="color:var(--g5);font-size:11px;cursor:pointer"
+             onclick="logExerciseWeight('${moduleId}','${(ex.name||'').replace(/'/g,"\\'")}',this)">
+             ${lastWeight ? `⚖️ ${lastWeight}kg` : '⚖️ Log weight'}</span>` : ''}
          </div>`;
 
     return `${hdr}
@@ -505,11 +586,112 @@ function toggleSet(moduleId, day, exIdx, setIdx) {
   const sessionData = Store.get(sessionKey, {});
   if (!sessionData[exIdx]) sessionData[exIdx] = [];
   const pos = sessionData[exIdx].indexOf(setIdx);
-  if (pos >= 0) sessionData[exIdx].splice(pos, 1);
-  else sessionData[exIdx].push(setIdx);
+  const wasChecked = pos >= 0;
+  if (wasChecked) sessionData[exIdx].splice(pos, 1);
+  else            sessionData[exIdx].push(setIdx);
   Store.set(sessionKey, sessionData);
+
+  // Haptic feedback
+  navigator.vibrate && navigator.vibrate(wasChecked ? 20 : 40);
+
+  // Start rest timer if set was just CHECKED (not unchecked) and not hold-based
+  if (!wasChecked && moduleId !== 'yoga' && moduleId !== 'stretching') {
+    const mod     = (window.APP_DATA_DEFAULT||window.APP_DATA).modules[moduleId];
+    const exOv    = Store.getContent('exercises_' + moduleId);
+    const day_ex  = exOv?.days?.[day] || mod?.days?.[day] || [];
+    const wu      = Store.getContent('warmup_' + moduleId)  || (window.APP_DATA_DEFAULT||window.APP_DATA).warmups?.[moduleId]   || [];
+    const cd      = Store.getContent('cooldown_' + moduleId)|| (window.APP_DATA_DEFAULT||window.APP_DATA).cooldowns?.[moduleId] || [];
+    const all     = [...wu, ...day_ex, ...cd];
+    const ex      = all[exIdx];
+    const restSec = ex?.rest ? parseInt(ex.rest) : 60;
+    // Only show rest timer if this wasn't the last set of the exercise
+    const totalSets = parseInt(ex?.sets) || 1;
+    const doneCount = (sessionData[exIdx] || []).length;
+    if (doneCount < totalSets) _showRestTimer(restSec);
+  }
+
   renderExercises(moduleId, day);
   updateCompleteBtn();
+}
+
+// ── REST TIMER ────────────────────────────────────────────────────
+let _restTimerInterval = null;
+
+function _showRestTimer(seconds) {
+  _clearRestTimer();
+  let remaining = seconds;
+
+  const el = document.createElement('div');
+  el.id = 'rest-timer-overlay';
+  el.style.cssText = `position:fixed;bottom:90px;left:50%;transform:translateX(-50%);
+    background:rgba(7,21,16,0.96);border:1px solid var(--g3);border-radius:20px;
+    padding:16px 24px;z-index:500;display:flex;align-items:center;gap:16px;
+    box-shadow:0 8px 32px rgba(0,0,0,0.5);min-width:220px;max-width:340px;
+    animation:slideUp .25s ease`;
+  el.innerHTML = `
+    <div style="font-size:28px" id="rest-timer-icon">⏱</div>
+    <div style="flex:1">
+      <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.08em">Rest Timer</div>
+      <div id="rest-timer-count" style="font-family:var(--font-display);font-size:32px;color:var(--g5);line-height:1">${remaining}s</div>
+      <div style="height:3px;background:var(--bg3);border-radius:2px;margin-top:6px;overflow:hidden">
+        <div id="rest-timer-bar" style="height:100%;background:var(--g4);border-radius:2px;width:100%;transition:width .9s linear"></div>
+      </div>
+    </div>
+    <button onclick="_clearRestTimer()" style="background:none;border:none;color:var(--text3);font-size:20px;cursor:pointer;padding:4px">✕</button>`;
+  document.body.appendChild(el);
+
+  // Animate bar immediately
+  requestAnimationFrame(() => {
+    const bar = document.getElementById('rest-timer-bar');
+    if (bar) bar.style.width = '0%';
+  });
+
+  _restTimerInterval = setInterval(() => {
+    remaining--;
+    const countEl = document.getElementById('rest-timer-count');
+    if (countEl) {
+      countEl.textContent = remaining + 's';
+      countEl.style.color = remaining <= 5 ? 'var(--accent)' : 'var(--g5)';
+    }
+    if (remaining <= 3) navigator.vibrate && navigator.vibrate(30);
+    if (remaining <= 0) {
+      navigator.vibrate && navigator.vibrate([80, 40, 80]);
+      const icon = document.getElementById('rest-timer-icon');
+      if (icon) icon.textContent = '💪';
+      if (countEl) countEl.textContent = "Go!";
+      setTimeout(_clearRestTimer, 1000);
+    }
+  }, 1000);
+}
+
+function logExerciseWeight(moduleId, exName, triggerEl) {
+  const user = APP.currentUser;
+  const plKey = `ff_pl_${user.id}_${moduleId}_${exName.replace(/\s+/g,'_')}`;
+  const plData = Store.get(plKey) || {};
+  const current = plData.weight || '';
+  const input = prompt(`Weight used for "${exName}" (kg):
+Leave blank to clear`, current);
+  if (input === null) return; // cancelled
+  const kg = parseFloat(input);
+  if (isNaN(kg) || kg <= 0) {
+    Store.remove(plKey);
+    if (triggerEl) triggerEl.textContent = '⚖️ Log weight';
+    return;
+  }
+  // Save with history
+  const history = plData.history || [];
+  history.push({ date: todayStr(), weight: kg });
+  if (history.length > 30) history.splice(0, history.length - 30);
+  Store.set(plKey, { weight: kg, history, updatedAt: new Date().toISOString() });
+  if (triggerEl) triggerEl.textContent = `⚖️ ${kg}kg`;
+  showToast(`Weight logged: ${kg}kg for ${exName} 💪`, 'success');
+  navigator.vibrate && navigator.vibrate(30);
+}
+
+function _clearRestTimer() {
+  if (_restTimerInterval) { clearInterval(_restTimerInterval); _restTimerInterval = null; }
+  const el = document.getElementById('rest-timer-overlay');
+  if (el) el.remove();
 }
 
 function updateCompleteBtn() {
@@ -571,6 +753,7 @@ function completeDay() {
   if (!logged) { showToast('Already logged today!', 'info'); return; }
 
   showToast('🎉 ' + day + ' complete! Great work!', 'success');
+  _launchConfetti();
   updateCompleteBtn();
 
   // Refresh day tabs to show ✓ — without resetting selected day
@@ -583,6 +766,7 @@ function completeDay() {
   });
 
   sheetsPost('logCompletion', { userId: user.id, email: user.email, module: mod, day, date: todayStr() });
+  setTimeout(() => checkAndUnlockWorkoutAchievements(user.id), 800);
 }
 
 // ── MODULE INNER TABS ─────────────────────────────────────────────
@@ -965,6 +1149,113 @@ function renderGlobalHistory() {
   _renderHistoryCalendar();
 }
 
+// ── WORKOUT ACHIEVEMENTS ─────────────────────────────────────────
+const WORKOUT_ACHIEVEMENTS = [
+  { id:'w_first',     emoji:'🌱', name:'First Workout',      desc:'Completed your very first workout',                  check: s => s.total >= 1 },
+  { id:'w_10',        emoji:'💪', name:'10 Workouts',         desc:'Completed 10 total workout sessions',                check: s => s.total >= 10 },
+  { id:'w_25',        emoji:'🔥', name:'25 Workouts',         desc:'Completed 25 total workout sessions',                check: s => s.total >= 25 },
+  { id:'w_50',        emoji:'⭐', name:'50 Workouts',         desc:'Completed 50 total workout sessions',                check: s => s.total >= 50 },
+  { id:'w_100',       emoji:'💯', name:'Century Club',        desc:'100 workout sessions — elite dedication',            check: s => s.total >= 100 },
+  { id:'w_streak3',   emoji:'📅', name:'3-Day Streak',        desc:'Worked out 3 days in a row (any module)',            check: s => s.streak >= 3 },
+  { id:'w_streak7',   emoji:'🗓️', name:'Week Warrior',        desc:'Worked out every day for a full week',               check: s => s.streak >= 7 },
+  { id:'w_streak30',  emoji:'🌙', name:'Iron Discipline',     desc:'30-day workout streak — legendary!',                 check: s => s.streak >= 30 },
+  { id:'w_allmod',    emoji:'🎯', name:'All-Rounder',         desc:'Trained in all 7 modules at least once',             check: s => s.uniqueMods >= 7 },
+  { id:'w_yoga10',    emoji:'🧘', name:'Yoga Enthusiast',     desc:'Completed 10 yoga sessions',                        check: s => (s.modCounts.yoga||0) >= 10 },
+  { id:'w_gym10',     emoji:'🏋️', name:'Gym Regular',         desc:'Completed 10 gym sessions',                         check: s => (s.modCounts.gym||0) >= 10 },
+  { id:'w_cardio10',  emoji:'🏠', name:'Home Hero',           desc:'Completed 10 home cardio sessions',                  check: s => (s.modCounts.cardio||0) >= 10 },
+  { id:'w_core10',    emoji:'🔥', name:'Core Crusher',        desc:'Completed 10 core & abs sessions',                   check: s => (s.modCounts.core||0) >= 10 },
+  { id:'w_early',     emoji:'🌅', name:'Early Bird',          desc:'Logged a workout before 7 AM',                       check: s => s.hasEarlyWorkout },
+  { id:'w_week_all',  emoji:'🏅', name:'Perfect Week',        desc:'Worked out 6+ days in a single week',                check: s => s.maxWeekDays >= 6 },
+];
+
+function _getWorkoutAchievements(userId) { return Store.get('ff_w_achievements_' + userId, {}); }
+function _saveWorkoutAchievements(userId, data) { Store.set('ff_w_achievements_' + userId, data); }
+
+function _buildWorkoutStats(userId) {
+  const logs = Store.getUserLogs(userId);
+  const runLogs = Store.getUserRunLogs(userId);
+  const allDates = [...new Set([...logs.map(l=>l.date), ...runLogs.map(r=>r.date)])].sort().reverse();
+
+  const modCounts = {};
+  logs.filter(l=>!l.module?.startsWith('custom_')).forEach(l => {
+    modCounts[l.module] = (modCounts[l.module]||0)+1;
+  });
+
+  // Max days in any single week
+  const weekMap = {};
+  allDates.forEach(d => {
+    const dt = new Date(d + 'T12:00:00');
+    const mon = new Date(dt); mon.setDate(dt.getDate() - ((dt.getDay()+6)%7));
+    const wk = mon.toISOString().split('T')[0];
+    if (!weekMap[wk]) weekMap[wk] = new Set();
+    weekMap[wk].add(d);
+  });
+  const maxWeekDays = Math.max(0, ...Object.values(weekMap).map(s => s.size));
+
+  // Early workout (before 7am)
+  const hasEarlyWorkout = logs.some(l => {
+    const ts = l.timestamp || '';
+    if (!ts) return false;
+    return new Date(ts).getHours() < 7;
+  });
+
+  return {
+    total:       logs.length,
+    streak:      calcStreak(userId),
+    uniqueMods:  Object.keys(modCounts).length,
+    modCounts,
+    maxWeekDays,
+    hasEarlyWorkout,
+  };
+}
+
+function checkAndUnlockWorkoutAchievements(userId) {
+  const stats    = _buildWorkoutStats(userId);
+  const unlocked = _getWorkoutAchievements(userId);
+  const newOnes  = [];
+  WORKOUT_ACHIEVEMENTS.forEach(a => {
+    if (!unlocked[a.id] && a.check(stats)) {
+      unlocked[a.id] = { unlockedAt: new Date().toISOString() };
+      newOnes.push(a);
+    }
+  });
+  if (newOnes.length) {
+    _saveWorkoutAchievements(userId, unlocked);
+    newOnes.forEach(a => {
+      setTimeout(() => showToast(`🏅 Achievement unlocked: ${a.emoji} ${a.name}!`, 'success'), 600);
+    });
+  }
+}
+
+// ── CONFETTI ─────────────────────────────────────────────────────
+function _launchConfetti() {
+  const colors = ['#4caf50','#7ed9a0','#f5c542','#ff7043','#42a5f5','#ce93d8'];
+  const count  = 60;
+  for (let i = 0; i < count; i++) {
+    const el = document.createElement('div');
+    const color = colors[Math.floor(Math.random() * colors.length)];
+    const size  = 6 + Math.random() * 8;
+    const x     = Math.random() * window.innerWidth;
+    const delay = Math.random() * 0.6;
+    const dur   = 1.2 + Math.random() * 0.8;
+    el.style.cssText = `position:fixed;left:${x}px;top:-10px;width:${size}px;height:${size}px;
+      border-radius:${Math.random()>0.5?'50%':'2px'};background:${color};z-index:9999;
+      pointer-events:none;animation:confettiFall ${dur}s ease-in ${delay}s forwards`;
+    document.body.appendChild(el);
+    setTimeout(() => el.remove(), (dur + delay + 0.1) * 1000);
+  }
+  // Inject keyframes once
+  if (!document.getElementById('confetti-style')) {
+    const s = document.createElement('style');
+    s.id = 'confetti-style';
+    s.textContent = `@keyframes confettiFall {
+      0%   { transform:translateY(0) rotate(0deg);  opacity:1; }
+      100% { transform:translateY(${window.innerHeight + 20}px) rotate(${360+Math.random()*360}deg); opacity:0; }
+    }`;
+    document.head.appendChild(s);
+  }
+}
+
 function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🙆', running: '🏃', calisthenics: '🤸‍♂️', core: '🔥' }[mod] || '💪'; }
 function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics', core: 'Core & Abs' }[mod] || mod; }
 
@@ -982,7 +1273,20 @@ function getBodyProfile(userId) {
 }
 
 function saveBodyProfile(userId, profile) {
-  Store.set('ff_body_profile_' + userId, { ...profile, updatedAt: new Date().toISOString() });
+  const updated = { ...profile, updatedAt: new Date().toISOString() };
+  Store.set('ff_body_profile_' + userId, updated);
+  // Append to weight history if weight is present
+  if (profile.weight) {
+    const history = Store.get('ff_weight_history_' + userId, []);
+    const today = new Date().toISOString().split('T')[0];
+    // Update today's entry or append
+    const todayIdx = history.findIndex(e => e.date === today);
+    if (todayIdx >= 0) history[todayIdx].weight = profile.weight;
+    else history.push({ date: today, weight: profile.weight });
+    // Keep last 90 entries
+    if (history.length > 90) history.splice(0, history.length - 90);
+    Store.set('ff_weight_history_' + userId, history);
+  }
 }
 
 function renderProfilePage() {
@@ -1064,6 +1368,59 @@ function renderProfilePage() {
       </div>
     </div>
 
+    <!-- Workout Achievements -->
+    <div class="section-title" style="margin-bottom:10px">Workout Achievements</div>
+    ${(() => {
+      const wUnlocked = _getWorkoutAchievements(user.id);
+      const wUnlockedList = WORKOUT_ACHIEVEMENTS.filter(a => wUnlocked[a.id]);
+      const wNext = WORKOUT_ACHIEVEMENTS.find(a => !wUnlocked[a.id]);
+      if (!wUnlockedList.length) return `
+        <div class="card card-sm" style="text-align:center;padding:16px;margin-bottom:16px">
+          <div style="font-size:28px;margin-bottom:6px">🏅</div>
+          <div style="font-size:13px;color:var(--text2)">Complete your first workout to earn badges!</div>
+        </div>`;
+      return `
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:${wNext?'8':'16'}px">
+          ${wUnlockedList.slice(-8).map(a => `
+            <div title="${a.name} — ${a.desc}" style="text-align:center;background:rgba(46,125,70,0.1);border:1px solid rgba(46,125,70,0.3);border-radius:10px;padding:8px 4px">
+              <div style="font-size:22px">${a.emoji}</div>
+              <div style="font-size:9px;color:var(--text3);margin-top:3px;line-height:1.2">${a.name}</div>
+            </div>`).join('')}
+        </div>
+        ${wNext ? `<div style="font-size:12px;color:var(--text3);margin-bottom:16px">Next: ${wNext.emoji} ${wNext.name} — ${wNext.desc}</div>` : ''}`;
+    })()}
+
+    <!-- Weight History Chart -->
+    ${(() => {
+      const wh = Store.get('ff_weight_history_' + user.id, []);
+      if (wh.length < 2) return '';
+      const recent = wh.slice(-12);
+      const minW = Math.min(...recent.map(e=>e.weight)) - 2;
+      const maxW = Math.max(...recent.map(e=>e.weight)) + 2;
+      const range = maxW - minW || 1;
+      const bars = recent.map((e, i) => {
+        const pct = ((e.weight - minW) / range) * 100;
+        const h   = 20 + (pct / 100) * 44;
+        return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px" title="${e.date}: ${e.weight}kg">
+          <div style="font-size:9px;color:var(--text3)">${e.weight}</div>
+          <div style="width:100%;height:${h}px;background:var(--g3);border-radius:3px 3px 0 0;min-height:4px"></div>
+          <div style="font-size:8px;color:var(--text3)">${e.date.slice(5)}</div>
+        </div>`;
+      }).join('');
+      const trend = recent[recent.length-1].weight - recent[0].weight;
+      const trendStr = trend > 0 ? `+${trend.toFixed(1)}kg` : trend < 0 ? `${trend.toFixed(1)}kg` : 'stable';
+      const trendColor = trend < 0 ? 'var(--g5)' : trend > 0 ? '#ef9a9a' : 'var(--text3)';
+      return `
+        <div class="section-title" style="margin-bottom:10px">Weight Trend</div>
+        <div class="card card-sm" style="margin-bottom:16px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+            <div style="font-size:13px;color:var(--text2)">Last ${recent.length} entries</div>
+            <div style="font-size:13px;font-weight:700;color:${trendColor}">${trendStr}</div>
+          </div>
+          <div style="display:flex;align-items:flex-end;gap:3px;height:80px">${bars}</div>
+        </div>`;
+    })()}
+
     <!-- Quick actions -->
     <div class="section-title" style="margin-bottom:10px">Achievements</div>
     ${(() => {
@@ -1091,6 +1448,7 @@ function renderProfilePage() {
     })()}
     <div class="section-title" style="margin-bottom:10px">Body Stats</div>
     <div class="card" style="margin-bottom:20px">
+      <div id="weight-chart-container" style="margin-bottom:12px"></div>
       ${body.age ? `
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
         <div style="background:var(--bg2);border-radius:10px;padding:10px;text-align:center">
@@ -1134,6 +1492,9 @@ function renderProfilePage() {
         onclick="logout()">🚪 Sign Out</button>
     </div>
   `;
+  // Render weight chart after DOM is ready
+  const wChart = document.getElementById('weight-chart-container');
+  if (wChart) _renderWeightChart(user.id, wChart);
 }
 
 // ── PROFILE MENU ──────────────────────────────────────────────────
@@ -1227,6 +1588,58 @@ function openEditBodyStats() {
   overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
 }
 
+// ── WEIGHT HISTORY TRACKING ──────────────────────────────────────
+function _logWeightEntry(userId, weightKg) {
+  const key  = 'ff_weight_log_' + userId;
+  const log  = Store.get(key, []);
+  const today = todayStr();
+  // Update if already logged today, otherwise append
+  const todayIdx = log.findIndex(e => e.date === today);
+  if (todayIdx >= 0) log[todayIdx].weight = weightKg;
+  else log.push({ date: today, weight: weightKg });
+  // Keep last 90 days
+  const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - 90);
+  const cutStr = cutoff.toISOString().split('T')[0];
+  Store.set(key, log.filter(e => e.date >= cutStr));
+}
+
+function _renderWeightChart(userId, container) {
+  const log = Store.get('ff_weight_log_' + userId, []).sort((a,b)=>a.date.localeCompare(b.date));
+  if (log.length < 2) { container.innerHTML = ''; return; }
+  const weights = log.map(e => e.weight);
+  const minW = Math.min(...weights) - 1;
+  const maxW = Math.max(...weights) + 1;
+  const range = maxW - minW || 1;
+  const W = 280, H = 80;
+  const pts = weights.map((w, i) => {
+    const x = Math.round(i / (weights.length - 1) * (W - 20) + 10);
+    const y = Math.round(H - 10 - ((w - minW) / range) * (H - 20));
+    return `${x},${y}`;
+  }).join(' ');
+  const first = log[0], last = log[log.length-1];
+  const diff  = last.weight - first.weight;
+  const trend = diff < -0.4 ? `↓ ${Math.abs(diff).toFixed(1)}kg` : diff > 0.4 ? `↑ ${diff.toFixed(1)}kg` : '→ Stable';
+  const trendColor = diff < -0.4 ? 'var(--g5)' : diff > 0.4 ? '#ef9a9a' : 'var(--text3)';
+  container.innerHTML = `
+    <div style="margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
+      <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.06em">Weight History</div>
+      <div style="font-size:12px;color:${trendColor};font-weight:700">${trend} <span style="color:var(--text3);font-weight:400">(${log.length} entries)</span></div>
+    </div>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:${H}px">
+      <polyline points="${pts}" fill="none" stroke="var(--g4)" stroke-width="2" stroke-linejoin="round"/>
+      ${weights.map((w,i)=>{
+        const x=Math.round(i/(weights.length-1)*(W-20)+10);
+        const y=Math.round(H-10-((w-minW)/range)*(H-20));
+        return `<circle cx="${x}" cy="${y}" r="3" fill="var(--g4)"/>`;
+      }).join('')}
+      <text x="6" y="${H-4}" fill="var(--text3)" font-size="9">${minW.toFixed(1)}</text>
+      <text x="6" y="12" fill="var(--text3)" font-size="9">${maxW.toFixed(1)}</text>
+    </svg>
+    <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-top:2px">
+      <span>${first.date}</span><span>${last.date}</span>
+    </div>`;
+}
+
 function saveBodyStatsFromModal() {
   const user   = APP.currentUser;
   const age    = +document.getElementById('es-age')?.value || null;
@@ -1242,6 +1655,8 @@ function saveBodyStatsFromModal() {
   }) || null;
 
   saveBodyProfile(user.id, { age, weight, height, gender, fitnessLevel });
+  // Log weight entry for chart history
+  if (weight) _logWeightEntry(user.id, weight);
   document.getElementById('body-stats-modal')?.remove();
   showToast('Body stats saved! ✅', 'success');
   renderProfilePage();
@@ -1550,6 +1965,7 @@ function completeCaliDay() {
   if (!logged) { showToast('Already logged today!', 'info'); return; }
   showToast('🎉 ' + day + ' calisthenics complete! 💪', 'success');
   sheetsPost('logCompletion', { userId: user.id, email: user.email, module: 'calisthenics', day, date: todayStr() });
+  setTimeout(() => checkAndUnlockWorkoutAchievements(user.id), 800);
   updateCaliCompleteBtn();
 }
 
