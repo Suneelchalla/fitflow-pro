@@ -324,6 +324,8 @@ function renderAnnouncementBanner() {
 
 // ── OPEN MODULE ───────────────────────────────────────────────────
 function openModule(moduleId) {
+  // Clear rest timer when leaving current module so it doesn't block other pages
+  _clearRestTimer();
   APP.currentModule = moduleId;
   // Persist so page refresh can restore the user to this module
   if (APP.currentUser) Store.set('ff_last_module_' + APP.currentUser.id, moduleId);
@@ -392,77 +394,6 @@ function selectDay(day, btn) {
 
 // ── RENDER EXERCISES ──────────────────────────────────────────────
 // ── REST TIMER ───────────────────────────────────────────────────
-let _restTimer = { active: false, interval: null, remaining: 0, total: 0 };
-
-function _startRestTimer(seconds) {
-  if (_restTimer.interval) { clearInterval(_restTimer.interval); }
-  _restTimer = { active: true, remaining: seconds, total: seconds, interval: null };
-
-  // Create floating overlay
-  const overlay = document.createElement('div');
-  overlay.id = 'rest-timer-overlay';
-  overlay.style.cssText = `
-    position:fixed;bottom:90px;left:50%;transform:translateX(-50%);z-index:500;
-    background:rgba(7,21,16,0.97);border:1px solid var(--g3);border-radius:20px;
-    padding:16px 24px;text-align:center;min-width:220px;
-    box-shadow:0 8px 32px rgba(0,0,0,0.6);backdrop-filter:blur(12px);
-    animation:fadeUp .3s ease both;
-  `;
-  overlay.innerHTML = `
-    <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Rest Timer</div>
-    <div id="rest-countdown" style="font-family:var(--font-display);font-size:48px;color:var(--g5);line-height:1">${seconds}</div>
-    <div style="margin:10px 0 0;height:4px;background:var(--bg3);border-radius:2px;overflow:hidden">
-      <div id="rest-bar" style="height:100%;width:100%;background:var(--g4);border-radius:2px;transition:width .9s linear"></div>
-    </div>
-    <div style="display:flex;gap:8px;margin-top:12px">
-      <button onclick="_skipRestTimer()" style="flex:1;padding:8px;border-radius:10px;border:1px solid var(--border);background:transparent;color:var(--text2);font-size:13px;cursor:pointer">Skip</button>
-      <button onclick="_addRestTime(15)" style="flex:1;padding:8px;border-radius:10px;border:1px solid var(--g3);background:rgba(46,125,70,0.15);color:var(--g5);font-size:13px;cursor:pointer">+15s</button>
-    </div>
-  `;
-  document.getElementById('rest-timer-overlay')?.remove();
-  document.body.appendChild(overlay);
-  navigator.vibrate && navigator.vibrate([30]);
-
-  _restTimer.interval = setInterval(() => {
-    _restTimer.remaining--;
-    const el  = document.getElementById('rest-countdown');
-    const bar = document.getElementById('rest-bar');
-    if (el) {
-      el.textContent = _restTimer.remaining;
-      el.style.color = _restTimer.remaining <= 3 ? 'var(--accent)' : 'var(--g5)';
-    }
-    if (bar) bar.style.width = (_restTimer.remaining / _restTimer.total * 100) + '%';
-
-    if (_restTimer.remaining <= 0) {
-      _stopRestTimer();
-      navigator.vibrate && navigator.vibrate([100, 50, 100, 50, 200]);
-      showToast("💪 Rest done — next set!", 'success');
-    }
-  }, 1000);
-  // Trigger bar transition on next frame
-  requestAnimationFrame(() => {
-    const bar = document.getElementById('rest-bar');
-    if (bar) bar.style.width = ((seconds - 1) / seconds * 100) + '%';
-  });
-}
-
-function _stopRestTimer() {
-  if (_restTimer.interval) { clearInterval(_restTimer.interval); _restTimer.interval = null; }
-  _restTimer.active = false;
-  const overlay = document.getElementById('rest-timer-overlay');
-  if (overlay) {
-    overlay.style.animation = 'fadeDown .3s ease forwards';
-    setTimeout(() => overlay.remove(), 300);
-  }
-}
-
-function _skipRestTimer() { _stopRestTimer(); }
-
-function _addRestTime(sec) {
-  _restTimer.remaining += sec;
-  _restTimer.total     += sec;
-}
-
 function renderExercises(moduleId, day) {
   if (!moduleId || !day) return;
   const mod = (window.APP_DATA_DEFAULT||window.APP_DATA).modules[moduleId];
