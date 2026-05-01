@@ -38,10 +38,39 @@ function selectActivityType(type, el) {
 }
 
 // ── LEAFLET MAP INSTANCES ─────────────────────────────────────────
-let _liveMap      = null;   // Leaflet map shown during active run
-let _livePolyline = null;   // live route polyline
-let _liveMarker   = null;   // current position marker
-let _sumMap       = null;   // Leaflet map shown in summary screen
+let _liveMap      = null;
+let _livePolyline = null;
+let _liveMarker   = null;
+let _sumMap       = null;
+let _userPanned   = false;   // true when user has manually panned — stops auto-recentering
+
+// ── SCREEN WAKE LOCK — keeps GPS alive when screen locks ──────────
+let _wakeLock = null;
+
+async function _requestWakeLock() {
+  // Screen Wake Lock API — prevents CPU throttling of GPS on Android
+  if ('wakeLock' in navigator) {
+    try {
+      _wakeLock = await navigator.wakeLock.request('screen');
+      _wakeLock.addEventListener('release', () => {
+        // Re-request if released unexpectedly (e.g. tab hidden then restored)
+        if (APP.runSession && !APP.runSession.paused) {
+          setTimeout(_requestWakeLock, 500);
+        }
+      });
+    } catch (e) {
+      // Wake lock denied — fall through to audio keepalive only
+      console.warn('Wake lock denied:', e.message);
+    }
+  }
+}
+
+function _releaseWakeLock() {
+  if (_wakeLock) {
+    _wakeLock.release().catch(() => {});
+    _wakeLock = null;
+  }
+}
 
 // ════════════════════════════════════════════════════════════════
 // LOCK SCREEN DISPLAY — Media Session API + Silent Audio trick
@@ -248,7 +277,7 @@ function _loadLeaflet(cb) {
 // ── ZOOM HELPER (called by +/− buttons) ───────────────────────────
 function _liveMapZoom(delta) {
   if (!_liveMap) return;
-  _liveMap.zoomIn && delta > 0 ? _liveMap.zoomIn() : _liveMap.zoomOut();
+  if (delta > 0) _liveMap.zoomIn(); else _liveMap.zoomOut();
 }
 
 // ── LIVE MAP (during active run) ──────────────────────────────────
@@ -258,29 +287,54 @@ function _initLiveMap() {
     if (!container) return;
 
     if (_liveMap) { _liveMap.remove(); _liveMap = null; _livePolyline = null; _liveMarker = null; }
+    _userPanned = false;
 
     const startCoord = APP.gpsCoords.length > 0
       ? [APP.gpsCoords[APP.gpsCoords.length - 1].lat, APP.gpsCoords[APP.gpsCoords.length - 1].lon]
       : [20.5937, 78.9629];
 
     _liveMap = L.map(container, {
-      zoomControl:     false,
+      zoomControl:        false,
       attributionControl: false,
-      dragging:        true,
-      scrollWheelZoom: false,
-      // Disable tap handler — it conflicts with our button touch events
-      tap:             false,
-      // Keep pinch zoom enabled
-      touchZoom:       true,
-      doubleClickZoom: false,
+      dragging:           true,
+      scrollWheelZoom:    false,
+      tap:                false,   // prevent Leaflet tap hijacking button taps
+      touchZoom:          true,    // pinch to zoom
+      doubleClickZoom:    false,
+      bounceAtZoomLimits: false,
     }).setView(startCoord, 17);
 
-    // Re-enable pointer events on just the drag/zoom panes after init
-    // (CSS sets pointer-events:none on #run-live-map; drag pane needs auto)
-    if (container._leaflet_id) {
-      const dragPane = container.querySelector('.leaflet-drag-pane');
-      if (dragPane) dragPane.style.pointerEvents = 'auto';
-    }
+    // Detect when user manually pans — stop auto-recentering
+    _liveMap.on('dragstart', () => { _userPanned = true; });
+    // After 8s of no pan, re-enable auto-center
+    _liveMap.on('dragend', () => {
+      clearTimeout(_liveMap._recenterTimer);
+      _liveMap._recenterTimer = setTimeout(() => { _userPanned = false; }, 8000);
+    });
+
+    // Re-center button (shown when user has panned away)
+    const recenterBtn = L.control({ position: 'bottomleft' });
+    recenterBtn.onAdd = () => {
+      const btn = L.DomUtil.create('button', '');
+      btn.innerHTML   = '⊙';
+      btn.title       = 'Re-center on my location';
+      btn.style.cssText = `
+        width:36px;height:36px;border-radius:10px;
+        background:rgba(7,21,16,0.88);border:1px solid rgba(255,255,255,0.2);
+        color:#fff;font-size:18px;cursor:pointer;display:flex;
+        align-items:center;justify-content:center;backdrop-filter:blur(8px);
+        touch-action:manipulation;
+      `;
+      L.DomEvent.on(btn, 'click', () => {
+        _userPanned = false;
+        if (_gpsLastGoodFix) {
+          _liveMap.setView([_gpsLastGoodFix.lat, _gpsLastGoodFix.lon], _liveMap.getZoom(), { animate: true });
+        }
+      });
+      L.DomEvent.disableClickPropagation(btn);
+      return btn;
+    };
+    recenterBtn.addTo(_liveMap);
 
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
@@ -300,7 +354,6 @@ function _initLiveMap() {
         width:18px;height:18px;border-radius:50%;
         background:#4285f4;border:3px solid #fff;
         box-shadow:0 0 0 6px rgba(66,133,244,0.25);
-        pointer-events:none;
       "></div>`,
       iconSize:   [18, 18],
       iconAnchor: [9, 9],
@@ -308,12 +361,6 @@ function _initLiveMap() {
     _liveMarker = L.marker(startCoord, { icon, zIndexOffset: 1000, interactive: false }).addTo(_liveMap);
 
     if (APP.gpsCoords.length > 0) _redrawLivePolyline();
-
-    // After tiles load, make drag pane interactive for panning
-    _liveMap.whenReady(() => {
-      const dp = container.querySelector('.leaflet-drag-pane');
-      if (dp) dp.style.pointerEvents = 'auto';
-    });
   });
 }
 
@@ -327,10 +374,11 @@ function _updateLiveMap(lat, lon) {
   if (!_liveMap) return;
   const pos = [lat, lon];
   if (_liveMarker) _liveMarker.setLatLng(pos);
-  _liveMap.setView(pos, _liveMap.getZoom(), { animate: true, duration: 0.8 });
-  if (_livePolyline) {
-    _livePolyline.addLatLng(pos);
+  // Only auto-center if user hasn't manually panned away
+  if (!_userPanned) {
+    _liveMap.setView(pos, _liveMap.getZoom(), { animate: true, duration: 0.6 });
   }
+  if (_livePolyline) _livePolyline.addLatLng(pos);
 }
 
 function _destroyLiveMap() {
@@ -388,12 +436,12 @@ function startRun() {
 
   navigator.geolocation.getCurrentPosition(
     () => {
-      // Switch from idle → active (full-screen map layout)
       document.getElementById('run-idle').style.display = 'none';
       document.getElementById('run-active').classList.remove('hidden');
       _startRunTimerLoop();
       _initLiveMap();
       startGPS();
+      _requestWakeLock();   // keep GPS alive when screen locks
       LockScreen.start();
     },
     () => {
@@ -402,6 +450,7 @@ function startRun() {
       showToast('GPS unavailable — time-only mode 🕐', 'info');
       _initLiveMap();
       _startRunTimerLoop();
+      _requestWakeLock();
       LockScreen.start();
     },
     { enableHighAccuracy: true, timeout: 10000 }
@@ -550,6 +599,7 @@ function stopRun() {
     APP.runWatchId = null;
   }
   LockScreen.stop();
+  _releaseWakeLock();
   _destroyLiveMap();
 
   const s       = APP.runSession;
@@ -603,7 +653,7 @@ function saveRun() {
     duration:     elapsed,
     pace:         parseFloat((elapsed / 60 / Math.max(s.distance, 0.01)).toFixed(2)),
     activityType: s.activityType || _activityType,
-    planType:     ctx ? `${ctx.planKey} · Wk${ctx.week} D${ctx.day}` : (APP.selectedPlan || 'Free Run'),
+    planType:     ctx ? `${ctx.planKey} · Wk${ctx.week} D${ctx.day}` : (APP.selectedPlan || ('Free ' + meta.label)),
     timestamp:    new Date().toISOString(),
     // Save coords for history detail map (thin to max 500 points to keep storage small)
     coords:       APP.gpsCoords.length > 500
@@ -661,6 +711,7 @@ function discardRun() {
   _gpsLastGoodFix = null;
   _clearRunSession();
   LockScreen.stop();
+  _releaseWakeLock();
   _destroyLiveMap();
 
   // Destroy summary map too to free memory
@@ -1577,12 +1628,15 @@ function renderDietRunning() {
     </div>`;
 }
 
-// ── PERSONAL BESTS ────────────────────────────────────────────────
-function _getPBs(userId) {
-  return Store.get('ff_pbs_' + userId, { distance: 0, pace: 9999, duration: 0 });
+// ── PERSONAL BESTS — per activity type ───────────────────────────
+// Keys: ff_pbs_{userId}_{activityType}  e.g. ff_pbs_u123_run
+function _getPBs(userId, activityType) {
+  const type = activityType || 'run';
+  return Store.get('ff_pbs_' + userId + '_' + type, { distance: 0, pace: 9999, duration: 0, count: 0 });
 }
-function _savePBs(userId, pbs) {
-  Store.set('ff_pbs_' + userId, pbs);
+function _savePBs(userId, pbs, activityType) {
+  const type = activityType || 'run';
+  Store.set('ff_pbs_' + userId + '_' + type, pbs);
 }
 
 // ── ACHIEVEMENT BADGES ────────────────────────────────────────────
@@ -1704,40 +1758,154 @@ function checkAndUnlockAchievements(userId) {
   return newUnlocks;
 }
 
+// ── ENCOURAGING MESSAGES & PB DISPLAY ────────────────────────────
+const ACTIVITY_MILESTONES = {
+  run: [
+    { dist: 42.195, label: 'Full Marathon! 🏆', msg: "You just ran a FULL MARATHON. That\'s legendary. The world bows to you! 🦅" },
+    { dist: 21.1,   label: 'Half Marathon! 🏅', msg: "21km done! Half marathon complete. You\'re in the top 1% of runners! 🔥" },
+    { dist: 10,     label: '10K! 🎖️',           msg: "10 kilometres! You\'ve crossed the double-digit barrier. Keep pushing! 💪" },
+    { dist: 5,      label: '5K! 🥇',             msg: "5K complete! Parkrun territory. You\'re officially a runner now! 🏃" },
+    { dist: 3,      label: '3K! 🌟',             msg: "3km strong! You\'re building serious endurance. Next stop: 5K! 🎯" },
+    { dist: 1,      label: '1K! 👟',             msg: "First kilometre done! Every marathon starts with 1km. You\'re on your way! 🚀" },
+  ],
+  walk: [
+    { dist: 10, label: '10K Walk! 🏆', msg: "10 kilometres on foot! That\'s serious dedication. Your legs are iron! 💪" },
+    { dist: 5,  label: '5K Walk! 🥇',  msg: "5km walk complete! That\'s over 6,500 steps. Movement is medicine! 🌿" },
+    { dist: 3,  label: '3K Walk! 🌟',  msg: "3km walked! You\'re building the habit. Every step counts! 🦶" },
+    { dist: 1,  label: '1K Walk! 👟',  msg: "First kilometre walked! The journey of a thousand miles begins with a single step. 🛤️" },
+  ],
+  cycle: [
+    { dist: 50, label: '50K Ride! 🏆', msg: "50 kilometres on the saddle! That\'s a serious ride. You\'re a cyclist! 🚴" },
+    { dist: 20, label: '20K Ride! 🥇', msg: "20km cycled! You\'re covering ground fast. Keep rolling! ⚡" },
+    { dist: 10, label: '10K Ride! 🌟', msg: "10km ride! Legs are turning, heart is pumping. Great work! 💚" },
+    { dist: 5,  label: '5K Ride! 👟',  msg: "5km ride complete! Every pedal stroke builds strength! 🚲" },
+  ],
+};
+
+const FIRST_ACTIVITY_MSG = {
+  run:   { emoji: '🎉', msg: "Your first run is logged! Every legend starts somewhere. This is your starting line!" },
+  walk:  { emoji: '🎉', msg: "First walk logged! Walking is one of the best things you can do for your health. Keep it up!" },
+  cycle: { emoji: '🎉', msg: "First ride logged! The open road is yours. Keep pedalling and see where it takes you!" },
+};
+
+const NEXT_TARGET_MSG = {
+  run:   [
+    { dist: 1,    msg: "Next target: Run 1km without stopping. You\'re almost there! 🎯" },
+    { dist: 3,    msg: "Next target: 3km! Add just 1 more km each session. 📈" },
+    { dist: 5,    msg: "Next target: 5K! The classic distance. You can do it! 🏃" },
+    { dist: 10,   msg: "Next target: 10K! Double digits await. Keep training! 💪" },
+    { dist: 21.1, msg: "Next target: Half marathon! You\'re in real runner territory now! 🔥" },
+    { dist: 42.2, msg: "Next target: Full marathon! Dream big, train hard! 🏆" },
+  ],
+  walk: [
+    { dist: 1,  msg: "Next target: Walk 1km. Just 10-12 minutes. You\'ve got this! 🎯" },
+    { dist: 3,  msg: "Next target: 3km walk. Add a few more streets tomorrow! 🗺️" },
+    { dist: 5,  msg: "Next target: 5km walk — the classic daily goal! 🌿" },
+    { dist: 10, msg: "Next target: 10km walk. That\'s a real achievement! 💪" },
+  ],
+  cycle: [
+    { dist: 5,  msg: "Next target: 5km ride. Build those legs! 🚲" },
+    { dist: 10, msg: "Next target: 10km! A solid training ride awaits! ⚡" },
+    { dist: 20, msg: "Next target: 20km! Explore further, ride stronger! 🌏" },
+    { dist: 50, msg: "Next target: 50km! Real cyclist territory! 🏆" },
+  ],
+};
+
+function _getNextTarget(type, distance) {
+  const targets = NEXT_TARGET_MSG[type] || NEXT_TARGET_MSG.run;
+  return targets.find(t => t.dist > distance) || targets[targets.length - 1];
+}
+
 function _renderRunPBBadges(distance, elapsed) {
   const el = document.getElementById('sum-pb-badges');
   if (!el) return;
-  const user   = APP.currentUser;
-  const pbs    = _getPBs(user.id);
-  const pace   = distance > 0 ? elapsed / 60 / distance : 9999;
-  const badges = [];
-  const newPbs = { ...pbs };
+  const user        = APP.currentUser;
+  const actType     = APP.runSession?.activityType || _activityType;
+  const meta        = ACTIVITY_META[actType] || ACTIVITY_META.run;
+  const pbs         = _getPBs(user.id, actType);
+  const pace        = distance > 0 ? elapsed / 60 / distance : 9999;
+  const isFirstEver = (pbs.count || 0) === 0;
+  const newPbs      = { ...pbs, count: (pbs.count || 0) + 1 };
+  let html          = '';
 
+  if (isFirstEver) {
+    const msg = FIRST_ACTIVITY_MSG[actType] || FIRST_ACTIVITY_MSG.run;
+    html += `
+      <div style="background:linear-gradient(135deg,${meta.color}22,${meta.color}11);
+        border:1px solid ${meta.color}55;border-radius:14px;padding:16px;text-align:center;margin-bottom:10px">
+        <div style="font-size:32px;margin-bottom:6px">${msg.emoji}</div>
+        <div style="font-size:15px;font-weight:700;color:${meta.color};margin-bottom:4px">First ${meta.label} Complete!</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.5">${msg.msg}</div>
+      </div>`;
+    const next = _getNextTarget(actType, distance);
+    if (next) {
+      html += `
+        <div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);
+          border-radius:12px;padding:12px 14px;text-align:center;margin-bottom:10px">
+          <div style="font-size:12px;color:var(--text3);margin-bottom:4px">💡 Next Goal</div>
+          <div style="font-size:13px;color:var(--text2);line-height:1.5">${next.msg}</div>
+        </div>`;
+    }
+    _savePBs(user.id, newPbs, actType);
+    sheetsPost('saveContent', { key: 'pbs_' + user.id + '_' + actType, value: newPbs });
+    el.innerHTML = html;
+    return;
+  }
+
+  const milestones   = ACTIVITY_MILESTONES[actType] || ACTIVITY_MILESTONES.run;
+  const prevBest     = pbs.distance || 0;
+  const hitMilestone = milestones.find(m => m.dist <= distance && m.dist > prevBest);
+
+  if (hitMilestone) {
+    html += `
+      <div style="background:linear-gradient(135deg,${meta.color}22,${meta.color}08);
+        border:1px solid ${meta.color}44;border-radius:14px;padding:16px;text-align:center;margin-bottom:10px">
+        <div style="font-size:28px;margin-bottom:6px">🏅</div>
+        <div style="font-size:15px;font-weight:700;color:${meta.color};margin-bottom:4px">${hitMilestone.label}</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.5">${hitMilestone.msg}</div>
+      </div>`;
+  }
+
+  const pbBadges = [];
   if (distance > 0 && distance > (pbs.distance || 0)) {
-    badges.push(`<span style="background:var(--accent);color:#000;font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px">🏆 NEW PB — Longest Run!</span>`);
+    pbBadges.push(`<div style="background:${meta.color};color:white;font-size:12px;font-weight:700;
+      padding:6px 14px;border-radius:20px">🏆 NEW PB — Longest ${meta.label}!</div>`);
     newPbs.distance = distance;
   }
   if (distance >= 0.5 && pace < (pbs.pace || 9999)) {
-    badges.push(`<span style="background:rgba(30,136,229,0.8);color:white;font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px">⚡ NEW PB — Best Pace!</span>`);
+    pbBadges.push(`<div style="background:rgba(30,136,229,0.85);color:white;font-size:12px;font-weight:700;
+      padding:6px 14px;border-radius:20px">⚡ NEW PB — Fastest Pace!</div>`);
     newPbs.pace = pace;
   }
   if (elapsed > (pbs.duration || 0)) {
-    badges.push(`<span style="background:rgba(67,160,90,0.8);color:white;font-size:12px;font-weight:700;padding:4px 12px;border-radius:20px">⏱ NEW PB — Longest Time!</span>`);
+    pbBadges.push(`<div style="background:rgba(67,160,90,0.85);color:white;font-size:12px;font-weight:700;
+      padding:6px 14px;border-radius:20px">⏱ NEW PB — Longest Time!</div>`);
     newPbs.duration = elapsed;
   }
-
-  if (badges.length) {
-    _savePBs(user.id, newPbs);
-    // Persist PBs to Sheets so they survive reinstalls
-    sheetsPost('saveContent', {
-      key:   'pbs_' + user.id,
-      value: newPbs,
-    });
-    el.innerHTML = badges.join('');
-    el.style.display = 'flex';
-  } else {
-    el.style.display = 'none';
+  if (pbBadges.length) {
+    html += `<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:center;margin-bottom:10px">${pbBadges.join('')}</div>`;
   }
+
+  if (!pbBadges.length && !hitMilestone) {
+    const encouragements = [
+      "Great " + meta.label.toLowerCase() + "! Consistency is the key to improvement. 💚",
+      "Well done! Every session makes you stronger than yesterday. 💪",
+      "Solid effort! Keep showing up — results compound over time. 📈",
+      "Good " + meta.label.toLowerCase() + "! Your future self thanks you for this. 🙌",
+    ];
+    const enc  = encouragements[newPbs.count % encouragements.length];
+    const next = _getNextTarget(actType, distance);
+    html += `
+      <div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);
+        border-radius:12px;padding:14px;text-align:center;margin-bottom:10px">
+        <div style="font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:${next?'8':'0'}px">${enc}</div>
+        ${next ? '<div style="font-size:12px;color:var(--text3)">🎯 ' + next.msg + '</div>' : ''}
+      </div>`;
+  }
+
+  _savePBs(user.id, newPbs, actType);
+  sheetsPost('saveContent', { key: 'pbs_' + user.id + '_' + actType, value: newPbs });
+  el.innerHTML = html;
 }
 
 // ── POST-RUN ROUTE MAP on real tiles (Leaflet) ────────────────────
@@ -1760,20 +1928,17 @@ function _renderRunRouteMap(coords) {
 
   const meta = ACTIVITY_META[APP.runSession?.activityType || _activityType] || ACTIVITY_META.run;
 
-  // No route — show placeholder
   if (pts.length < 2) {
-    el.style.height     = '120px';
+    // No route — show placeholder inside the map div
     el.style.background = 'var(--bg3)';
-    el.style.display    = 'flex';
-    el.style.alignItems = 'center';
-    el.style.justifyContent = 'center';
-    el.innerHTML = `<div style="font-size:13px;color:var(--text3)">No GPS route recorded</div>`;
+    el.innerHTML = (el.innerHTML || '') +
+      `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--text3);z-index:1">No GPS route recorded</div>`;
     return;
   }
 
-  // el is already sized 260px tall via inline style in HTML
-  el.innerHTML = '';
-
+  // Clear any placeholder content
+  const label = el.querySelector('[data-keep]');
+  // Keep the activity label overlay div — clear only Leaflet contents
   _loadLeaflet(() => {
     const latlngs = pts.map(p => [p.lat, p.lon]);
 
@@ -1787,51 +1952,39 @@ function _renderRunRouteMap(coords) {
       doubleClickZoom:    false,
     });
 
-    // Dark tile layer — same as live map for consistency
     L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
       maxZoom: 19,
     }).addTo(_sumMap);
 
-    // Route polyline — activity-colored (orange for run, blue for walk, yellow for cycle)
-    const routeColor = meta.color;
+    // Route line — activity color
     L.polyline(latlngs, {
-      color:   routeColor,
+      color:   meta.color,
       weight:  5,
       opacity: 0.95,
       lineCap: 'round',
     }).addTo(_sumMap);
 
-    // Start dot — green
+    // Start marker — green dot
     L.circleMarker(latlngs[0], {
-      radius:      7,
-      fillColor:   '#43a05a',
-      color:       '#fff',
-      weight:      2,
-      fillOpacity: 1,
-    }).bindTooltip('Start', { permanent: false }).addTo(_sumMap);
+      radius: 7, fillColor: '#43a05a', color: '#fff', weight: 2, fillOpacity: 1,
+    }).addTo(_sumMap);
 
-    // Finish dot — activity color
+    // Finish marker — activity color
     L.circleMarker(latlngs[latlngs.length - 1], {
-      radius:      7,
-      fillColor:   routeColor,
-      color:       '#fff',
-      weight:      2,
-      fillOpacity: 1,
-    }).bindTooltip('Finish', { permanent: false }).addTo(_sumMap);
+      radius: 7, fillColor: meta.color, color: '#fff', weight: 2, fillOpacity: 1,
+    }).addTo(_sumMap);
 
-    // Fit map to route bounds with padding
-    const bounds = L.latLngBounds(latlngs).pad(0.15);
-    _sumMap.fitBounds(bounds);
+    _sumMap.fitBounds(L.latLngBounds(latlngs).pad(0.15));
 
-    // GPS point count label
-    const countDiv = L.control({ position: 'bottomright' });
-    countDiv.onAdd = () => {
+    // GPS count label
+    const countCtrl = L.control({ position: 'bottomright' });
+    countCtrl.onAdd = () => {
       const d = L.DomUtil.create('div');
       d.style.cssText = 'background:rgba(7,21,16,0.75);color:rgba(255,255,255,0.6);font-size:10px;padding:3px 8px;border-radius:8px;pointer-events:none';
       d.textContent   = pts.length + ' GPS points';
       return d;
     };
-    countDiv.addTo(_sumMap);
+    countCtrl.addTo(_sumMap);
   });
 }
 
