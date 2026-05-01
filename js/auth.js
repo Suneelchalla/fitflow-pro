@@ -149,7 +149,8 @@ async function syncContentFromSheets() {
     user ? _syncUserLogs(user.id)        : Promise.resolve(),
     user ? _syncUserRunLogs(user.id)     : Promise.resolve(),
     user ? _syncPlanProgress(user.id)    : Promise.resolve(),
-    user ? _syncCustomWorkouts(user.id)  : Promise.resolve(),  // ← Fix 4: restore custom workouts
+    user ? _syncCustomWorkouts(user.id)  : Promise.resolve(),
+    user ? _syncUserProfile(user.id)     : Promise.resolve(),  // body stats, weights, achievements
   ]);
 }
 
@@ -251,6 +252,67 @@ async function _syncUserRunLogs(userId) {
     if (changed) Store.set('ff_runlogs', local);
   } catch (e) {
     console.warn('Run log sync skipped:', e.message);
+  }
+}
+
+async function _syncUserProfile(userId) {
+  // Restore all user data that was only in localStorage
+  // Body stats, weight history, achievements, overload weights,
+  // cali skill/challenge progress, module order
+  try {
+    const res = await Sheets.get('getAllContent');
+    if (!res?.success || !res.content) return;
+    const c = res.content;
+
+    // Body stats
+    const bodyKey = 'body_profile_' + userId;
+    if (c[bodyKey]) {
+      Store.set('ff_body_profile_' + userId, c[bodyKey]);
+    }
+
+    // Weight history
+    const wLogKey = 'weight_log_' + userId;
+    if (c[wLogKey] && Array.isArray(c[wLogKey])) {
+      Store.set('ff_weight_log_' + userId, c[wLogKey]);
+    }
+
+    // Workout achievements
+    const wAchKey = 'w_achievements_' + userId;
+    if (c[wAchKey]) {
+      Store.set('ff_w_achievements_' + userId, c[wAchKey]);
+    }
+
+    // Running achievements (already synced via achievements_userId key)
+    const rAchKey = 'achievements_' + userId;
+    if (c[rAchKey]) {
+      Store.set('ff_achievements_' + userId, c[rAchKey]);
+    }
+
+    // PBs per activity type
+    ['run','walk','cycle'].forEach(type => {
+      const pbKey = 'pbs_' + userId + '_' + type;
+      if (c[pbKey]) Store.set('ff_pbs_' + userId + '_' + type, c[pbKey]);
+    });
+
+    // Calisthenics skill progress (all skill keys)
+    Object.entries(c).forEach(([key, value]) => {
+      if (key.startsWith('cali_skill_' + userId + '_')) {
+        const skillKey = key.replace('cali_skill_' + userId + '_', '');
+        Store.set('ff_skill_progress_' + userId + '_' + skillKey, value);
+      }
+      if (key === 'cali_challenge_' + userId) {
+        Store.set('ff_cali_challenge_' + userId, value);
+      }
+      if (key === 'module_order_' + userId) {
+        Store.set('ff_module_order_' + userId, value);
+      }
+      // Progressive overload weights (pl_userId_module_exercise)
+      if (key.startsWith('pl_' + userId + '_')) {
+        Store.set('ff_' + key, value);
+      }
+    });
+  } catch (e) {
+    console.warn('Profile sync skipped:', e.message);
   }
 }
 
