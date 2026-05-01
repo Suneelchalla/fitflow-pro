@@ -1,4 +1,7 @@
 // ── DEFAULT DATA ─────────────────────────────────────────────────
+// Bump this number whenever exercise data changes — triggers auto-seed to Sheets
+const DATA_VERSION = 17;
+
 window.APP_DATA = {
 
   quotes: [
