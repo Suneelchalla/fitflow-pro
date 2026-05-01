@@ -1428,14 +1428,57 @@ async function openUserProgress(userId, userName) {
       </div>
     </div>
     <div style="padding:0 16px 14px">
-      <div class="section-title" style="margin-bottom:8px">Last 30 Days</div>
-      <div style="display:flex;gap:3px;flex-wrap:wrap">
-        ${Object.entries(last30).map(([d,cnt])=>`
-          <div title="${d}: ${cnt} sessions" style="width:calc((100% - 87px)/30);min-width:8px;aspect-ratio:1;border-radius:2px;
-            background:${cnt>2?'var(--g4)':cnt>0?'var(--g3)':'var(--bg3)'}"></div>`).join('')}
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+        <div class="section-title" style="margin:0">Last 30 Days</div>
+        <div style="font-size:11px;color:var(--text3)">${Object.values(last30).filter(v=>v>0).length} active days</div>
       </div>
-      <div style="display:flex;gap:12px;margin-top:6px;font-size:10px;color:var(--text3)">
-        <span>⬜ None</span><span style="color:var(--g3)">▪ Active</span><span style="color:var(--g4)">▪ Very active</span>
+      <!-- Activity heatmap -->
+      <div style="display:grid;grid-template-columns:repeat(10,1fr);gap:3px;margin-bottom:10px">
+        ${Object.entries(last30).map(([d,cnt])=>`
+          <div title="${d}: ${cnt} session${cnt!==1?'s':''}"
+            style="aspect-ratio:1;border-radius:3px;cursor:default;
+              background:${cnt>3?'var(--g5)':cnt>2?'var(--g4)':cnt>1?'var(--g3)':cnt>0?'rgba(67,160,90,0.4)':'var(--bg3)'}">
+          </div>`).join('')}
+      </div>
+      <!-- Run distance last 30d bar chart -->
+      ${(() => {
+        const runByDay = {};
+        Object.keys(last30).forEach(d => runByDay[d] = 0);
+        runLogs.forEach(r => { if (runByDay[r.date]!==undefined) runByDay[r.date]+=(r.distance||0); });
+        const maxKm = Math.max(...Object.values(runByDay), 0.1);
+        const hasRuns = Object.values(runByDay).some(v=>v>0);
+        if (!hasRuns) return '';
+        return `
+          <div style="margin-top:8px">
+            <div style="font-size:11px;color:var(--text3);margin-bottom:4px">🏃 Daily Distance (km)</div>
+            <div style="display:flex;align-items:flex-end;gap:2px;height:40px">
+              ${Object.entries(runByDay).map(([d,km])=>`
+                <div style="flex:1;display:flex;flex-direction:column;align-items:center" title="${d}: ${km.toFixed(1)}km">
+                  <div style="width:100%;background:rgba(30,136,229,0.7);border-radius:2px 2px 0 0;
+                    height:${km>0?Math.max(3,Math.round(km/maxKm*36)):0}px"></div>
+                </div>`).join('')}
+            </div>
+          </div>`;
+      })()}
+      <!-- Module frequency donut-style bars -->
+      ${Object.keys(modCounts).length ? `
+      <div style="margin-top:12px">
+        <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Module Frequency</div>
+        ${Object.entries(modCounts).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([mod,cnt])=>`
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+            <span style="font-size:14px;width:20px;text-align:center">${getModuleEmoji(mod)}</span>
+            <div style="flex:1">
+              <div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">
+                <div style="height:100%;width:${Math.round(cnt/Math.max(...Object.values(modCounts))*100)}%;
+                  background:var(--g4);border-radius:3px;transition:width .5s ease"></div>
+              </div>
+            </div>
+            <span style="font-size:11px;color:var(--text3);min-width:24px;text-align:right">${cnt}</span>
+          </div>`).join('')}
+      </div>` : ''}
+      <div style="display:flex;gap:12px;margin-top:8px;font-size:10px;color:var(--text3)">
+        <span style="display:flex;align-items:center;gap:3px"><span style="width:10px;height:10px;border-radius:2px;background:var(--g4);display:inline-block"></span>Active</span>
+        <span style="display:flex;align-items:center;gap:3px"><span style="width:10px;height:10px;border-radius:2px;background:var(--bg3);display:inline-block"></span>Rest day</span>
       </div>
     </div>
     ${Object.keys(modCounts).length ? `
@@ -1455,11 +1498,55 @@ async function openUserProgress(userId, userName) {
         <div style="font-size:13px;color:var(--text2)">${(bestRun.distance||0).toFixed(2)} km · ${fmtTime(bestRun.duration||0)} · ${bestRun.date}</div>
       </div>
     </div>` : ''}
+    <!-- Weekly session bar chart — last 8 weeks -->
+    <div style="padding:0 16px 14px">
+      <div class="section-title" style="margin-bottom:8px">Weekly Activity (8 weeks)</div>
+      <div class="card card-sm">
+        ${(() => {
+          const weekTotals = [];
+          for (let w = 7; w >= 0; w--) {
+            const wStart = new Date(); wStart.setDate(wStart.getDate() - wStart.getDay() - w * 7 + 1);
+            const wEnd   = new Date(wStart); wEnd.setDate(wStart.getDate() + 6);
+            const wStartStr = wStart.toISOString().split('T')[0];
+            const wEndStr   = wEnd.toISOString().split('T')[0];
+            const count = logs.filter(l => l.date >= wStartStr && l.date <= wEndStr).length
+                        + runLogs.filter(r => r.date >= wStartStr && r.date <= wEndStr).length;
+            weekTotals.push({ label: 'W' + (8-w), count });
+          }
+          const maxW = Math.max(...weekTotals.map(w=>w.count), 1);
+          return '<div style="display:flex;align-items:flex-end;gap:4px;height:60px">' +
+            weekTotals.map(w => {
+              const h = Math.max(3, Math.round(w.count / maxW * 56));
+              return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px" title="${w.label}: ${w.count} sessions">
+                <div style="font-size:9px;color:var(--text3)">${w.count||''}</div>
+                <div style="width:100%;height:${h}px;background:${w.count>0?'var(--g3)':'var(--bg3)'};border-radius:3px 3px 0 0"></div>
+                <div style="font-size:9px;color:var(--text3)">${w.label}</div>
+              </div>`;
+            }).join('') + '</div>';
+        })()}
+      </div>
+    </div>
+    <!-- Run history for this user -->
+    ${runLogs.length ? `
+    <div style="padding:0 16px 14px">
+      <div class="section-title" style="margin-bottom:8px">Recent Runs</div>
+      ${runLogs.sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,5).map(r=>`
+        <div class="card card-sm" style="margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:13px;font-weight:600">${(r.activityType||'run').charAt(0).toUpperCase()+(r.activityType||'run').slice(1)} · ${(r.distance||0).toFixed(2)} km</div>
+            <div style="font-size:11px;color:var(--text3)">${r.date} · ${fmtTime(r.duration||0)}</div>
+          </div>
+          <span class="badge badge-green">${fmtPace(r.distance||0, r.duration||0)} /km</span>
+        </div>`).join('')}
+    </div>` : ''}
   `;
 }
 
 function _calcStreakForUser(userId) {
-  const dates = [...new Set(Store.getLogs().filter(l=>l.userId===userId).map(l=>l.date))].sort().reverse();
+  // Include both workout dates and run dates
+  const wDates = Store.getLogs().filter(l=>l.userId===userId).map(l=>l.date);
+  const rDates = Store.getRunLogs().filter(r=>r.userId===userId).map(r=>r.date);
+  const dates = [...new Set([...wDates, ...rDates])].sort().reverse();
   if (!dates.length) return 0;
   let streak=0, cur=new Date();
   for (let i=0;i<60;i++) {
