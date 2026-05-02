@@ -536,17 +536,12 @@ const GPS_MIN_DISTANCE_KM = 0.005; // ignore movement < 5 m (standing still jitt
 let _gpsWarmupCount  = 0;          // counts received fixes during warmup phase
 let _gpsLastGoodFix  = null;       // last confirmed-accurate position
 let _stillSince      = null;       // timestamp when user stopped moving (for auto-pause)
-let _lastKnownSpeed  = 0;          // last GPS speed in km/h (used for lock-screen estimate)
 const AUTO_PAUSE_STILL_MS = 60000; // suggest auto-pause after 60s of no movement
 
-// ── LOCK SCREEN DISTANCE ESTIMATION ──────────────────────────────
-// When screen locks, GPS stops. We track:
-// - when screen locked
-// - speed at time of locking
-// On unlock, we estimate distance covered and offer to add it
-let _lockTime       = null;   // Date.now() when screen locked during active run
-let _lockSpeed      = null;   // speed (km/h) at moment of locking
-const LOCK_MIN_SPEED = 0.5;   // only estimate if user was moving (>0.5 km/h)
+// ── LOCK SCREEN AUTO-PAUSE ───────────────────────────────────────
+// When screen locks, GPS stops — we auto-pause the timer so no fake
+// time accumulates. On unlock, timer and GPS resume automatically.
+let _lockedWhileRunning = false; // true if we auto-paused due to screen lock
 
 function _checkLocationPermission(onGranted) {
   // Check if permission is already "always" or "granted"
@@ -809,11 +804,8 @@ function startGPS() {
         _gpsLastGoodFix = { lat, lon, ts: Date.now() };
       }
 
-      // Track last known speed for lock-screen distance estimation
-      const _speedNow = pos.coords.speed != null ? pos.coords.speed * 3.6 : null;
-      if (_speedNow !== null) _lastKnownSpeed = _speedNow;
-
       // Auto-pause detection: if speed < 0.5 km/h for AUTO_PAUSE_STILL_MS, prompt user
+      const _speedNow = pos.coords.speed != null ? pos.coords.speed * 3.6 : null;
       if (_speedNow !== null && _speedNow < 0.5) {
         if (!_stillSince) _stillSince = Date.now();
         else if (Date.now() - _stillSince > AUTO_PAUSE_STILL_MS && !APP.runSession.paused) {
@@ -1071,12 +1063,9 @@ function discardRun() {
     APP.runWatchId = null;
   }
   APP.runSession  = null;
-  _gpsWarmupCount = 0;
-  _gpsLastGoodFix = null;
-  _lockTime       = null;
-  _lockSpeed      = null;
-  _lastKnownSpeed = 0;
-  document.getElementById('lock-estimate-prompt')?.remove();
+  _gpsWarmupCount      = 0;
+  _gpsLastGoodFix      = null;
+  _lockedWhileRunning  = false;
   _clearRunSession();
   LockScreen.stop();
   _releaseWakeLock();
@@ -1104,34 +1093,38 @@ function discardRun() {
 // ── BACKGROUND / FOREGROUND RECOVERY ─────────────────────────────
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') {
-    // Screen locked — save session and record lock time + current speed
     if (APP.runSession && !APP.runSession.paused) {
+      // Auto-pause when screen locks so timer doesn't run without GPS
+      _lockedWhileRunning = true;
+      APP.runSession.paused   = true;
+      APP.runSession.pausedAt = Date.now();
       _saveRunSession();
-      _lockTime  = Date.now();
-      _lockSpeed = _lastKnownSpeed || 0;
+      // Update pause button UI if visible
+      const btn = document.getElementById('pause-run-btn');
+      if (btn) btn.textContent = '▶ Resume';
     }
     return;
   }
 
-  // Screen unlocked — app back to foreground
-  if (!APP.runSession || APP.runSession.paused) {
-    _lockTime = null; _lockSpeed = null;
-    return;
-  }
+  // Screen unlocked
+  if (!APP.runSession) return;
 
-  // Calculate how long screen was locked
-  if (_lockTime && _lockSpeed >= LOCK_MIN_SPEED) {
-    const lockedSec = (Date.now() - _lockTime) / 1000;
-    // Only offer estimate if locked for at least 10 seconds
-    if (lockedSec >= 10) {
-      const estKm = parseFloat((_lockSpeed / 3600 * lockedSec).toFixed(2));
-      _showLockScreenEstimate(lockedSec, estKm);
+  if (_lockedWhileRunning && APP.runSession.paused) {
+    // Auto-resume — undo the auto-pause we applied on lock
+    _lockedWhileRunning = false;
+    if (APP.runSession.pausedAt) {
+      APP.runSession.totalPaused += (Date.now() - APP.runSession.pausedAt);
     }
+    APP.runSession.pausedAt = null;
+    APP.runSession.paused   = false;
+    _saveRunSession();
+    const btn = document.getElementById('pause-run-btn');
+    if (btn) btn.textContent = '⏸ Pause';
+    showToast('GPS resumed 📍', 'success');
   }
-  _lockTime = null;
-  _lockSpeed = null;
 
-  // Re-request wake lock and restart GPS
+  if (APP.runSession.paused) return; // user manually paused — don't restart GPS
+
   _requestWakeLock();
   _gpsWarmupCount = 0;
   _gpsLastGoodFix = null;
@@ -1140,84 +1133,6 @@ document.addEventListener('visibilitychange', () => {
   updateRunDisplay();
   LockScreen.refresh();
 });
-
-function _showLockScreenEstimate(lockedSec, estKm) {
-  // Remove any existing prompt
-  document.getElementById('lock-estimate-prompt')?.remove();
-
-  const mins = Math.floor(lockedSec / 60);
-  const secs = Math.round(lockedSec % 60);
-  const timeStr = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
-
-  const el = document.createElement('div');
-  el.id = 'lock-estimate-prompt';
-  el.style.cssText = `
-    position:fixed;top:0;left:0;right:0;z-index:9000;
-    background:linear-gradient(135deg,#0d2a1a,#1a4a28);
-    border-bottom:2px solid var(--g3);
-    padding:14px 16px;
-    animation:slideDown .3s ease both;
-  `;
-  el.innerHTML = `
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-      <div style="font-size:24px">📱</div>
-      <div style="flex:1">
-        <div style="font-weight:700;font-size:14px">Screen was locked for ${timeStr}</div>
-        <div style="font-size:12px;color:var(--text2);margin-top:2px">
-          GPS paused. Based on your last speed (${(_lockSpeed||0).toFixed(1)} km/h),
-          you may have covered ~<strong style="color:var(--g5)">${estKm} km</strong>.
-        </div>
-      </div>
-    </div>
-    <div style="display:flex;gap:8px">
-      <button onclick="_dismissLockEstimate()"
-        style="flex:1;padding:9px;border-radius:12px;border:1px solid rgba(255,255,255,0.15);
-          background:transparent;color:rgba(255,255,255,0.6);font-size:13px;cursor:pointer">
-        Skip
-      </button>
-      <button onclick="_addLockEstimate(${estKm})"
-        style="flex:2;padding:9px;border-radius:12px;border:none;
-          background:var(--g4);color:#fff;font-size:13px;font-weight:700;cursor:pointer">
-        ➕ Add ${estKm} km to my run
-      </button>
-    </div>`;
-
-  // Inject slideDown animation if not already present
-  if (!document.getElementById('lock-estimate-style')) {
-    const s = document.createElement('style');
-    s.id = 'lock-estimate-style';
-    s.textContent = `@keyframes slideDown {
-      from { transform:translateY(-100%); opacity:0; }
-      to   { transform:translateY(0);     opacity:1; }
-    }`;
-    document.head.appendChild(s);
-  }
-
-  document.body.appendChild(el);
-  navigator.vibrate && navigator.vibrate([100, 50, 100]);
-
-  // Auto-dismiss after 20s if user doesn't respond
-  setTimeout(() => _dismissLockEstimate(), 20000);
-}
-
-function _addLockEstimate(km) {
-  if (APP.runSession) {
-    APP.runSession.distance += km;
-    _saveRunSession();
-    updateRunDisplay();
-    LockScreen.refresh();
-    showToast(`+${km} km added to your run 📍`, 'success');
-  }
-  _dismissLockEstimate();
-}
-
-function _dismissLockEstimate() {
-  const el = document.getElementById('lock-estimate-prompt');
-  if (el) {
-    el.style.animation = 'slideDown .2s ease reverse';
-    setTimeout(() => el.remove(), 200);
-  }
-}
 
 // ── TRAINING PLANS ────────────────────────────────────────────────
 APP.selectedPlan     = null;
