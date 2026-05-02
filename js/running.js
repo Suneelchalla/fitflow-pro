@@ -1194,6 +1194,22 @@ function confirmMarkPlanDone(planKey, week, day, dist, dur) {
   renderRunHistory();
   checkPlanCompletion(planKey, week);
 }
+
+function togglePlanDay(planKey, week, day, dist, dur) {
+  if (isPlanDayDone(planKey, week, day)) {
+    // Unmark — remove the completion record
+    const key = _planDayKey(planKey, week, day);
+    Store.remove(key);
+    showToast('Day unmarked.', 'info');
+    renderMyPlan();
+  } else {
+    // Mark done
+    _markPlanDayDone(planKey, week, day, dist, dur);
+    showToast('Day marked complete! 🎉', 'success');
+    renderMyPlan();
+    checkPlanCompletion(planKey, week);
+  }
+}
 function startPlanDayRun(planKey, week, day, targetDist) {
   APP._planRunCtx  = { planKey, week, day, targetDist, fromMyPlan: APP.currentPage === 'page-my-plan' };
   APP.selectedPlan = planKey;
@@ -1264,14 +1280,17 @@ function _refreshMyPlanNav() {
   const runTab = document.querySelector('.nav-item[data-nav="running"]');
   if (!tab) return;
   const active = getActivePlan();
+  // Run tab ALWAYS visible — never hide it
+  if (runTab) runTab.style.display = '';
   if (active) {
     const plan = (window.APP_DATA_DEFAULT||window.APP_DATA).running.plans[active.planKey];
     tab.style.display = '';
     if (label) label.textContent = plan ? active.planKey : 'My Plan';
-    if (runTab) runTab.style.display = 'none';
+    // Show plan emoji in nav icon
+    const icon = document.getElementById('nav-myplan-icon');
+    if (icon && plan) icon.textContent = plan.emoji || '🎯';
   } else {
     tab.style.display = 'none';
-    if (runTab) runTab.style.display = '';
   }
 }
 
@@ -1467,24 +1486,42 @@ function renderMyPlan() {
                  </div>`
               : `<div class="badge badge-blue" style="flex-shrink:0;margin-left:8px;align-self:flex-start">Rest</div>`}
           </div>
-          ${!isDone ? `
-            <div style="display:flex;gap:8px">
-              ${!isRest ? `
-                <button class="btn btn-primary btn-sm" style="flex:1;background:${plan.color};border-color:${plan.color}"
-                  onclick="startPlanDayRun('${active.planKey}',${s.week},${s.day},${s.dist})">
-                  ▶ Start Run
-                </button>` : ''}
-              <button class="btn ${isRest?'btn-primary':'btn-ghost'} btn-sm" style="${isRest?'flex:1;':''}"
-                onclick="confirmMarkPlanDone('${active.planKey}',${s.week},${s.day},${s.dist},${s.dur});renderMyPlan()">
-                ${isRest ? '✓ Mark Rest Done' : '✓ Log Manually'}
-              </button>
+          <!-- Toggle to mark done/undone -->
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:4px">
+            <div style="font-size:13px;color:${isDone ? 'var(--g5)' : 'var(--text3)'}">
+              ${isDone ? '✅ Completed' : isRest ? 'Mark rest day done' : 'Mark as completed'}
             </div>
-          ` : `<div style="text-align:center;font-size:12px;color:var(--g5)">✅ Session complete!</div>`}
+            <div onclick="togglePlanDay('${active.planKey}',${s.week},${s.day},${s.dist},${s.dur})"
+              style="
+                width:52px;height:28px;border-radius:14px;cursor:pointer;
+                background:${isDone ? plan.color : 'var(--bg3)'};
+                border:1.5px solid ${isDone ? plan.color : 'var(--border)'};
+                position:relative;transition:all .25s;flex-shrink:0;
+              ">
+              <div style="
+                width:22px;height:22px;border-radius:50%;
+                background:${isDone ? '#fff' : 'var(--text3)'};
+                position:absolute;top:2px;
+                left:${isDone ? '26px' : '2px'};
+                transition:left .25s;
+                box-shadow:0 1px 4px rgba(0,0,0,0.3);
+              "></div>
+            </div>
+          </div>
         </div>`;
     }).join('')}
 
-    <div class="card card-sm" style="margin-top:6px;background:rgba(30,136,229,0.06);border-color:rgba(30,136,229,0.2);text-align:center;cursor:pointer" onclick="openModule('running')">
-      <div style="font-size:13px;color:#64b5f6">🏃 Want a free run outside the plan? <strong>Open Running →</strong></div>
+    <div style="display:flex;gap:10px;margin-top:10px">
+      <div class="card card-sm" style="flex:1;background:rgba(67,160,90,0.06);border-color:rgba(67,160,90,0.2);text-align:center;cursor:pointer;padding:12px" onclick="navTo('running')">
+        <div style="font-size:20px;margin-bottom:4px">🏃</div>
+        <div style="font-size:12px;color:var(--g5);font-weight:700">Start a Run</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">GPS tracking</div>
+      </div>
+      <div class="card card-sm" style="flex:1;background:rgba(30,136,229,0.06);border-color:rgba(30,136,229,0.2);text-align:center;cursor:pointer;padding:12px" onclick="navTo('running');setTimeout(()=>renderRunningTabs('history'),300)">
+        <div style="font-size:20px;margin-bottom:4px">📊</div>
+        <div style="font-size:12px;color:#64b5f6;font-weight:700">Run History</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:2px">View past runs</div>
+      </div>
     </div>
 
     <div style="margin-top:20px">
