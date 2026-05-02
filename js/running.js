@@ -238,11 +238,13 @@ const LockScreen = {
   _updateMeta() {
     const s = APP.runSession;
     if (!s) return;
-    const elapsed = _calcElapsed(s);
-    const status  = s.paused ? '⏸ Paused' : '🏃 Running';
-    const meta    = ACTIVITY_META[s.activityType || _activityType] || ACTIVITY_META.run;
+    const elapsed  = _calcElapsed(s);
+    const meta     = ACTIVITY_META[s.activityType || _activityType] || ACTIVITY_META.run;
+    // Use actual activity emoji + label — not hardcoded "🏃 Running"
+    const statusIcon = s.paused ? '⏸' : meta.emoji;
+    const statusText = s.paused ? 'Paused' : meta.label;  // "Walk", "Run", "Cycle"
     navigator.mediaSession.metadata = new MediaMetadata({
-      title:   `${status}  ${fmtTime(elapsed)}  ·  ${s.distance.toFixed(2)} km`,
+      title:   `${statusIcon} ${statusText}  ${fmtTime(elapsed)}  ·  ${s.distance.toFixed(2)} km`,
       artist:  `Pace ${fmtPace(s.distance, elapsed)} /km  ·  ${Math.round(s.distance * meta.kcalPerKm)} kcal`,
       album:   'FitFlow Pro',
       artwork: [{ src: _lockScreenArtwork(), sizes: '512x512', type: 'image/svg+xml' }],
