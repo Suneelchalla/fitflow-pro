@@ -1835,6 +1835,116 @@ function renderRunHistory() {
 // ── RUN DETAIL MODAL ──────────────────────────────────────────────
 let _detailMapInst = null;
 
+// ── HISTORY RUN PB INFO ───────────────────────────────────────────
+// Shows PB badges and motivation for any historical run (not just post-run)
+function _renderHistoryRunPBInfo(r) {
+  const el = document.getElementById('run-detail-pb-badges');
+  if (!el) return;
+
+  const user    = APP.currentUser;
+  const actType = r.activityType || 'run';
+  const meta    = ACTIVITY_META[actType] || ACTIVITY_META.run;
+  const distance = r.distance || 0;
+  const elapsed  = r.duration || 0;
+  const pace     = distance > 0 ? elapsed / 60 / distance : 9999;
+
+  // Get ALL run logs for this activity type sorted by date
+  const allLogs = Store.getUserRunLogs(user.id)
+    .filter(l => (l.activityType || 'run') === actType)
+    .sort((a,b) => (a.timestamp||a.date||'').localeCompare(b.timestamp||b.date||''));
+
+  // Find index of this run in history
+  const thisIdx = allLogs.findIndex(l =>
+    l.date === r.date &&
+    Math.abs((l.distance||0) - distance) < 0.01 &&
+    Math.abs((l.duration||0) - elapsed) < 10
+  );
+
+  let html = '';
+
+  // Check milestones hit during this run
+  const milestones = ACTIVITY_MILESTONES[actType] || ACTIVITY_MILESTONES.run;
+  // Find best distance from runs BEFORE this one
+  const prevBest = thisIdx > 0
+    ? Math.max(...allLogs.slice(0, thisIdx).map(l => l.distance || 0), 0)
+    : 0;
+  const hitMilestone = milestones.find(m => m.dist <= distance && m.dist > prevBest);
+
+  if (hitMilestone) {
+    html += `
+      <div style="background:linear-gradient(135deg,${meta.color}22,${meta.color}08);
+        border:1px solid ${meta.color}44;border-radius:14px;padding:14px;text-align:center;margin-bottom:8px">
+        <div style="font-size:28px;margin-bottom:6px">🏅</div>
+        <div style="font-size:15px;font-weight:700;color:${meta.color};margin-bottom:4px">${hitMilestone.label}</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.5">${hitMilestone.msg}</div>
+      </div>`;
+  }
+
+  // Check PBs this run set (vs runs before it)
+  if (thisIdx > 0) {
+    const prevRuns   = allLogs.slice(0, thisIdx);
+    const prevDist   = Math.max(...prevRuns.map(l => l.distance||0), 0);
+    const prevDur    = Math.max(...prevRuns.map(l => l.duration||0), 0);
+    const prevPaces  = prevRuns.filter(l=>(l.distance||0)>=0.1).map(l=> l.duration/60/(l.distance||1));
+    const prevPace   = prevPaces.length ? Math.min(...prevPaces) : 9999;
+
+    const pbCards = [];
+    // Only show PBs if the previous best was also a meaningful session
+    if (distance >= 0.1 && distance > prevDist && prevDist >= 0.1)
+      pbCards.push({ icon:'📏', label:'Longest '+meta.label, val: distance.toFixed(2)+' km', prev: prevDist.toFixed(2)+' km', color: meta.color });
+    if (elapsed >= 60 && elapsed > prevDur && prevDur >= 60)
+      pbCards.push({ icon:'⏱', label:'Longest Time', val: fmtTime(elapsed), prev: fmtTime(prevDur), color:'#43a05a' });
+    if (distance >= 0.1 && pace < prevPace && pace < 9999 && prevDist >= 0.1)
+      pbCards.push({ icon:'⚡', label:'Fastest Pace', val: fmtPace(distance,elapsed)+' /km', prev: prevPaces.length?fmtPace(1,prevPace*60)+' /km':'--:--', color:'#1e88e5' });
+
+    pbCards.forEach(pb => {
+      html += `
+        <div style="background:linear-gradient(135deg,${pb.color}20,${pb.color}08);
+          border:1px solid ${pb.color}40;border-radius:14px;padding:12px 14px;
+          display:flex;align-items:center;gap:12px;margin-bottom:8px">
+          <div style="font-size:26px;flex-shrink:0">${pb.icon}</div>
+          <div style="flex:1">
+            <div style="font-size:10px;font-weight:700;color:${pb.color};text-transform:uppercase;letter-spacing:.08em">Personal Best</div>
+            <div style="font-size:14px;font-weight:700;color:var(--text);margin:2px 0">${pb.label}</div>
+            <div style="display:flex;align-items:center;gap:6px">
+              <span style="font-size:16px;font-weight:700;color:${pb.color}">${pb.val}</span>
+              <span style="font-size:11px;color:var(--text3)">prev ${pb.prev}</span>
+            </div>
+          </div>
+          <div style="font-size:20px">🏅</div>
+        </div>`;
+    });
+  } else if (thisIdx === 0) {
+    // First ever run of this type
+    const msg = FIRST_ACTIVITY_MSG[actType] || FIRST_ACTIVITY_MSG.run;
+    html += `
+      <div style="background:linear-gradient(135deg,${meta.color}22,${meta.color}11);
+        border:1px solid ${meta.color}55;border-radius:14px;padding:14px;text-align:center;margin-bottom:8px">
+        <div style="font-size:28px;margin-bottom:6px">${msg.emoji}</div>
+        <div style="font-size:14px;font-weight:700;color:${meta.color};margin-bottom:4px">First ${meta.label}!</div>
+        <div style="font-size:12px;color:var(--text2);line-height:1.5">${msg.msg}</div>
+      </div>`;
+  }
+
+  // Motivational encouragement if no PBs
+  if (!html) {
+    const encouragements = [
+      'Every session builds strength. Keep going! 💪',
+      'Consistency is the key to improvement. 📈',
+      'Your future self thanks you for this one. 🙌',
+      'Progress happens one session at a time. 🌟',
+    ];
+    const enc = encouragements[Math.floor(Math.random() * encouragements.length)];
+    html = `
+      <div style="background:rgba(255,255,255,0.04);border:1px solid var(--border);
+        border-radius:12px;padding:14px;text-align:center">
+        <div style="font-size:13px;color:var(--text2);line-height:1.5">${enc}</div>
+      </div>`;
+  }
+
+  el.innerHTML = html;
+}
+
 function _showRunDetail(idx) {
   const user = APP.currentUser;
   const logs = Store.getUserRunLogs(user.id)
@@ -1893,9 +2003,15 @@ function _showRunDetail(idx) {
       </div>
 
       ${!hasMap ? `<div style="text-align:center;font-size:13px;color:var(--text3);padding:8px 0">No GPS route for this activity</div>` : ''}
+
+      <!-- PB & motivation for this run -->
+      <div id="run-detail-pb-badges" style="margin-top:8px"></div>
+
     </div>`;
 
   openModal('modal-run-detail');
+  // Show PB info for this historical run
+  _renderHistoryRunPBInfo(r);
 
   // Render Leaflet map inside modal after it opens
   if (hasMap) {
@@ -2242,6 +2358,10 @@ function _renderRunPBBadges(distance, elapsed) {
   // (avoids 0.02km "test walks" beating 1km genuine sessions)
   const MIN_PB_DISTANCE = 0.1;   // at least 100m to earn a distance/pace PB
   const MIN_PB_DURATION = 60;    // at least 60 seconds to earn a time PB
+  // Previous session must ALSO be meaningful to count as a real baseline
+  // This prevents: "0.02km test walk → 1.52km real walk = NEW PB" false positives
+  const prevDistMeaningful = (pbs.distance || 0) >= MIN_PB_DISTANCE;
+  const prevDurMeaningful  = (pbs.duration || 0) >= MIN_PB_DURATION;
 
   if (distance >= MIN_PB_DISTANCE && distance > (pbs.distance || 0)) {
     newPbs.distance = distance;
@@ -2253,13 +2373,14 @@ function _renderRunPBBadges(distance, elapsed) {
     newPbs.duration = elapsed;
   }
 
-  if (newPbs.distance > (pbs.distance || 0)) {
+  // Only show PB badge if the previous baseline was also a real session
+  if (newPbs.distance > (pbs.distance || 0) && prevDistMeaningful) {
     pbBadges.push({ type: 'distance', label: `Longest ${meta.label}`, value: `${distance.toFixed(2)} km`, prev: `${(pbs.distance||0).toFixed(2)} km`, color: meta.color, icon: '📏' });
   }
-  if (newPbs.pace < (pbs.pace || 9999) && distance >= MIN_PB_DISTANCE) {
+  if (newPbs.pace < (pbs.pace || 9999) && distance >= MIN_PB_DISTANCE && prevDistMeaningful) {
     pbBadges.push({ type: 'pace', label: 'Fastest Pace', value: fmtPace(distance, elapsed) + ' /km', prev: pbs.pace < 9999 ? fmtPace(1, pbs.pace * 60) + ' /km' : '--:--', color: '#1e88e5', icon: '⚡' });
   }
-  if (newPbs.duration > (pbs.duration || 0)) {
+  if (newPbs.duration > (pbs.duration || 0) && prevDurMeaningful) {
     pbBadges.push({ type: 'time', label: 'Longest Time', value: fmtTime(elapsed), prev: fmtTime(pbs.duration || 0), color: '#43a05a', icon: '⏱' });
   }
 
