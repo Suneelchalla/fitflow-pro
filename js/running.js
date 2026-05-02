@@ -141,8 +141,34 @@ function _stopGpsKeepAlive() {
 // ════════════════════════════════════════════════════════════════
 // LOCK SCREEN DISPLAY — Media Session API + Silent Audio trick
 // ════════════════════════════════════════════════════════════════
-const SILENT_WAV_B64 =
-  'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=';
+// Proper 0.5s 8kHz mono 16-bit silent WAV — long enough for Android Chrome to loop
+// (0-duration WAV gets rejected by Chrome's autoplay policy on some Android versions)
+const SILENT_WAV_B64 = (() => {
+  // Build a 0.5s 8000Hz mono PCM WAV programmatically
+  const sampleRate = 8000;
+  const duration   = 0.5;
+  const numSamples = Math.floor(sampleRate * duration);
+  const buf        = new ArrayBuffer(44 + numSamples * 2);
+  const view       = new DataView(buf);
+  const write      = (o, s) => { for (let i=0;i<s.length;i++) view.setUint8(o+i, s.charCodeAt(i)); };
+  write(0,'RIFF'); view.setUint32(4, 36+numSamples*2, true);
+  write(8,'WAVE'); write(12,'fmt '); view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate*2, true);
+  view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  write(36,'data'); view.setUint32(40, numSamples*2, true);
+  // Samples are already zero (ArrayBuffer initialized to 0)
+  const bytes = new Uint8Array(buf);
+  let b64 = '';
+  for (let i=0;i<bytes.length;i+=3) {
+    const chunk = [bytes[i],bytes[i+1]||0,bytes[i+2]||0];
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    b64 += chars[(chunk[0]>>2)] + chars[((chunk[0]&3)<<4)|(chunk[1]>>4)] +
+           (i+1<bytes.length ? chars[((chunk[1]&15)<<2)|(chunk[2]>>6)] : '=') +
+           (i+2<bytes.length ? chars[chunk[2]&63] : '=');
+  }
+  return 'data:audio/wav;base64,' + b64;
+})();
 
 const LockScreen = {
   _audio:        null,
@@ -282,12 +308,6 @@ window.addEventListener('pagehide', () => {
   if (APP.runSession) _saveRunSession();
 });
 // Also save whenever page becomes hidden (screen off, app switch)
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'hidden' && APP.runSession) {
-    _saveRunSession();
-  }
-});
-
 // ── FIX #4: Global session recovery — runs wherever the app starts ──
 // Called from DOMContentLoaded in app.js AFTER login, but we also
 // call it whenever initRunningPage fires. Belt-and-suspenders.
@@ -493,6 +513,125 @@ let _gpsLastGoodFix = null;       // last confirmed-accurate position
 let _stillSince     = null;       // timestamp when user stopped moving (for auto-pause)
 const AUTO_PAUSE_STILL_MS = 60000; // suggest auto-pause after 60s of no movement
 
+function _checkLocationPermission(onGranted) {
+  // Check if permission is already "always" or "granted"
+  if (!navigator.permissions) { onGranted(); return; }
+  navigator.permissions.query({ name: 'geolocation' }).then(result => {
+    if (result.state === 'granted') {
+      // Permission granted — but may still be "while using" only at OS level
+      // Show background GPS reminder once per install
+      if (!Store.get('ff_gps_reminder_shown')) {
+        _showBackgroundGPSReminder(onGranted);
+      } else {
+        onGranted();
+      }
+    } else if (result.state === 'denied') {
+      _showGPSDeniedModal();
+    } else {
+      // 'prompt' — will ask user
+      _showBackgroundGPSReminder(onGranted);
+    }
+  }).catch(() => onGranted());
+}
+
+function _showBackgroundGPSReminder(onContinue) {
+  // Remove existing if any
+  document.getElementById('gps-reminder-modal')?.remove();
+
+  const el = document.createElement('div');
+  el.id = 'gps-reminder-modal';
+  el.style.cssText = `
+    position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9000;
+    display:flex;align-items:flex-end;justify-content:center;
+    backdrop-filter:blur(6px);
+  `;
+  el.innerHTML = `
+    <div style="
+      background:#071510;border-radius:20px 20px 0 0;
+      padding:24px 20px 36px;width:100%;max-width:480px;
+      border:1px solid rgba(67,160,90,0.3);border-bottom:none;
+    ">
+      <div style="text-align:center;margin-bottom:18px">
+        <div style="font-size:52px;margin-bottom:10px">📍</div>
+        <div style="font-size:19px;font-weight:700;margin-bottom:8px">Allow Background Location</div>
+        <div style="font-size:14px;color:rgba(255,255,255,0.65);line-height:1.65">
+          For GPS to keep tracking when your <strong>screen is locked</strong> or you
+          <strong>switch apps</strong>, you must set location permission to
+          <strong style="color:#7ed9a0">"Allow all the time"</strong> in Android settings.
+        </div>
+      </div>
+
+      <div style="
+        background:rgba(67,160,90,0.1);border:1px solid rgba(67,160,90,0.3);
+        border-radius:14px;padding:14px 16px;margin-bottom:18px;
+      ">
+        <div style="font-size:12px;font-weight:700;color:#7ed9a0;text-transform:uppercase;
+          letter-spacing:.07em;margin-bottom:10px">How to fix it</div>
+        ${[
+          '1. Open <strong>Android Settings</strong>',
+          '2. Go to <strong>Apps → Chrome</strong> (or FitFlow)',
+          '3. Tap <strong>Permissions → Location</strong>',
+          '4. Select <strong>"Allow all the time"</strong>',
+        ].map(s => `<div style="font-size:13px;color:rgba(255,255,255,0.75);
+          padding:5px 0;border-bottom:1px solid rgba(255,255,255,0.07);
+          line-height:1.5">${s}</div>`).join('')}
+      </div>
+
+      <div style="font-size:12px;color:rgba(255,255,255,0.4);text-align:center;margin-bottom:16px">
+        Without this, GPS pauses whenever the screen locks.
+      </div>
+
+      <div style="display:flex;gap:10px">
+        <button id="gps-reminder-skip"
+          style="flex:1;padding:13px;border-radius:14px;
+            border:1px solid rgba(255,255,255,0.15);background:transparent;
+            color:rgba(255,255,255,0.5);font-size:14px;cursor:pointer">
+          Skip for now
+        </button>
+        <button id="gps-reminder-ok"
+          style="flex:2;padding:13px;border-radius:14px;border:none;
+            background:linear-gradient(135deg,#2e7d46,#43a05a);
+            color:#fff;font-size:14px;font-weight:700;cursor:pointer">
+          Got it — Start ${ACTIVITY_META[_activityType]?.label || 'Run'}
+        </button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(el);
+
+  document.getElementById('gps-reminder-ok').addEventListener('click', () => {
+    Store.set('ff_gps_reminder_shown', true);
+    el.remove();
+    onContinue();
+  });
+  document.getElementById('gps-reminder-skip').addEventListener('click', () => {
+    el.remove();
+    onContinue(); // still start, just without reminder
+  });
+}
+
+function _showGPSDeniedModal() {
+  document.getElementById('gps-reminder-modal')?.remove();
+  const el = document.createElement('div');
+  el.id = 'gps-reminder-modal';
+  el.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px';
+  el.innerHTML = `
+    <div style="background:#071510;border-radius:20px;padding:28px 22px;max-width:380px;text-align:center;border:1px solid rgba(239,83,80,0.3)">
+      <div style="font-size:48px;margin-bottom:12px">🚫</div>
+      <div style="font-size:18px;font-weight:700;margin-bottom:8px">Location Blocked</div>
+      <div style="font-size:13px;color:rgba(255,255,255,0.6);line-height:1.6;margin-bottom:20px">
+        Location access is blocked for this app. GPS tracking won't work.<br><br>
+        Go to <strong>Settings → Apps → Chrome → Permissions → Location</strong> and allow it.
+      </div>
+      <button onclick="document.getElementById('gps-reminder-modal').remove()"
+        style="width:100%;padding:13px;border-radius:14px;border:none;
+          background:rgba(239,83,80,0.2);color:#ef5350;font-size:14px;font-weight:700;cursor:pointer">
+        Close
+      </button>
+    </div>`;
+  document.body.appendChild(el);
+}
+
 function startRun() {
   if (!navigator.geolocation) {
     showToast('GPS not available on this device.', 'error');
@@ -503,6 +642,11 @@ function startRun() {
     return;
   }
 
+  // Check location permission and show background GPS reminder if needed
+  _checkLocationPermission(_doStartRun);
+}
+
+function _doStartRun() {
   const meta = ACTIVITY_META[_activityType] || ACTIVITY_META.run;
 
   APP.runSession = {
