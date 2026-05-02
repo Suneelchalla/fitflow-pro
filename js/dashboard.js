@@ -1112,7 +1112,7 @@ function _renderDayActivityLog(allLogs) {
               ${getModuleEmoji(l.module)}
             </div>
             <div style="flex:1;min-width:0">
-              <div style="font-weight:700;font-size:15px">${getModuleName(l.module)}</div>
+              <div style="font-weight:700;font-size:15px">${isRun && runLog?.title ? runLog.title : getModuleName(l.module)}</div>
               <div style="font-size:12px;color:var(--text3);margin-top:2px">
                 ${l.day || ''}${isRun && l._runKm ? ' · ' + l._runKm.toFixed(2) + ' km' : ''}
               </div>
