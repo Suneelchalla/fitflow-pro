@@ -1003,20 +1003,26 @@ function _renderHistoryCalendar() {
   // Merge workout logs + run logs into one unified list for calendar + activity display
   const workoutLogs = Store.getUserLogs(user.id);
   const runEntries  = Store.getUserRunLogs(user.id).map(r => ({
-    userId:    r.userId,
-    module:    'running',
-    day:       r.date ? new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' }) : '',
-    date:      r.date   || '',
-    timestamp: r.timestamp || r.date || '',
-    _isRun:    true,
-    _runKm:    r.distance || 0,
+    userId:       r.userId,
+    module:       'running',
+    day:          r.date ? new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' }) : '',
+    date:         r.date      || '',
+    timestamp:    r.timestamp || r.date || '',
+    _isRun:       true,
+    _runKm:       r.distance  || 0,
+    _runTs:       r.timestamp || '',  // store exact timestamp for matching
+    _activityType: r.activityType || 'run',
   }));
-  // Combine: use a Set to avoid double-counting if a run was also logged as workout
+  // Combine workout logs + run entries
+  // Dedup only if exact same timestamp already exists (avoid double-counting)
   const logs = [...workoutLogs];
   runEntries.forEach(r => {
-    if (r.date && !logs.find(l => l.module === 'running' && l.date === r.date)) {
-      logs.push(r);
-    }
+    const isDuplicate = logs.find(l =>
+      l.module === 'running' &&
+      l.date === r.date &&
+      l.timestamp === r.timestamp  // same timestamp = same log entry
+    );
+    if (!isDuplicate) logs.push(r);
   });
 
   const label = document.getElementById('history-month-label');
@@ -1048,10 +1054,14 @@ function selectHistoryDay(dateStr, el) {
     day:    r.date ? new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' }) : '',
     date:   r.date || '', timestamp: r.timestamp || r.date || '',
     _isRun: true, _runKm: r.distance || 0,
+    _runTs: r.timestamp || '', _activityType: r.activityType || 'run',
   }));
   const logs = [...workoutLogs];
   runEntries.forEach(r => {
-    if (r.date && !logs.find(l => l.module === 'running' && l.date === r.date)) logs.push(r);
+    const isDuplicate = logs.find(l =>
+      l.module === 'running' && l.date === r.date && l.timestamp === r.timestamp
+    );
+    if (!isDuplicate) logs.push(r);
   });
   document.getElementById('history-cal').innerHTML = buildCalendar(logs, null, _historyYear, _historyMonth, 'global');
   _renderDayActivityLog(logs);
@@ -1095,11 +1105,32 @@ function _renderDayActivityLog(allLogs) {
       ${dayLogs.length} activit${dayLogs.length > 1 ? 'ies' : 'y'} — tap any to view details
     </div>
     ${dayLogs.map((l, idx) => {
-      const isRun   = l._isRun || l.module === 'running';
-      const runLog  = isRun ? runLogs[0] : null; // match first run for this date
-      const runIdx  = isRun ? Store.getUserRunLogs(user.id)
-        .sort((a,b) => (b.timestamp||b.date||'').localeCompare(a.timestamp||a.date||''))
-        .findIndex(r => r.date === _selectedHistoryDate) : -1;
+      const isRun = l._isRun || l.module === 'running';
+      // Match this specific activity card to its exact run log by timestamp
+      const allSortedRunLogs = Store.getUserRunLogs(user.id)
+        .sort((a,b) => (b.timestamp||b.date||'').localeCompare(a.timestamp||a.date||''));
+      let runLog = null;
+      let runIdx = -1;
+      if (isRun) {
+        if (l._runTs) {
+          // Match by exact timestamp (most reliable)
+          runIdx = allSortedRunLogs.findIndex(r => r.timestamp === l._runTs);
+          runLog = runIdx >= 0 ? allSortedRunLogs[runIdx] : null;
+        }
+        if (!runLog) {
+          // Fallback: match by date + distance
+          runIdx = allSortedRunLogs.findIndex(r =>
+            r.date === _selectedHistoryDate &&
+            Math.abs((r.distance||0) - (l._runKm||0)) < 0.01
+          );
+          runLog = runIdx >= 0 ? allSortedRunLogs[runIdx] : null;
+        }
+        if (!runLog) {
+          // Last resort: first run of the day
+          runIdx = allSortedRunLogs.findIndex(r => r.date === _selectedHistoryDate);
+          runLog = runIdx >= 0 ? allSortedRunLogs[runIdx] : null;
+        }
+      }
 
       return `
         <div class="card history-day-card" style="margin-bottom:10px;cursor:pointer"
@@ -1274,8 +1305,8 @@ function renderGlobalHistory() {
     <div class="stat-row">
       <div class="stat-card"><div class="stat-val">${logs.length}</div><div class="stat-label">Total Workouts</div></div>
       <div class="stat-card"><div class="stat-val">${calcStreak(user.id)}🔥</div><div class="stat-label">Day Streak</div></div>
-      <div class="stat-card"><div class="stat-val">${runLogs.length}</div><div class="stat-label">Runs Logged</div></div>
-      <div class="stat-card"><div class="stat-val">${runLogs.reduce((a, r) => a + (r.distance || 0), 0).toFixed(1)}</div><div class="stat-label">Total km Run</div></div>
+      <div class="stat-card"><div class="stat-val">${runLogs.length}</div><div class="stat-label">Activities</div></div>
+      <div class="stat-card"><div class="stat-val">${runLogs.reduce((a, r) => a + (r.distance || 0), 0).toFixed(1)}</div><div class="stat-label">Total km</div></div>
     </div>`;
 
   _renderHistoryCalendar();
