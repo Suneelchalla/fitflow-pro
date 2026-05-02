@@ -1285,7 +1285,7 @@ function _refreshMyPlanNav() {
   if (active) {
     const plan = (window.APP_DATA_DEFAULT||window.APP_DATA).running.plans[active.planKey];
     tab.style.display = '';
-    if (label) label.textContent = plan ? active.planKey : 'My Plan';
+    if (label) label.textContent = plan ? (active.planKey + ' Plan') : 'My Plan';
     // Show plan emoji in nav icon
     const icon = document.getElementById('nav-myplan-icon');
     if (icon && plan) icon.textContent = plan.emoji || '🎯';
