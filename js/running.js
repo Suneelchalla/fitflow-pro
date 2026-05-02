@@ -536,6 +536,7 @@ const GPS_MIN_DISTANCE_KM = 0.005; // ignore movement < 5 m (standing still jitt
 let _gpsWarmupCount  = 0;          // counts received fixes during warmup phase
 let _gpsLastGoodFix  = null;       // last confirmed-accurate position
 let _stillSince      = null;       // timestamp when user stopped moving (for auto-pause)
+let _currentGpsSpeed = null;       // real-time speed from GPS (km/h), null if unavailable
 const AUTO_PAUSE_STILL_MS = 60000; // suggest auto-pause after 60s of no movement
 
 // ── LOCK SCREEN AUTO-PAUSE ───────────────────────────────────────
@@ -687,9 +688,10 @@ function _doStartRun() {
     paused:       false,
     activityType: _activityType,
   };
-  APP.gpsCoords   = [];
-  _gpsWarmupCount = 0;
-  _gpsLastGoodFix = null;
+  APP.gpsCoords    = [];
+  _gpsWarmupCount  = 0;
+  _gpsLastGoodFix  = null;
+  _currentGpsSpeed = null;
   _saveRunSession();
 
   // Update active run header label with activity type
@@ -804,8 +806,11 @@ function startGPS() {
         _gpsLastGoodFix = { lat, lon, ts: Date.now() };
       }
 
-      // Auto-pause detection: if speed < 0.5 km/h for AUTO_PAUSE_STILL_MS, prompt user
+      // Track real-time GPS speed for live display
       const _speedNow = pos.coords.speed != null ? pos.coords.speed * 3.6 : null;
+      if (_speedNow !== null && _speedNow >= 0) _currentGpsSpeed = _speedNow;
+
+      // Auto-pause detection: if speed < 0.5 km/h for AUTO_PAUSE_STILL_MS, prompt user
       if (_speedNow !== null && _speedNow < 0.5) {
         if (!_stillSince) _stillSince = Date.now();
         else if (Date.now() - _stillSince > AUTO_PAUSE_STILL_MS && !APP.runSession.paused) {
@@ -845,7 +850,10 @@ function updateRunDisplay() {
   if (!s) return;
   const elapsed  = _calcElapsed(s);
   const meta     = ACTIVITY_META[s.activityType || _activityType] || ACTIVITY_META.run;
-  const speedKph = elapsed > 0 ? (s.distance / elapsed * 3600) : 0;
+  const avgSpeedKph  = elapsed > 0 ? (s.distance / elapsed * 3600) : 0;
+  // Use real-time GPS speed if available — much more accurate than average
+  // especially for cycling where speed varies a lot
+  const displaySpeed = (_currentGpsSpeed !== null) ? _currentGpsSpeed : avgSpeedKph;
 
   const timerEl = document.getElementById('run-timer');
   const distEl  = document.getElementById('run-dist');
@@ -856,7 +864,7 @@ function updateRunDisplay() {
   if (timerEl) timerEl.textContent = fmtTime(elapsed);
   if (distEl)  distEl.textContent  = s.distance.toFixed(2);
   if (paceEl)  paceEl.textContent  = fmtPace(s.distance, elapsed);
-  if (speedEl) speedEl.textContent = speedKph.toFixed(1);
+  if (speedEl) speedEl.textContent = displaySpeed.toFixed(1);
   if (calEl)   calEl.textContent   = Math.round(s.distance * meta.kcalPerKm);
 }
 
@@ -879,8 +887,9 @@ function togglePauseRun() {
     }
     APP.runSession.pausedAt = null;
     APP.runSession.paused   = false;
-    _gpsWarmupCount = 0;
-    _gpsLastGoodFix = null;
+    _gpsWarmupCount  = 0;
+    _gpsLastGoodFix  = null;
+    _currentGpsSpeed = null;
     startGPS();
   }
 
@@ -1065,6 +1074,7 @@ function discardRun() {
   APP.runSession  = null;
   _gpsWarmupCount      = 0;
   _gpsLastGoodFix      = null;
+  _currentGpsSpeed     = null;
   _lockedWhileRunning  = false;
   _clearRunSession();
   LockScreen.stop();
