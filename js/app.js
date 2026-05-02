@@ -131,7 +131,7 @@ function showToast(msg, type = 'success') {
 // ── PAGE ROUTING ─────────────────────────────────────────────────
 // page-running is a ROOT_PAGE so the global swipe-back gesture never
 // fires while a run is active — map panning was triggering goBack().
-const ROOT_PAGES = ['page-login', 'page-dashboard', 'page-admin', 'page-quote', 'page-onboarding', 'page-my-plan', 'page-running'];
+const ROOT_PAGES = ['page-login', 'page-dashboard', 'page-admin', 'page-quote', 'page-onboarding', 'page-running'];
 
 function showPage(id, addToHistory = true) {
   const prev = APP.currentPage;
@@ -179,6 +179,7 @@ function _syncNav(pageId) {
   else if (pageId === 'page-history-global') setActiveNav('history');
   else if (pageId === 'page-running')        setActiveNav('running');
   else if (pageId === 'page-admin')          setActiveNav('admin');
+  else if (pageId === 'page-my-plan')        setActiveNav('myplan');
 }
 
 window.addEventListener('popstate', e => {
@@ -514,6 +515,10 @@ document.addEventListener('DOMContentLoaded', () => {
     } else if (targetPage === 'page-weekly-report') {
       if (typeof renderWeeklyReport === 'function') renderWeeklyReport();
       setActiveNav('home');
+    } else if (targetPage === 'page-my-plan') {
+      if (typeof renderMyPlan === 'function') renderMyPlan();
+      if (typeof _refreshMyPlanNav === 'function') _refreshMyPlanNav();
+      setActiveNav('myplan');
     } else {
       setActiveNav('home');
     }
@@ -521,9 +526,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // Sync from Sheets THEN re-render so data appears after cache clear
     syncContentFromSheets().then(() => {
       if (typeof refreshDashboard === 'function') refreshDashboard();
-      // Re-render history page so run logs appear after sync
+      // Always refresh plan nav — plan may be registered but nav not showing
+      if (typeof _refreshMyPlanNav === 'function') _refreshMyPlanNav();
+      // Re-render current page after sync
       if (APP.currentPage === 'page-history-global' && typeof renderGlobalHistory === 'function') {
         renderGlobalHistory();
+      }
+      if (APP.currentPage === 'page-my-plan' && typeof renderMyPlan === 'function') {
+        renderMyPlan();
       }
       if (APP.currentPage === 'page-module' && APP.currentModule) {
         if (typeof renderExercises === 'function') renderExercises(APP.currentModule, APP.currentDay || (new Date()).toLocaleDateString('en-US',{weekday:'long'}));
