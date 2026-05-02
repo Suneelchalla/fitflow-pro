@@ -129,9 +129,10 @@ function showToast(msg, type = 'success') {
 }
 
 // ── PAGE ROUTING ─────────────────────────────────────────────────
-// page-running is a ROOT_PAGE so the global swipe-back gesture never
-// fires while a run is active — map panning was triggering goBack().
-const ROOT_PAGES = ['page-login', 'page-dashboard', 'page-admin', 'page-quote', 'page-onboarding', 'page-running'];
+// ROOT_PAGES: swipe-back and goBack() never fire on these pages.
+// page-running is NOT in ROOT_PAGES — instead we check APP.runSession
+// at swipe time so idle running page allows swipe-back but active run doesn't.
+const ROOT_PAGES = ['page-login', 'page-dashboard', 'page-admin', 'page-quote', 'page-onboarding'];
 
 function showPage(id, addToHistory = true) {
   const prev = APP.currentPage;
@@ -185,7 +186,13 @@ function _syncNav(pageId) {
 window.addEventListener('popstate', e => {
   // Only handle real navigation events, not browser chrome show/hide
   if (!e.state?.page) return;
+  // Block back navigation from root pages
   if (ROOT_PAGES.includes(APP.currentPage)) {
+    window.history.pushState({ page: APP.currentPage }, '', '#' + APP.currentPage);
+    return;
+  }
+  // Block back navigation from running page during an ACTIVE run
+  if (APP.currentPage === 'page-running' && APP.runSession) {
     window.history.pushState({ page: APP.currentPage }, '', '#' + APP.currentPage);
     return;
   }
@@ -239,7 +246,10 @@ window.addEventListener('popstate', e => {
     if (maxDy > 30) return;
 
     // Swipe-back: left swipe > 80px, horizontal dominates vertical, not a root page
-    if (dx < -80 && dy < 40 && Math.abs(dx) > dy * 2 && !ROOT_PAGES.includes(APP.currentPage)) {
+    // Special case: block swipe on running page ONLY when a run is active
+    // (map panning would otherwise trigger goBack during an active run)
+    const runBlocked = APP.currentPage === 'page-running' && APP.runSession;
+    if (dx < -80 && dy < 40 && Math.abs(dx) > dy * 2 && !ROOT_PAGES.includes(APP.currentPage) && !runBlocked) {
       goBack();
     }
   }, { passive: true });
