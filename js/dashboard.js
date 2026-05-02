@@ -8,6 +8,8 @@ function initDashboard() {
   renderDashboardStats();
   refreshDashboardBadges();
   renderAnnouncementBanner();
+  // Always show registered plan in bottom nav on every dashboard init
+  if (typeof _refreshMyPlanNav === 'function') _refreshMyPlanNav();
 }
 
 function refreshDashboardBadges() {
