@@ -929,15 +929,68 @@ function stopRun() {
 
   _renderRunPBBadges(s.distance, elapsed);
   _renderRunRouteMap(APP.gpsCoords);
+  // Transition to save screen after map loads
+  setTimeout(() => showSaveActivity(), 400);
 }
 
 // ── SAVE ──────────────────────────────────────────────────────────
+// ── ACTIVITY TITLE GENERATOR ─────────────────────────────────────
+function _getDefaultActivityTitle(activityType) {
+  const hour = new Date().getHours();
+  const timeOfDay = hour >= 5 && hour < 12 ? 'Morning'
+                  : hour >= 12 && hour < 17 ? 'Afternoon'
+                  : hour >= 17 && hour < 21 ? 'Evening'
+                  : 'Night';
+  const meta = ACTIVITY_META[activityType] || ACTIVITY_META.run;
+  return timeOfDay + ' ' + meta.label;
+}
+
+function showSaveActivity() {
+  const s = APP.runSession;
+  if (!s) return;
+  const meta    = ACTIVITY_META[s.activityType || _activityType] || ACTIVITY_META.run;
+  const elapsed = s.finalElapsed || _calcElapsed(s);
+  const title   = _getDefaultActivityTitle(s.activityType || _activityType);
+
+  const titleInput = document.getElementById('save-activity-title');
+  const descInput  = document.getElementById('save-activity-desc');
+  if (titleInput) { titleInput.value = title; setTimeout(() => { titleInput.focus(); titleInput.select(); }, 350); }
+  if (descInput)  descInput.value = '';
+
+  const typeEmoji = document.getElementById('save-type-emoji');
+  const typeLabel = document.getElementById('save-type-label');
+  if (typeEmoji) typeEmoji.textContent = meta.emoji;
+  if (typeLabel) typeLabel.textContent = meta.label;
+
+  const strip = document.getElementById('save-stats-strip');
+  if (strip) {
+    const kcal = Math.round(s.distance * meta.kcalPerKm);
+    strip.innerHTML = [
+      { label:'Distance', val: s.distance.toFixed(2)+' km', color: meta.color },
+      { label:'Time',     val: fmtTime(elapsed),            color: 'var(--text)' },
+      { label:'Calories', val: kcal+' kcal',                color: 'var(--text)' },
+    ].map(st => `<div style="background:var(--surface);border-radius:12px;padding:12px;
+        border:1px solid var(--border);text-align:center">
+        <div style="font-size:18px;font-weight:700;color:${st.color}">${st.val}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:3px">${st.label}</div>
+      </div>`).join('');
+  }
+
+  document.getElementById('run-summary').classList.add('hidden');
+  document.getElementById('run-save-screen').classList.remove('hidden');
+}
+
 function saveRun() {
   const s       = APP.runSession;
   const user    = APP.currentUser;
   const elapsed = s.finalElapsed || _calcElapsed(s);
   const ctx     = APP._planRunCtx || null;
   const meta    = ACTIVITY_META[s.activityType || _activityType] || ACTIVITY_META.run;
+
+  const titleEl = document.getElementById('save-activity-title');
+  const descEl  = document.getElementById('save-activity-desc');
+  const activityTitle = (titleEl?.value?.trim()) || _getDefaultActivityTitle(s.activityType || _activityType);
+  const activityDesc  = descEl?.value?.trim() || '';
 
   const log = {
     userId:       user.id,
@@ -947,7 +1000,9 @@ function saveRun() {
     duration:     elapsed,
     pace:         parseFloat((elapsed / 60 / Math.max(s.distance, 0.01)).toFixed(2)),
     activityType: s.activityType || _activityType,
-    planType:     ctx ? `${ctx.planKey} · Wk${ctx.week} D${ctx.day}` : (APP.selectedPlan || ('Free ' + meta.label)),
+    planType:     activityTitle,
+    title:        activityTitle,
+    description:  activityDesc,
     timestamp:    new Date().toISOString(),
     // Save coords for history detail map (thin to max 500 points to keep storage small)
     coords:       APP.gpsCoords.length > 500
@@ -1022,6 +1077,7 @@ function discardRun() {
   if (labelEl) labelEl.textContent = 'START A RUN';
 
   document.getElementById('run-summary')?.classList.add('hidden');
+  document.getElementById('run-save-screen')?.classList.add('hidden');
   document.getElementById('run-active')?.classList.add('hidden');
   document.getElementById('run-idle').style.display = 'flex';
 }
