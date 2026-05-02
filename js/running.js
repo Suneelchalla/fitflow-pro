@@ -395,9 +395,14 @@ function _initLiveMap() {
     if (_liveMap) { _liveMap.remove(); _liveMap = null; _livePolyline = null; _liveMarker = null; }
     _userPanned = false;
 
-    const startCoord = APP.gpsCoords.length > 0
+    // Use last known GPS coord if available, otherwise get real location
+    // NEVER use a hardcoded fallback — that showed Nagpur for users in Andhra Pradesh
+    const lastCoord = APP.gpsCoords.length > 0
       ? [APP.gpsCoords[APP.gpsCoords.length - 1].lat, APP.gpsCoords[APP.gpsCoords.length - 1].lon]
-      : [20.5937, 78.9629];
+      : null;
+
+    // Initialize map at a neutral zoom first, then fly to real location
+    const startCoord = lastCoord || [0, 0];
 
     _liveMap = L.map(container, {
       zoomControl:        false,
@@ -464,9 +469,27 @@ function _initLiveMap() {
       iconSize:   [18, 18],
       iconAnchor: [9, 9],
     });
-    _liveMarker = L.marker(startCoord, { icon, zIndexOffset: 1000, interactive: false }).addTo(_liveMap);
+    _liveMarker = L.marker(startCoord[0] !== 0 ? startCoord : [0,0], { icon, zIndexOffset: 1000, interactive: false }).addTo(_liveMap);
 
     if (APP.gpsCoords.length > 0) _redrawLivePolyline();
+
+    // If no GPS coords yet, get real current position and fly map there
+    if (!lastCoord) {
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          const { latitude: lat, longitude: lon } = pos.coords;
+          if (_liveMap) {
+            _liveMap.setView([lat, lon], 17, { animate: false });
+            if (_liveMarker) _liveMarker.setLatLng([lat, lon]);
+          }
+        },
+        () => {
+          // GPS denied/unavailable — show India overview so at least map is visible
+          if (_liveMap) _liveMap.setView([20.5937, 78.9629], 5, { animate: false });
+        },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
+      );
+    }
   });
 }
 
