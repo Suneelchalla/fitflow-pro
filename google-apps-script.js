@@ -77,6 +77,7 @@ function doGet(e) {
       case 'getAllLogs':          result = { success:true, logs:getAllLogs() };              break;
       case 'getUserRunLogs':     result = { success:true, logs:getUserRunLogs(p.userId) };  break;
       case 'getAllRunLogs':       result = { success:true, logs:getAllRunLogs() };           break;
+      case 'deleteRunLog':       result = deleteRunLog(p.logId, p.userId);                   break;
       case 'getActivePlan':      result = getActivePlan(p.userId);                          break;
       case 'getPlanProgress':    result = getPlanProgress(p.userId, p.planKey);             break;
       case 'getContent':         result = { success:true, content:getContent(p.key) };     break;
@@ -116,6 +117,7 @@ function doPost(e) {
       case 'savePushSubscription':  result = savePushSubscription(body);  break;
       case 'removePushSubscription':result = removePushSubscription(body);break;
       case 'saveHydrationLog':      result = saveHydrationLog(body);      break;
+      case 'deleteRunLog':          result = deleteRunLog(body.logId, body.userId); break;
       default: result = { success:false, error:'Unknown action: ' + body.action };
     }
   } catch(err) { result = { success:false, error:err.message }; }
@@ -170,7 +172,7 @@ function setupSheets() {
     userSh.appendRow(['u_admin','Admin User','admin@fitflow.com','admin123','',false,'ADMIN','ACTIVE',new Date().toISOString().split('T')[0],'System','']);
   }
   _ensureSheet(SHEETS.LOGS,           ['LogID','UserID','UserEmail','Module','Day','Date','Timestamp']);
-  _ensureSheet(SHEETS.RUN_LOGS,       ['LogID','UserID','UserEmail','Date','Distance_km','Duration_sec','Pace_min_km','PlanType','Timestamp','ActivityType','CoordsJSON']);
+  _ensureSheet(SHEETS.RUN_LOGS,       ['LogID','UserID','UserEmail','Date','Distance_km','Duration_sec','Pace_min_km','PlanType','Timestamp','ActivityType','CoordsJSON','Title','Description']);
   _ensureSheet(SHEETS.HYDRATION_LOGS, ['LogID','UserID','UserEmail','Date','GlassesTarget','GlassesDone','Timestamp']);
   _ensureSheet(SHEETS.CONTENT,        ['Key','Value','UpdatedAt']);
   _ensureSheet(SHEETS.FEEDBACK,       ['FeedbackID','UserID','Name','Email','Category','Rating','Message','Date','Timestamp']);
@@ -192,30 +194,45 @@ function migrateRunningLog() {
   const header = data[0].map(h => (h||'').toString().trim().toLowerCase());
   const hasActivityType = header.includes('activitytype');
   const hasCoordsJson   = header.includes('coordsjson');
+  const hasTitle        = header.includes('title');
+  const hasDescription  = header.includes('description');
 
   let colsAdded = 0;
   if (!hasActivityType) {
-    const nextCol = data[0].length + 1;
+    const nextCol = data[0].length + colsAdded + 1;
     sh.getRange(1, nextCol).setValue('ActivityType');
     sh.getRange(1, nextCol).setFontWeight('bold').setBackground('#1B5E20').setFontColor('#FFFFFF');
-    for (let i = 2; i <= sh.getLastRow(); i++) {
-      sh.getRange(i, nextCol).setValue('run');
-    }
+    for (let i = 2; i <= sh.getLastRow(); i++) sh.getRange(i, nextCol).setValue('run');
     colsAdded++;
-    Logger.log('Added ActivityType column — all existing rows defaulted to "run"');
+    Logger.log('Added ActivityType column');
   }
   if (!hasCoordsJson) {
     const nextCol = data[0].length + colsAdded + 1;
     sh.getRange(1, nextCol).setValue('CoordsJSON');
     sh.getRange(1, nextCol).setFontWeight('bold').setBackground('#1B5E20').setFontColor('#FFFFFF');
-    for (let i = 2; i <= sh.getLastRow(); i++) {
-      sh.getRange(i, nextCol).setValue('[]');
-    }
-    Logger.log('Added CoordsJSON column — all existing rows set to empty []');
+    for (let i = 2; i <= sh.getLastRow(); i++) sh.getRange(i, nextCol).setValue('[]');
+    colsAdded++;
+    Logger.log('Added CoordsJSON column');
+  }
+  if (!hasTitle) {
+    const nextCol = data[0].length + colsAdded + 1;
+    sh.getRange(1, nextCol).setValue('Title');
+    sh.getRange(1, nextCol).setFontWeight('bold').setBackground('#1B5E20').setFontColor('#FFFFFF');
+    for (let i = 2; i <= sh.getLastRow(); i++) sh.getRange(i, nextCol).setValue('');
+    colsAdded++;
+    Logger.log('Added Title column');
+  }
+  if (!hasDescription) {
+    const nextCol = data[0].length + colsAdded + 1;
+    sh.getRange(1, nextCol).setValue('Description');
+    sh.getRange(1, nextCol).setFontWeight('bold').setBackground('#1B5E20').setFontColor('#FFFFFF');
+    for (let i = 2; i <= sh.getLastRow(); i++) sh.getRange(i, nextCol).setValue('');
+    colsAdded++;
+    Logger.log('Added Description column');
   }
 
-  if (colsAdded === 0 && hasCoordsJson) {
-    Logger.log('RunningLog already has both columns — no migration needed.');
+  if (colsAdded === 0) {
+    Logger.log('RunningLog already up to date — no migration needed.');
   }
   SpreadsheetApp.flush();
   Logger.log('✅ Migration complete! Redeploy now.');
@@ -404,8 +421,10 @@ function logRun(body) {
     coordsJson = JSON.stringify(slim);
   }
 
+  // Use the ID generated by the client so localStorage and Sheets share the same ID
+  // This enables reliable deletion by ID from both stores
   sh.appendRow([
-    'run_'+Date.now(),
+    body.id || ('run_'+Date.now()),
     body.userId       || '',
     body.email        || '',
     body.date         || '',
@@ -416,6 +435,8 @@ function logRun(body) {
     new Date().toISOString(),
     body.activityType || 'run',
     coordsJson,
+    body.title        || '',
+    body.description  || '',
   ]);
   return { success:true };
 }
@@ -436,6 +457,8 @@ function getUserRunLogs(userId) {
       if (coordsCol >= 0 && r[coordsCol]) {
         try { coords = JSON.parse(r[coordsCol]); } catch {}
       }
+      const titleCol = header.indexOf('title');
+      const descCol  = header.indexOf('description');
       return {
         id:           (r[RCOL.LOG_ID]   ||'').toString(),
         userId:       (r[RCOL.USER_ID]  ||'').toString(),
@@ -447,9 +470,31 @@ function getUserRunLogs(userId) {
         planType:     (r[RCOL.PLAN_TYPE]||'Free Run').toString(),
         timestamp:    (r[RCOL.TIMESTAMP]||'').toString(),
         activityType: actCol >= 0 ? (r[actCol]||'run').toString() : 'run',
+        title:        titleCol >= 0 ? (r[titleCol]||'').toString() : '',
+        description:  descCol  >= 0 ? (r[descCol] ||'').toString() : '',
         coords,
       };
     });
+}
+
+function deleteRunLog(logId, userId) {
+  if (!logId) return { success:false, error:'logId required.' };
+  const sh   = getSheet(SHEETS.RUN_LOGS);
+  const data = sh.getDataRange().getValues();
+  // Search by LogID in col 0, optionally verify userId in col 1
+  for (let i = 1; i < data.length; i++) {
+    const rowLogId = (data[i][0]||'').toString().trim();
+    const rowUserId = (data[i][1]||'').toString().trim();
+    if (rowLogId === logId.toString().trim()) {
+      if (userId && rowUserId !== userId.toString().trim()) {
+        return { success:false, error:'Unauthorized.' };
+      }
+      sh.deleteRow(i + 1);
+      SpreadsheetApp.flush();
+      return { success:true, deleted:logId };
+    }
+  }
+  return { success:false, error:'Log not found.' };
 }
 
 function getAllRunLogs() {
