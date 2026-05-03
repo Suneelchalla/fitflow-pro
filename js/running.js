@@ -756,6 +756,7 @@ function _doStartRun() {
   _gpsWarmupCount  = 0;
   _gpsLastGoodFix  = null;
   _currentGpsSpeed = null;
+  _kalman.reset();   // fresh Kalman state for new run
   _saveRunSession();
 
   // Update active run header label with activity type
@@ -1083,7 +1084,11 @@ function saveRun() {
   const activityTitle = (titleEl?.value?.trim()) || _getDefaultActivityTitle(s.activityType || _activityType);
   const activityDesc  = descEl?.value?.trim() || '';
 
+  // Generate one shared ID used in BOTH localStorage AND Google Sheets
+  const runLogId = 'run_' + Date.now();
+
   const log = {
+    id:           runLogId,
     userId:       user.id,
     email:        user.email,
     date:         todayStr(),
