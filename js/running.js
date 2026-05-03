@@ -2104,8 +2104,59 @@ function _renderKmSplits(coords, totalDistance, color) {
     </div>`;
 }
 
+// ── DELETE RUN LOG ───────────────────────────────────────────────
+function confirmDeleteRunLog() {
+  if (!_currentDetailRunId) return;
+  showConfirm(
+    '🗑️ Delete Activity',
+    'This will permanently delete this activity from your history and cloud backup. This cannot be undone.',
+    'Delete',
+    'Cancel',
+    () => _deleteRunLog(_currentDetailRunId),
+    null,
+    'danger'
+  );
+}
+
+async function _deleteRunLog(logId) {
+  const user = APP.currentUser;
+  if (!user || !logId) return;
+
+  // 1. Delete from localStorage immediately
+  const removed = Store.deleteRunLog(user.id, logId);
+
+  // 2. Close modal
+  closeModal('modal-run-detail');
+
+  // 3. Refresh all history views everywhere
+  if (typeof renderRunHistory === 'function')       renderRunHistory();
+  if (typeof renderGlobalHistory === 'function')    renderGlobalHistory();
+  if (typeof renderDashboardStats === 'function')   renderDashboardStats();
+  if (typeof renderDashboardTiles === 'function')   renderDashboardTiles();
+  // Re-render day log if currently viewing history
+  if (typeof _selectedHistoryDate === 'string' && _selectedHistoryDate) {
+    if (typeof selectHistoryDay === 'function') selectHistoryDay(_selectedHistoryDate);
+  }
+
+  showToast('Activity deleted.', 'success');
+
+  // 4. Delete from Google Sheets in background
+  try {
+    const res = await sheetsPost('deleteRunLog', { logId, userId: user.id });
+    if (!res?.success) {
+      console.warn('GAS delete failed:', res?.error);
+    }
+  } catch(e) {
+    console.warn('GAS delete error:', e);
+    // Local delete already done — not critical if sheets fails
+  }
+
+  _currentDetailRunId = null;
+}
+
 // ── RUN DETAIL MODAL ──────────────────────────────────────────────
-let _detailMapInst = null;
+let _detailMapInst      = null;
+let _currentDetailRunId = null; // ID of run currently shown in detail modal
 
 // ── HISTORY RUN PB INFO ───────────────────────────────────────────
 // Shows PB badges and motivation for any historical run (not just post-run)
@@ -2223,6 +2274,11 @@ function _showRunDetail(idx) {
     .sort((a, b) => (b.timestamp||b.date||'').localeCompare(a.timestamp||a.date||''));
   const r    = logs[idx];
   if (!r) return;
+  // Track which run is open so delete knows which one to remove
+  _currentDetailRunId = r.id || r.timestamp || null;
+
+  // Store logId so the Delete button knows which run to delete
+  window._currentRunDetailId = r.id;
 
   const type     = r.activityType || 'run';
   const meta     = ACTIVITY_META[type] || ACTIVITY_META.run;
@@ -2333,6 +2389,34 @@ function _showRunDetail(idx) {
         _detailMapInst.fitBounds(L.latLngBounds(latlngs).pad(0.15));
       });
     }, 250); // wait for modal animation to complete before sizing map
+  }
+}
+
+// ── DELETE RUN ACTIVITY ──────────────────────────────────────────
+async function deleteRunActivity(logId) {
+  const user = APP.currentUser;
+  if (!user || !logId) return;
+
+  if (!confirm('Delete this activity?\n\nThis will permanently remove it from your history and cloud backup. This cannot be undone.')) return;
+
+  // 1. Delete from localStorage immediately
+  Store.deleteRunLog(user.id, logId);
+
+  // 2. Close the detail modal
+  closeModal('modal-run-detail');
+
+  // 3. Refresh all history views right away
+  if (typeof renderGlobalHistory === 'function') renderGlobalHistory();
+  if (typeof renderRunHistory    === 'function') renderRunHistory();
+  if (typeof refreshDashboard    === 'function') refreshDashboard();
+
+  showToast('Activity deleted.', 'info');
+
+  // 4. Delete from Google Sheets in background (non-blocking)
+  try {
+    await sheetsPost('deleteRunLog', { userId: user.id, logId });
+  } catch(e) {
+    console.warn('Sheets delete failed — removed locally:', e);
   }
 }
 
