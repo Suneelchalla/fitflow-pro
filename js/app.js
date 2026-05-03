@@ -62,7 +62,7 @@ const Store = {
       Math.abs((l.distance||0) - (log.distance||0)) < 0.01
     );
     if (exists) return false;
-    logs.push({ ...log, id: 'run_' + Date.now() });
+    logs.push({ ...log, id: log.id || ('run_' + Date.now()) });
     this.set('ff_runlogs', logs);
     return true;
   },
