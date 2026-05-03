@@ -1029,3 +1029,58 @@ function completeOnboarding() {
   showPage('page-quote', false);
   renderQuote();
 }
+
+
+// ════════════════════════════════════════════════════════════════
+// FITFLOW PRO — Google Sign In (One Tap / GSI Button)
+// ════════════════════════════════════════════════════════════════
+
+// Called when user clicks "Sign in with Google" button
+function signInWithGoogle() {
+  // Trigger the Google Identity Services popup
+  google.accounts.id.initialize({
+    client_id: '255447439211-c769706kdp6g4vjuagf8t2uenkl5qhr8.apps.googleusercontent.com',
+    callback:  handleGoogleLogin,
+    ux_mode:   'popup',
+  });
+  google.accounts.id.prompt();
+}
+
+// Called by Google after user selects their account
+// credential is a JWT containing name, email, picture, sub (Google ID)
+async function handleGoogleLogin(response) {
+  const errEl = document.getElementById('login-error');
+  if (errEl) errEl.textContent = '';
+
+  try {
+    // Decode the JWT payload (base64url middle part)
+    const payload = JSON.parse(atob(response.credential.split('.')[1].replace(/-/g,'+').replace(/_/g,'/')));
+    const { name, email, sub: googleId, picture } = payload;
+
+    if (!email) {
+      if (errEl) errEl.textContent = 'Google login failed — no email returned.';
+      return;
+    }
+
+    // Show loading state
+    const btn = document.getElementById('google-signin-btn');
+    if (btn) { btn.textContent = 'Signing in...'; btn.disabled = true; }
+
+    // Tell GAS to find or create this user
+    const res = await sheetsPost('googleLogin', { name, email, googleId, picture: picture || '' });
+
+    if (btn) { btn.textContent = 'Sign in with Google'; btn.disabled = false; }
+
+    if (res?.success && res.user) {
+      // Use same completeLogin flow as normal login
+      await completeLogin(res.user);
+    } else {
+      if (errEl) errEl.textContent = res?.error || 'Google login failed. Please try again.';
+    }
+  } catch(e) {
+    console.error('Google login error:', e);
+    const btn = document.getElementById('google-signin-btn');
+    if (btn) { btn.textContent = 'Sign in with Google'; btn.disabled = false; }
+    if (errEl) errEl.textContent = 'Google login failed. Please try again.';
+  }
+}
