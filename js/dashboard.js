@@ -906,7 +906,9 @@ function buildCalendar(logs, moduleFilter, year, month, context) {
   const headers = ['S','M','T','W','T','F','S']
     .map(d => `<div class="cal-day header">${d}</div>`).join('');
 
-  const offset = firstDay === 0 ? 6 : firstDay - 1;
+  // Headers are Sunday-first: S M T W T F S
+  // JS getDay(): 0=Sun, 1=Mon...6=Sat → offset = firstDay directly
+  const offset = firstDay;
   let cells = Array(offset).fill('<div class="cal-day" style="background:transparent"></div>').join('');
 
   for (let d = 1; d <= daysInMonth; d++) {
