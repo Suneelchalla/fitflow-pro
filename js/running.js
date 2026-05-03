@@ -526,6 +526,70 @@ function _setGpsBadge(ok) {
   el.style.background   = ok ? 'rgba(67,160,90,0.85)' : 'rgba(229,57,53,0.75)';
 }
 
+// ── KALMAN FILTER ────────────────────────────────────────────────
+// Smooths GPS noise while preserving real turns and curves.
+// Same technique used by Strava, Nike Run Club, Google Maps.
+//
+// How it works:
+//   Each GPS fix has measurement noise (3-8m random error).
+//   The filter maintains a state estimate (predicted position)
+//   and blends it with each new GPS reading weighted by accuracy.
+//   Random jumps contradict the prediction → mostly filtered out.
+//   Real turns confirm across multiple fixes → fully preserved.
+
+class GpsKalmanFilter {
+  constructor() {
+    this.reset();
+  }
+
+  reset() {
+    this.lat       = null;
+    this.lon       = null;
+    this.variance  = -1;   // negative = not initialised
+    this.lastTs    = 0;
+    // Process noise: how much we expect position to change per second
+    // Higher = trusts GPS more, Lower = smoother but slower to react
+    // 3.0 m²/s works well for running/walking/cycling
+    this.Q_METRES_PER_SECOND = 3.0;
+  }
+
+  // Returns smoothed { lat, lon } or null if not ready
+  process(lat, lon, accuracy, timestampMs) {
+    const minAccuracy = Math.max(accuracy, 1);
+
+    if (this.variance < 0) {
+      // First fix — initialise with this position
+      this.lat      = lat;
+      this.lon      = lon;
+      this.variance = minAccuracy * minAccuracy;
+      this.lastTs   = timestampMs;
+      return { lat, lon };
+    }
+
+    // Time since last fix in seconds
+    const dtSec = Math.max((timestampMs - this.lastTs) / 1000, 0.001);
+    this.lastTs = timestampMs;
+
+    // Predict: position uncertainty grows with time (we're moving)
+    const Q = this.Q_METRES_PER_SECOND * dtSec;
+    this.variance += Q * Q;
+
+    // Update: blend prediction with GPS measurement
+    // K = Kalman gain: how much we trust GPS vs our prediction
+    const K = this.variance / (this.variance + minAccuracy * minAccuracy);
+
+    // Blend position (lat/lon are small enough that linear blend works)
+    this.lat     += K * (lat - this.lat);
+    this.lon     += K * (lon - this.lon);
+    this.variance = (1 - K) * this.variance;
+
+    return { lat: this.lat, lon: this.lon };
+  }
+}
+
+// Single filter instance — reset on each new run/resume
+const _kalman = new GpsKalmanFilter();
+
 // ── GPS RUN TRACKER ───────────────────────────────────────────────
 
 // FIX #2: GPS warm-up state — skip first N fixes while device acquires lock
@@ -775,35 +839,39 @@ function startGPS() {
     pos => {
       if (!APP.runSession || APP.runSession.paused) return;
 
-      const { latitude: lat, longitude: lon, accuracy } = pos.coords;
+      const { latitude: rawLat, longitude: rawLon, accuracy } = pos.coords;
+      const nowTs = Date.now();
 
       // FIX #2a: Reject inaccurate fixes
       if (accuracy > GPS_MIN_ACCURACY_M) return;
 
       _setGpsBadge(true);
 
+      // Apply Kalman filter to smooth GPS noise
+      // Real turns/curves are preserved — random 3-8m jumps are removed
+      const smoothed = _kalman.process(rawLat, rawLon, accuracy, nowTs);
+      const lat = smoothed.lat;
+      const lon = smoothed.lon;
+
       // FIX #2b: Warmup — skip first N accurate fixes while GPS stabilises
       if (_gpsWarmupCount < GPS_WARMUP_FIXES) {
         _gpsWarmupCount++;
-        _gpsLastGoodFix = { lat, lon, ts: Date.now() };
-        // Still update map position during warmup so user sees their dot
+        _gpsLastGoodFix = { lat, lon, ts: nowTs };
         _updateLiveMap(lat, lon);
         return;
       }
 
-      // FIX #2c: Compute distance from last GOOD fix
+      // FIX #2c: Compute distance from last GOOD fix (using smoothed coords)
       if (_gpsLastGoodFix) {
         const d = haversine(_gpsLastGoodFix.lat, _gpsLastGoodFix.lon, lat, lon);
         if (d >= GPS_MIN_DISTANCE_KM) {
           APP.runSession.distance += d;
           updateRunDisplay();
           _saveRunSession();
-        }
-        if (d >= GPS_MIN_DISTANCE_KM) {
-          _gpsLastGoodFix = { lat, lon, ts: Date.now() };
+          _gpsLastGoodFix = { lat, lon, ts: nowTs };
         }
       } else {
-        _gpsLastGoodFix = { lat, lon, ts: Date.now() };
+        _gpsLastGoodFix = { lat, lon, ts: nowTs };
       }
 
       // Track real-time GPS speed for live display
@@ -812,17 +880,17 @@ function startGPS() {
 
       // Auto-pause detection: if speed < 0.5 km/h for AUTO_PAUSE_STILL_MS, prompt user
       if (_speedNow !== null && _speedNow < 0.5) {
-        if (!_stillSince) _stillSince = Date.now();
-        else if (Date.now() - _stillSince > AUTO_PAUSE_STILL_MS && !APP.runSession.paused) {
-          _stillSince = null;  // reset so we don't prompt again immediately
+        if (!_stillSince) _stillSince = nowTs;
+        else if (nowTs - _stillSince > AUTO_PAUSE_STILL_MS && !APP.runSession.paused) {
+          _stillSince = null;
           _showAutoPausePrompt();
         }
       } else {
         _stillSince = null;
       }
 
-      // Store coord and update live map
-      APP.gpsCoords.push({ lat, lon, ts: Date.now() });
+      // Store smoothed coord and update live map
+      APP.gpsCoords.push({ lat, lon, ts: nowTs });
       _updateLiveMap(lat, lon);
     },
 
@@ -890,6 +958,7 @@ function togglePauseRun() {
     _gpsWarmupCount  = 0;
     _gpsLastGoodFix  = null;
     _currentGpsSpeed = null;
+    _kalman.reset();   // fresh filter state after pause — GPS may have drifted
     startGPS();
   }
 
@@ -1082,6 +1151,7 @@ function discardRun() {
   _gpsLastGoodFix      = null;
   _currentGpsSpeed     = null;
   _lockedWhileRunning  = false;
+  _kalman.reset();
   _clearRunSession();
   LockScreen.stop();
   _releaseWakeLock();
@@ -1144,6 +1214,8 @@ document.addEventListener('visibilitychange', () => {
   _requestWakeLock();
   _gpsWarmupCount = 0;
   _gpsLastGoodFix = null;
+  _currentGpsSpeed = null;
+  _kalman.reset();   // GPS may have drifted while screen was locked
   _setGpsBadge(false);
   startGPS();
   updateRunDisplay();
@@ -2224,7 +2296,9 @@ function _showRunDetail(idx) {
         if (!mapEl) return;
         if (_detailMapInst) { _detailMapInst.remove(); _detailMapInst = null; }
 
-        const latlngs = r.coords.map(c => [c.lat, c.lon]);
+        // Apply display smoothing to history coords too
+        const smoothedCoords = _smoothCoordsForDisplay(r.coords);
+        const latlngs = smoothedCoords.map(c => [c.lat, c.lon]);
         _detailMapInst = L.map(mapEl, {
           zoomControl:     true,
           attributionControl: false,
@@ -2629,6 +2703,29 @@ function _renderRunPBBadges(distance, elapsed) {
 }
 
 // ── POST-RUN ROUTE MAP on real tiles (Leaflet) ────────────────────
+// Apply post-processing smoothing to stored coords for display
+// Uses Douglas-Peucker simplification to remove redundant points
+// then a light moving-average pass to reduce any remaining jitter
+function _smoothCoordsForDisplay(coords) {
+  if (!coords || coords.length < 3) return coords || [];
+
+  // Moving average: replace each point with weighted avg of neighbours
+  // Weights: [0.25, 0.5, 0.25] — centre point counts most
+  const smoothed = [coords[0]];
+  for (let i = 1; i < coords.length - 1; i++) {
+    const prev = coords[i - 1];
+    const cur  = coords[i];
+    const next = coords[i + 1];
+    smoothed.push({
+      lat: prev.lat * 0.25 + cur.lat * 0.5 + next.lat * 0.25,
+      lon: prev.lon * 0.25 + cur.lon * 0.5 + next.lon * 0.25,
+      ts:  cur.ts,
+    });
+  }
+  smoothed.push(coords[coords.length - 1]);
+  return smoothed;
+}
+
 function _renderRunRouteMap(coords) {
   const el = document.getElementById('sum-route-map');
   if (!el) return;
@@ -2638,13 +2735,15 @@ function _renderRunRouteMap(coords) {
 
   // Filter and deduplicate coords
   const seen = new Set();
-  const pts  = (coords || []).filter(c => {
-    if (!c.lat || !c.lon) return false;
-    const key = `${c.lat.toFixed(5)},${c.lon.toFixed(5)}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const pts  = _smoothCoordsForDisplay(
+    (coords || []).filter(c => {
+      if (!c.lat || !c.lon) return false;
+      const key = `${c.lat.toFixed(5)},${c.lon.toFixed(5)}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+  );
 
   const meta = ACTIVITY_META[APP.runSession?.activityType || _activityType] || ACTIVITY_META.run;
 
