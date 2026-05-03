@@ -944,6 +944,12 @@ function stopRun() {
   document.getElementById('sum-cal').textContent   = Math.round(s.distance * meta.kcalPerKm) + ' kcal';
 
   _renderRunPBBadges(s.distance, elapsed);
+  // Render km splits in summary
+  const splitsEl = document.getElementById('sum-km-splits');
+  if (splitsEl) {
+    const meta = ACTIVITY_META[s.activityType || _activityType] || ACTIVITY_META.run;
+    splitsEl.innerHTML = _renderKmSplits(APP.gpsCoords, s.distance, meta.color);
+  }
   _renderRunRouteMap(APP.gpsCoords);
   // Transition to save screen after map loads
   setTimeout(() => showSaveActivity(), 400);
@@ -1912,6 +1918,120 @@ function renderRunHistory() {
   }).join('');
 }
 
+// ── KM SPLITS ────────────────────────────────────────────────────
+function _calcKmSplits(coords, totalDistance) {
+  if (!coords || coords.length < 2) return [];
+
+  const splits  = [];
+  let distAcc   = 0;       // accumulated distance in km
+  let kmMark    = 1;       // next km boundary to cross
+  let kmStart   = coords[0].ts; // timestamp when this km started
+
+  for (let i = 1; i < coords.length; i++) {
+    const c    = coords[i];
+    const prev = coords[i - 1];
+    if (!c.ts || !prev.ts) continue;
+
+    const d = haversine(prev.lat, prev.lon, c.lat, c.lon);
+    if (d <= 0 || d > 0.5) continue; // skip bad points
+
+    distAcc += d;
+
+    // Crossed a km boundary?
+    if (distAcc >= kmMark) {
+      const kmEndTs   = c.ts;
+      const kmTimeSec = Math.round((kmEndTs - kmStart) / 1000);
+      splits.push({
+        km:      kmMark,
+        timeSec: kmTimeSec,
+        pace:    kmTimeSec > 0 ? fmtPace(1, kmTimeSec) : '--:--',
+      });
+      kmMark++;
+      kmStart = c.ts;
+    }
+  }
+
+  // Last partial km (if > 0.1km remaining)
+  const lastKmDist = distAcc - (kmMark - 1);
+  if (lastKmDist >= 0.1 && coords.length > 0) {
+    const lastTs    = coords[coords.length - 1].ts;
+    const kmTimeSec = Math.round((lastTs - kmStart) / 1000);
+    // Extrapolate pace for a full km
+    const extrapolatedSec = lastKmDist > 0 ? Math.round(kmTimeSec / lastKmDist) : 0;
+    splits.push({
+      km:       kmMark,
+      timeSec:  kmTimeSec,
+      pace:     extrapolatedSec > 0 ? fmtPace(1, extrapolatedSec) : '--:--',
+      partial:  true,
+      partialKm: parseFloat(lastKmDist.toFixed(2)),
+    });
+  }
+
+  return splits;
+}
+
+function _renderKmSplits(coords, totalDistance, color) {
+  const splits = _calcKmSplits(coords, totalDistance);
+  if (!splits || splits.length < 2) return ''; // need at least 2 splits to show
+
+  // Find fastest and slowest for bar scaling
+  const paces    = splits.map(s => s.timeSec / (s.partial ? s.partialKm : 1));
+  const maxPace  = Math.max(...paces);
+  const minPace  = Math.min(...paces);
+  const paceRange = maxPace - minPace || 1;
+
+  const accentColor = color || 'var(--g4)';
+
+  const rows = splits.map(s => {
+    const paceSec = s.timeSec / (s.partial ? s.partialKm : 1);
+    // Bar width: fastest pace = 100%, slowest = 30%
+    const barPct  = Math.round(30 + ((maxPace - paceSec) / paceRange) * 70);
+    const isBest  = paceSec === minPace;
+    const isWorst = paceSec === maxPace && splits.length > 2;
+    const label   = s.partial ? `${s.km} *` : `${s.km}`;
+
+    return `
+      <div style="display:flex;align-items:center;gap:10px;padding:7px 0;
+        border-bottom:1px solid rgba(255,255,255,0.05)">
+        <!-- Km number -->
+        <div style="width:24px;text-align:right;font-size:13px;font-weight:700;
+          color:${isBest ? accentColor : 'var(--text3)'};flex-shrink:0">${label}</div>
+        <!-- Pace -->
+        <div style="width:52px;font-size:13px;font-weight:700;
+          color:${isBest ? accentColor : isWorst ? '#ef9a9a' : 'var(--text)'};
+          flex-shrink:0">${s.pace}</div>
+        <!-- Bar -->
+        <div style="flex:1;height:10px;background:var(--bg3);border-radius:5px;overflow:hidden">
+          <div style="
+            height:100%;width:${barPct}%;border-radius:5px;
+            background:${isBest ? accentColor : isWorst ? 'rgba(239,154,154,0.6)' : 'rgba(255,255,255,0.2)'};
+            transition:width .4s ease;
+          "></div>
+        </div>
+        <!-- Time for this km -->
+        <div style="width:44px;text-align:right;font-size:11px;color:var(--text3);
+          flex-shrink:0">${fmtTime(s.timeSec)}</div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div style="margin-top:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:700;color:var(--text)">📏 Km Splits</div>
+        ${splits.some(s => s.partial) ? '<div style="font-size:11px;color:var(--text3)">* partial km</div>' : ''}
+      </div>
+      <!-- Header row -->
+      <div style="display:flex;align-items:center;gap:10px;padding:0 0 6px;
+        border-bottom:1px solid rgba(255,255,255,0.1);margin-bottom:2px">
+        <div style="width:24px;text-align:right;font-size:10px;color:var(--text3);font-weight:700;flex-shrink:0">KM</div>
+        <div style="width:52px;font-size:10px;color:var(--text3);font-weight:700;flex-shrink:0">PACE</div>
+        <div style="flex:1;font-size:10px;color:var(--text3);font-weight:700"></div>
+        <div style="width:44px;text-align:right;font-size:10px;color:var(--text3);font-weight:700;flex-shrink:0">TIME</div>
+      </div>
+      ${rows}
+    </div>`;
+}
+
 // ── RUN DETAIL MODAL ──────────────────────────────────────────────
 let _detailMapInst = null;
 
@@ -2083,6 +2203,9 @@ function _showRunDetail(idx) {
       </div>
 
       ${!hasMap ? `<div style="text-align:center;font-size:13px;color:var(--text3);padding:8px 0">No GPS route for this activity</div>` : ''}
+
+      <!-- Km splits -->
+      ${r.coords && r.coords.length >= 2 ? _renderKmSplits(r.coords, r.distance, meta.color) : ''}
 
       <!-- PB & motivation for this run -->
       <div id="run-detail-pb-badges" style="margin-top:8px"></div>
