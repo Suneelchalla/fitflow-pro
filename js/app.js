@@ -67,6 +67,12 @@ const Store = {
     return true;
   },
   getUserRunLogs(uid)         { return this.getRunLogs().filter(l => l.userId === uid); },
+  deleteRunLog(uid, logId) {
+    const logs    = this.getRunLogs();
+    const updated = logs.filter(l => !(l.userId === uid && (l.id === logId || l.timestamp === logId)));
+    this.set('ff_runlogs', updated);
+    return logs.length !== updated.length; // true if something was removed
+  },
 
   getContent(key)             { return this.get('ff_content_' + key); },
   setContent(key, val)        { this.set('ff_content_' + key, val); },
@@ -119,6 +125,29 @@ const Sheets = {
 async function sheetsPost(action, data) { return Sheets.post(action, data); }
 
 // ── TOAST ─────────────────────────────────────────────────────────
+function showConfirm(title, message, confirmLabel, cancelLabel, onConfirm, onCancel, type) {
+  // Use the existing confirm modal if it exists, else fall back to native confirm
+  const modal = document.getElementById('modal-confirm');
+  if (modal) {
+    document.getElementById('confirm-title').textContent   = title   || 'Are you sure?';
+    document.getElementById('confirm-message').textContent = message || '';
+    const confirmBtn = document.getElementById('confirm-ok-btn');
+    const cancelBtn  = document.getElementById('confirm-cancel-btn');
+    confirmBtn.textContent = confirmLabel || 'Confirm';
+    cancelBtn.textContent  = cancelLabel  || 'Cancel';
+    confirmBtn.className   = 'btn btn-full' + (type === 'danger' ? ' btn-danger' : '');
+    confirmBtn.style.background = type === 'danger' ? 'rgba(229,57,53,.85)' : '';
+    confirmBtn.style.borderColor = type === 'danger' ? 'rgba(229,57,53,.6)' : '';
+    confirmBtn.onclick = () => { closeModal('modal-confirm'); if (onConfirm) onConfirm(); };
+    cancelBtn.onclick  = () => { closeModal('modal-confirm'); if (onCancel)  onCancel();  };
+    openModal('modal-confirm');
+  } else {
+    // Fallback: native browser confirm
+    if (window.confirm(title + '\n\n' + message)) { if (onConfirm) onConfirm(); }
+    else { if (onCancel) onCancel(); }
+  }
+}
+
 function showToast(msg, type = 'success') {
   const t = document.getElementById('toast');
   if (!t) return;
