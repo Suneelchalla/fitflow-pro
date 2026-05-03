@@ -1064,12 +1064,12 @@ async function handleGoogleLogin(response) {
 
     // Show loading state
     const btn = document.getElementById('google-signin-btn');
-    if (btn) { btn.textContent = 'Signing in...'; btn.disabled = true; }
+    if (btn) { btn.classList.add('loading'); btn.disabled = true; }
 
     // Tell GAS to find or create this user
     const res = await sheetsPost('googleLogin', { name, email, googleId, picture: picture || '' });
 
-    if (btn) { btn.textContent = 'Sign in with Google'; btn.disabled = false; }
+    if (btn) { btn.classList.remove('loading'); btn.disabled = false; }
 
     if (res?.success && res.user) {
       const googleUser = res.user;
@@ -1092,7 +1092,7 @@ async function handleGoogleLogin(response) {
   } catch(e) {
     console.error('Google login error:', e);
     const btn = document.getElementById('google-signin-btn');
-    if (btn) { btn.textContent = 'Sign in with Google'; btn.disabled = false; }
+    if (btn) { btn.classList.remove('loading'); btn.disabled = false; }
     if (errEl) errEl.textContent = 'Google login failed. Please try again.';
   }
 }
