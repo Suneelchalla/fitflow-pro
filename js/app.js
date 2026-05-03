@@ -213,6 +213,18 @@ function _syncNav(pageId) {
 }
 
 window.addEventListener('popstate', e => {
+  // If a modal is open, close it instead of navigating back
+  const openMod = document.querySelector('.modal-overlay.open');
+  if (openMod) {
+    openMod.classList.remove('open');
+    if (openMod.id === 'modal-run-detail' && typeof _detailMapInst !== 'undefined' && _detailMapInst) {
+      _detailMapInst.remove();
+      _detailMapInst = null;
+    }
+    // Push state back so the URL stays correct
+    window.history.pushState({ page: APP.currentPage }, '', '#' + APP.currentPage);
+    return;
+  }
   // Only handle real navigation events, not browser chrome show/hide
   if (!e.state?.page) return;
   // Block back navigation from root pages
@@ -276,8 +288,20 @@ window.addEventListener('popstate', e => {
 
     // Swipe-back: left swipe > 80px, horizontal dominates vertical, not a root page
     // Special case: block swipe on running page ONLY when a run is active
-    // (map panning would otherwise trigger goBack during an active run)
     const runBlocked = APP.currentPage === 'page-running' && APP.runSession;
+
+    // If a modal is open, swipe left closes it — don't navigate away from the page
+    const openModal = document.querySelector('.modal-overlay.open');
+    if (dx < -80 && dy < 40 && Math.abs(dx) > dy * 2 && openModal) {
+      openModal.classList.remove('open');
+      // Clean up run detail map if it was open
+      if (openModal.id === 'modal-run-detail' && typeof _detailMapInst !== 'undefined' && _detailMapInst) {
+        _detailMapInst.remove();
+        _detailMapInst = null;
+      }
+      return;
+    }
+
     if (dx < -80 && dy < 40 && Math.abs(dx) > dy * 2 && !ROOT_PAGES.includes(APP.currentPage) && !runBlocked) {
       goBack();
     }
