@@ -1072,8 +1072,20 @@ async function handleGoogleLogin(response) {
     if (btn) { btn.textContent = 'Sign in with Google'; btn.disabled = false; }
 
     if (res?.success && res.user) {
-      // Use same completeLogin flow as normal login
-      await completeLogin(res.user);
+      const googleUser = res.user;
+      // Check if this is a brand new Google user (created just now)
+      // New Google users need onboarding to set up their profile
+      const isNewGoogleUser = googleUser.id && googleUser.id.startsWith('u_g_');
+      if (isNewGoogleUser && googleUser.role !== 'ADMIN') {
+        // Store user and go through onboarding like a new user
+        APP.currentUser = googleUser;
+        Store.saveSession(googleUser);
+        if (typeof _refreshMyPlanNav === 'function') _refreshMyPlanNav();
+        startOnboarding();
+      } else {
+        // Existing user — go straight to dashboard
+        await completeLogin(googleUser);
+      }
     } else {
       if (errEl) errEl.textContent = res?.error || 'Google login failed. Please try again.';
     }
