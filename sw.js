@@ -3,21 +3,21 @@
 // Updated for PWABuilder / Play Store compatibility
 // ════════════════════════════════════════════════════════════════
 
-const CACHE = 'fitflow-v47';
+const CACHE = 'fitflow-v48';
 const ASSETS = [
   './',
   './index.html',
   './css/style.css',
-  './js/data.js?v=47',
-  './js/data-cali.js?v=47',
-  './js/app.js?v=47',
-  './js/auth.js?v=47',
-  './js/dashboard.js?v=47',
-  './js/running.js?v=47',
-  './js/admin.js?v=47',
-  './push.js?v=47',
-  './js/custom-workouts.js?v=47',
-  './js/weekly-report.js?v=47',
+  './js/data.js?v=48',
+  './js/data-cali.js?v=48',
+  './js/app.js?v=48',
+  './js/auth.js?v=48',
+  './js/dashboard.js?v=48',
+  './js/running.js?v=48',
+  './js/admin.js?v=48',
+  './push.js?v=48',
+  './js/custom-workouts.js?v=48',
+  './js/weekly-report.js?v=48',
   './manifest.json',
   './privacy.html',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
@@ -46,14 +46,15 @@ self.addEventListener('activate', e => {
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
 
-  // Don't cache Google Apps Script API calls — always fetch fresh
-  if (e.request.url.includes('script.google.com')) {
-    e.respondWith(fetch(e.request).catch(() => new Response(
-      JSON.stringify({ success: false, error: 'You are offline.' }),
-      { headers: { 'Content-Type': 'application/json' } }
-    )));
-    return;
-  }
+  // Never intercept Google Apps Script API calls — pass through to network
+  // Intercepting these causes login failures and "offline" errors
+  if (e.request.url.includes('script.google.com')) return;
+
+  // Never intercept Google accounts / OAuth calls
+  if (e.request.url.includes('accounts.google.com')) return;
+
+  // Never intercept any googleapis
+  if (e.request.url.includes('googleapis.com')) return;
 
   e.respondWith(
     caches.match(e.request).then(cached => {
