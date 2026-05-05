@@ -80,38 +80,58 @@ function renderWeeklyReport() {
   const pLogs = stdLogs.filter(l => l.date >= prevMon && l.date <= prevSun);
   const pRuns = runLogs.filter(r => r.date >= prevMon && r.date <= prevSun);
 
-  const activeDays    = [...new Set(wLogs.map(l => l.date))].length;
-  const totalWorkouts = wLogs.length + wCW.length;
+  // Active days = days with ANY activity (workout, custom workout, or run)
+  const allWeekDates = [
+    ...wLogs.map(l => l.date),
+    ...wCW.map(l => l.date),
+    ...wRuns.map(r => r.date),
+  ];
+  const activeDays    = [...new Set(allWeekDates)].length;
+  // Total workouts = workout sessions + custom workouts + runs
+  const totalWorkouts = wLogs.length + wCW.length + wRuns.length;
   const totalKm       = wRuns.reduce((a, r) => a + (r.distance || 0), 0);
   const totalTime     = wRuns.reduce((a, r) => a + (r.duration  || 0), 0);
   const streakAsOf    = sunday > today ? today : sunday;
   const streak        = calcStreak(user.id, streakAsOf);
 
+  // Module counts include runs as 'running'
   const modCounts = {};
   wLogs.forEach(l => { modCounts[l.module] = (modCounts[l.module] || 0) + 1; });
+  if (wRuns.length) modCounts['running'] = (modCounts['running'] || 0) + wRuns.length;
 
-  const prevActiveDays = [...new Set(pLogs.map(l => l.date))].length;
-  const wowWorkouts    = totalWorkouts - pLogs.length;
+  // Previous week active days same logic
+  const prevAllDates = [
+    ...pLogs.map(l => l.date),
+    ...pRuns.map(r => r.date),
+  ];
+  const prevActiveDays = [...new Set(prevAllDates)].length;
+  const prevTotal      = pLogs.length + pRuns.length;
+  const wowWorkouts    = totalWorkouts - prevTotal;
   const wowKm          = totalKm - pRuns.reduce((a, r) => a + (r.distance || 0), 0);
 
   const dayGrid = Array.from({ length: 7 }, (_, i) => {
     const d   = _addDays(monday, i);
     const dl  = allLogs.filter(l => l.date === d);
+    const dRuns = runLogs.filter(r => r.date === d);
+    const totalCount = dl.length + dRuns.length;
+    const emojiSet = new Set(dl.map(l => getModuleEmoji(l.module.startsWith('custom_') ? 'custom' : l.module)));
+    if (dRuns.length) emojiSet.add('🏃');
     return {
       date:     d,
-      count:    dl.length,
-      emojis:   [...new Set(dl.map(l => getModuleEmoji(l.module.startsWith('custom_') ? 'custom' : l.module)))],
+      count:    totalCount,
+      emojis:   [...emojiSet],
       isToday:  d === today,
       isFuture: d > today,
     };
   });
 
-  const grade = activeDays >= 6 ? { letter:'A+', label:'Outstanding!', color:'var(--g4)'    }
-              : activeDays >= 5 ? { letter:'A',  label:'Excellent!',   color:'var(--g4)'    }
-              : activeDays >= 4 ? { letter:'B',  label:'Great job!',   color:'#43a05a'       }
-              : activeDays >= 3 ? { letter:'C',  label:'Good effort',  color:'var(--accent)' }
-              : activeDays >= 2 ? { letter:'D',  label:'Keep going!',  color:'#fb8c00'       }
-              :                   { letter:'F',  label:"Let's start!", color:'var(--danger)'  };
+  const grade = activeDays >= 6 ? { letter:'A+', label:'Outstanding!',     color:'var(--g4)'    }
+              : activeDays >= 5 ? { letter:'A',  label:'Excellent!',        color:'var(--g4)'    }
+              : activeDays >= 4 ? { letter:'B',  label:'Great job!',        color:'#43a05a'       }
+              : activeDays >= 3 ? { letter:'C',  label:'Good effort',       color:'var(--accent)' }
+              : activeDays >= 2 ? { letter:'D',  label:'Keep going!',       color:'#fb8c00'       }
+              : activeDays >= 1 ? { letter:'E',  label:'Just getting started', color:'#fb8c00'    }
+              :                   { letter:'F',  label:"Let's start!",      color:'var(--danger)' };
 
   const modRows = Object.keys(modCounts).length > 0
     ? Object.entries(modCounts).map(([mod, cnt]) => `
@@ -282,9 +302,10 @@ function getLast7Days()  { return Array.from({ length: 7 }, (_, i) => _addDays(g
 function formatDate(s)   { return _fmt(s); }
 
 function statCard(val, label, diff, emoji, diffLabel) {
+  // Show diff only when there's a meaningful change (non-zero)
   const ds = diffLabel != null ? diffLabel
-           : diff != null
-             ? (diff > 0 ? `+${diff} vs prev` : diff < 0 ? `${diff} vs prev` : 'Same as prev')
+           : (typeof diff === 'number' && diff !== 0)
+             ? (diff > 0 ? `+${diff} vs prev` : `${diff} vs prev`)
              : '';
   const dc = diff > 0 ? 'var(--g5)' : diff < 0 ? '#ef9a9a' : 'var(--text3)';
   return `
