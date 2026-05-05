@@ -25,9 +25,13 @@ async function _loadAndRender() {
       const res = await Sheets.get('getUserLogs', { userId: user.id });
       if (res?.success && Array.isArray(res.logs) && res.logs.length) {
         const local = Store.getLogs(); let ch = false;
+        const seen = new Set(local.map(l => (l.userId||'') + '|' + (l.module||'') + '|' + (l.date||'')));
         res.logs.forEach(sl => {
-          if (!local.find(l => l.userId===sl.userId&&l.module===sl.module&&l.day===sl.day&&l.date===sl.date)) {
-            local.push({ ...sl, id: sl.id||('log_'+Date.now()+Math.random()) }); ch = true;
+          const key = (sl.userId||'') + '|' + (sl.module||'') + '|' + (sl.date||'');
+          if (!seen.has(key)) {
+            local.push({ ...sl, id: sl.id||('log_'+Date.now()+Math.random()) });
+            seen.add(key);
+            ch = true;
           }
         });
         if (ch) Store.set('ff_logs', local);
