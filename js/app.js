@@ -453,18 +453,32 @@ function getMonday() {
   d.setDate(d.getDate() - day + (day === 0 ? -6 : 1));
   return d.toISOString().split('T')[0];
 }
-function calcStreak(uid) {
+function calcStreak(uid, asOfDate) {
   // Merge workout dates AND run dates — a run day counts toward streak
   const workoutDates = Store.getUserLogs(uid).map(l => l.date);
   const runDates     = Store.getUserRunLogs(uid).map(r => r.date);
   const dates = [...new Set([...workoutDates, ...runDates])].sort().reverse();
   if (!dates.length) return 0;
-  let streak = 0, cur = new Date();
-  for (let i = 0; i < 60; i++) {
+
+  // Start from asOfDate if provided, otherwise today
+  const ref = asOfDate || new Date().toISOString().split('T')[0];
+
+  // Find the most recent active date on or before ref
+  // This ensures: if viewing last week, streak starts from last active day in that period
+  const startDate = dates.find(d => d <= ref);
+  if (!startDate) return 0;
+
+  // Count consecutive days backwards from startDate
+  const cur = new Date(startDate + 'T12:00:00');
+  let streak = 0;
+  for (let i = 0; i < 366; i++) {
     const d = cur.toISOString().split('T')[0];
-    if (dates.includes(d)) { streak++; cur.setDate(cur.getDate() - 1); }
-    else if (i > 0) break;
-    else { cur.setDate(cur.getDate() - 1); if (!dates.includes(cur.toISOString().split('T')[0])) break; }
+    if (dates.includes(d)) {
+      streak++;
+      cur.setDate(cur.getDate() - 1);
+    } else {
+      break;
+    }
   }
   return streak;
 }
