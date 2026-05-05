@@ -1214,6 +1214,403 @@ window.addEventListener('DOMContentLoaded', function() {
   }
 }
 
+
+
+/* Admin user controls — extended with sort + CSV */
+.admin-controls-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
+.admin-controls-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.admin-sort-select {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 9px 14px;
+  color: var(--text);
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color .15s;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23a5c8ac' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+}
+.admin-sort-select:hover { border-color: var(--text3); }
+.admin-sort-select:focus { outline: none; border-color: var(--g4); }
+
+@media (min-width: 901px) {
+  .admin-controls-row {
+    flex-direction: row;
+    align-items: center;
+    gap: 12px;
+  }
+  .admin-controls-row .admin-search-input {
+    flex: 1;
+    max-width: 380px;
+  }
+  .admin-controls-actions {
+    margin-left: auto;
+  }
+}
+
+@media (max-width: 540px) {
+  .admin-controls-actions {
+    width: 100%;
+  }
+  .admin-sort-select {
+    flex: 1;
+  }
+}
+
+
+
+/* Personal Records — clean grid of records with icon */
+.pr-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 4px;
+}
+.pr-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: transform .15s, border-color .15s;
+}
+.pr-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(67,160,90,0.3);
+}
+.pr-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: rgba(67,160,90,0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+.pr-info { flex: 1; min-width: 0; }
+.pr-value {
+  font-family: var(--font-display);
+  font-size: 18px;
+  color: var(--g5);
+  font-weight: 700;
+  line-height: 1.1;
+  margin-bottom: 2px;
+}
+.pr-label {
+  font-size: 11px;
+  color: var(--text2);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.pr-date {
+  font-size: 11px;
+  color: var(--text3);
+  margin-top: 2px;
+}
+
+@media (min-width: 600px) {
+  .pr-grid { grid-template-columns: repeat(3, 1fr); }
+}
+@media (max-width: 380px) {
+  .pr-grid { grid-template-columns: 1fr; }
+}
+
+
+
+/* Activity Heatmap — GitHub-style green squares */
+.hm-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: var(--font-body);
+}
+.hm-months {
+  position: relative;
+  height: 14px;
+  margin-left: 28px;
+}
+.hm-month-label {
+  position: absolute;
+  font-size: 10px;
+  color: var(--text3);
+  top: 0;
+}
+.hm-body {
+  display: flex;
+  gap: 4px;
+}
+.hm-day-labels {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 24px;
+}
+.hm-day-label {
+  font-size: 9px;
+  color: var(--text3);
+  height: 10px;
+  line-height: 10px;
+}
+.hm-grid {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  flex: 1;
+  scrollbar-width: thin;
+}
+.hm-grid::-webkit-scrollbar { height: 4px; }
+.hm-grid::-webkit-scrollbar-track { background: var(--bg2); border-radius: 2px; }
+.hm-grid::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.hm-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.hm-cell {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.04);
+  flex-shrink: 0;
+}
+.hm-cell-0 { background: rgba(255,255,255,0.04); }
+.hm-cell-1 { background: rgba(67,160,90,0.30); }
+.hm-cell-2 { background: rgba(67,160,90,0.55); }
+.hm-cell-3 { background: rgba(67,160,90,0.80); }
+.hm-cell-4 { background: var(--g4); box-shadow: 0 0 8px rgba(67,160,90,0.4); }
+.hm-cell-future { background: transparent; border: 1px dashed rgba(255,255,255,0.04); }
+
+.hm-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 28px;
+  margin-top: 4px;
+}
+.hm-legend .hm-cell { cursor: default; }
+
+@media (max-width: 480px) {
+  .hm-cell { width: 9px; height: 9px; }
+  .hm-day-label { height: 9px; line-height: 9px; }
+}
+
+
+
+/* Push Notifications — Compose UI */
+.notify-grid {
+  display: grid;
+  grid-template-columns: 1fr 280px;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+.notify-section-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.notify-section-head h3 {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+.notify-help {
+  font-size: 11px;
+  color: var(--text3);
+}
+.notify-compose { min-width: 0; }
+.notify-label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--text2);
+  font-weight: 500;
+  margin-bottom: 6px;
+  margin-top: 14px;
+}
+.notify-counter {
+  font-size: 11px;
+  color: var(--text3);
+  font-weight: 400;
+}
+.notify-input,
+.notify-textarea {
+  width: 100%;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 11px 14px;
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color .15s;
+  resize: vertical;
+}
+.notify-input:focus, .notify-textarea:focus {
+  outline: none;
+  border-color: var(--g4);
+}
+.notify-textarea { min-height: 80px; line-height: 1.5; }
+
+.notify-templates { margin-top: 16px; }
+.notify-templates-label {
+  font-size: 12px;
+  color: var(--text3);
+  margin-bottom: 8px;
+  font-weight: 500;
+}
+.notify-template-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.notify-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+}
+.notify-actions .btn { flex-shrink: 0; }
+
+/* Phone preview */
+.notify-preview-col {
+  position: sticky;
+  top: 16px;
+  align-self: start;
+}
+.notify-phone {
+  background: #1a1a1a;
+  border: 6px solid #2a2a2a;
+  border-radius: 28px;
+  padding: 0;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  width: 100%;
+  max-width: 280px;
+  margin: 0 auto;
+}
+.notify-phone-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 18px;
+  background: #000;
+  color: #fff;
+}
+.notify-phone-content {
+  background: linear-gradient(180deg, #1e2a35 0%, #0a1015 100%);
+  padding: 18px 12px;
+  min-height: 280px;
+}
+.notify-card {
+  background: rgba(255,255,255,0.95);
+  color: #111;
+  border-radius: 14px;
+  padding: 12px 14px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.4);
+}
+.notify-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.notify-app-icon {
+  width: 24px;
+  height: 24px;
+  background: var(--g4);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.notify-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #000;
+  margin-bottom: 3px;
+  word-wrap: break-word;
+}
+.notify-card-body {
+  font-size: 12px;
+  color: #444;
+  line-height: 1.4;
+  word-wrap: break-word;
+}
+
+/* History */
+.notify-history {
+  border-top: 1px solid var(--border);
+  padding-top: 18px;
+}
+.notify-history-item {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+}
+.notify-history-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--text3);
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.notify-history-date { font-weight: 500; }
+.notify-history-recipients { color: var(--g5); }
+.notify-history-sender { font-style: italic; }
+.notify-history-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+.notify-history-body {
+  font-size: 12px;
+  color: var(--text2);
+  line-height: 1.4;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+  .notify-grid {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+  .notify-preview-col {
+    position: static;
+  }
+}
+
 </style>
 
     <button id="google-signin-btn" onclick="signInWithGoogle()" type="button">
@@ -1849,6 +2246,9 @@ window.addEventListener('DOMContentLoaded', function() {
         <button class="admin-nav-btn"        data-tab="announce"  onclick="switchAdminTab('announce',this)">
           <span class="admin-nav-ico">📣</span><span class="admin-nav-lbl">Announcements</span>
         </button>
+        <button class="admin-nav-btn"        data-tab="notify"    onclick="switchAdminTab('notify',this)">
+          <span class="admin-nav-ico">🔔</span><span class="admin-nav-lbl">Push Notifications</span>
+        </button>
         <button class="admin-nav-btn"        data-tab="content"   onclick="switchAdminTab('content',this)">
           <span class="admin-nav-ico">🗂</span><span class="admin-nav-lbl">Content</span>
         </button>
@@ -1920,6 +2320,14 @@ window.addEventListener('DOMContentLoaded', function() {
             <h2 class="admin-tab-title">📣 Announcements</h2>
           </div>
           <div id="admin-announce-content"></div>
+        </div>
+
+        <!-- NOTIFY tab -->
+        <div id="admin-tab-notify" class="admin-tab-content" style="display:none">
+          <div class="admin-tab-header">
+            <h2 class="admin-tab-title">🔔 Push Notifications</h2>
+          </div>
+          <div id="admin-notify-content"></div>
         </div>
 
         <!-- CONTENT tab -->
@@ -2284,16 +2692,16 @@ window.addEventListener('DOMContentLoaded', function() {
     });
   }
 </script>
-<script src="js/data.js?v=55"></script>
-<script src="js/data-cali.js?v=55"></script>
-<script src="js/app.js?v=55"></script>
-<script src="js/auth.js?v=55"></script>
-<script src="js/dashboard.js?v=55"></script>
-<script src="js/running.js?v=55"></script>
-<script src="js/admin.js?v=55"></script>
+<script src="js/data.js?v=56"></script>
+<script src="js/data-cali.js?v=56"></script>
+<script src="js/app.js?v=56"></script>
+<script src="js/auth.js?v=56"></script>
+<script src="js/dashboard.js?v=56"></script>
+<script src="js/running.js?v=56"></script>
+<script src="js/admin.js?v=56"></script>
 <script src="push.js"></script>
-<script src="js/custom-workouts.js?v=55"></script>
-<script src="js/weekly-report.js?v=55"></script>
+<script src="js/custom-workouts.js?v=56"></script>
+<script src="js/weekly-report.js?v=56"></script>
 <script>
 
 // ── PROFILE DROPDOWN ──────────────────────────────────────────
