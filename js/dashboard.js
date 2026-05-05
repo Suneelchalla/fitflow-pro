@@ -1614,6 +1614,89 @@ function _showHistoryWorkoutDetail(moduleId, date, day) {
   openModal('modal-day-detail');
 }
 
+
+// ── DEDUP LOCAL LOGS ─────────────────────────────────────────────
+// Removes duplicate entries from localStorage (same userId+module+date)
+// Call from console: dedupLocalLogs() — returns count removed
+function dedupLocalLogs() {
+  // Helper: derive YYYY-MM-DD from a timestamp string in LOCAL time
+  // (timestamps are stored as ISO strings — UTC by default — but we want local date)
+  const tsToLocalDate = (ts) => {
+    if (!ts) return null;
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return null;
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  };
+
+  const logs = Store.get('ff_logs', []) || [];
+  const seen = new Set();
+  const kept = [];
+  let dups = 0;
+  let dateFixed = 0;
+  logs.forEach(l => {
+    // Normalize date the same way as Store.getLogs
+    let date = (typeof l.date === 'string') ? l.date.substring(0, 10) :
+                 (l.date instanceof Date && !isNaN(l.date.getTime())) ?
+                   l.date.getFullYear() + '-' + String(l.date.getMonth()+1).padStart(2,'0') + '-' + String(l.date.getDate()).padStart(2,'0') :
+                   '';
+    // If we have a timestamp, prefer LOCAL date from timestamp (fixes UTC bug from old logs)
+    const localFromTs = tsToLocalDate(l.timestamp);
+    if (localFromTs && localFromTs !== date) {
+      date = localFromTs;
+      dateFixed++;
+    }
+    const key = (l.userId||'') + '|' + (l.module||'') + '|' + date;
+    if (seen.has(key)) { dups++; return; }
+    seen.add(key);
+    kept.push({ ...l, date });
+  });
+  Store.set('ff_logs', kept);
+  if (dateFixed) console.log('[FitFlow] Fixed dates on ' + dateFixed + ' workout logs (UTC -> local)');
+
+  // Same for run logs (dedup by id, then by user+date+distance)
+  const runs = Store.get('ff_runlogs', []) || [];
+  const rSeenIds = new Set();
+  const rSeenKeys = new Set();
+  const rKept = [];
+  let runDups = 0;
+  let runDateFixed = 0;
+  runs.forEach(r => {
+    if (r.id && rSeenIds.has(r.id)) { runDups++; return; }
+    let date = (typeof r.date === 'string') ? r.date.substring(0, 10) :
+                 (r.date instanceof Date && !isNaN(r.date.getTime())) ?
+                   r.date.getFullYear() + '-' + String(r.date.getMonth()+1).padStart(2,'0') + '-' + String(r.date.getDate()).padStart(2,'0') :
+                   '';
+    // Prefer LOCAL date from timestamp if available
+    const localFromTs = tsToLocalDate(r.timestamp);
+    if (localFromTs && localFromTs !== date) {
+      date = localFromTs;
+      runDateFixed++;
+    }
+    const key = (r.userId||'') + '|' + date + '|' + (r.distance||0).toFixed(2);
+    if (rSeenKeys.has(key)) { runDups++; return; }
+    if (r.id) rSeenIds.add(r.id);
+    rSeenKeys.add(key);
+    rKept.push({ ...r, date });
+  });
+  Store.set('ff_runlogs', rKept);
+  if (runDateFixed) console.log('[FitFlow] Fixed dates on ' + runDateFixed + ' run logs (UTC -> local)');
+
+  console.log('Removed ' + dups + ' duplicate workout logs and ' + runDups + ' duplicate run logs');
+  console.log('Refresh page to see updated counts');
+  return { workouts: dups, runs: runDups };
+}
+
+// Run dedup automatically once on every login (cheap, idempotent)
+function _autoDedupOnLogin() {
+  try {
+    if (!APP.currentUser) return;
+    const result = dedupLocalLogs();
+    if (result.workouts || result.runs) {
+      console.log('[FitFlow] Auto-cleaned local duplicates on login');
+    }
+  } catch (e) { console.warn('Auto-dedup failed:', e.message); }
+}
+
 function renderGlobalHistory() {
   _historyYear         = new Date().getFullYear();
   _historyMonth        = new Date().getMonth();
@@ -1632,9 +1715,14 @@ async function _syncHistoryThenRender() {
       const res = await Sheets.get('getUserLogs', { userId: user.id });
       if (res?.success && Array.isArray(res.logs) && res.logs.length) {
         const local = Store.getLogs(); let ch = false;
+        // Build Set of existing keys: userId|module|date (NO day - causes duplicates)
+        const seen = new Set(local.map(l => (l.userId||'') + '|' + (l.module||'') + '|' + (l.date||'')));
         res.logs.forEach(sl => {
-          if (!local.find(l => l.userId===sl.userId && l.module===sl.module && l.day===sl.day && l.date===sl.date)) {
-            local.push({ ...sl, id: sl.id||('log_'+Date.now()+Math.random()) }); ch = true;
+          const key = (sl.userId||'') + '|' + (sl.module||'') + '|' + (sl.date||'');
+          if (!seen.has(key)) {
+            local.push({ ...sl, id: sl.id||('log_'+Date.now()+Math.random()) });
+            seen.add(key);
+            ch = true;
           }
         });
         if (ch) Store.set('ff_logs', local);
@@ -1642,9 +1730,17 @@ async function _syncHistoryThenRender() {
       const rr = await Sheets.get('getUserRunLogs', { userId: user.id });
       if (rr?.success && Array.isArray(rr.logs) && rr.logs.length) {
         const lr = Store.getRunLogs(); let ch2 = false;
+        // Build Set of existing IDs and (userId|date|distance) keys
+        const seenIds = new Set(lr.filter(l => l.id).map(l => l.id));
+        const seenKeys = new Set(lr.map(l => (l.userId||'') + '|' + (l.date||'') + '|' + (l.distance||0).toFixed(2)));
         rr.logs.forEach(r => {
-          if (!lr.find(l => l.id===r.id||(l.userId===r.userId&&l.date===r.date&&Math.abs((l.distance||0)-(r.distance||0))<0.01)))
-            { lr.push(r); ch2=true; }
+          if (r.id && seenIds.has(r.id)) return;
+          const key = (r.userId||'') + '|' + (r.date||'') + '|' + (r.distance||0).toFixed(2);
+          if (seenKeys.has(key)) return;
+          lr.push(r);
+          if (r.id) seenIds.add(r.id);
+          seenKeys.add(key);
+          ch2 = true;
         });
         if (ch2) Store.set('ff_runlogs', lr);
       }
