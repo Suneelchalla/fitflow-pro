@@ -571,6 +571,23 @@ function openChangePasswordModal() {
     newInput.oninput = () => _updatePasswordStrength(newInput.value);
   }
 
+  // Detect Google-only user (no password set)
+  const user = APP.currentUser;
+  const isGoogleUser = user?.id?.startsWith('u_g_') || user?.authType === 'google';
+  const currentBlock = document.getElementById('cp-current-block');
+  const googleNote   = document.getElementById('cp-google-note');
+  const modalSubtitle = document.getElementById('cp-subtitle');
+
+  if (currentBlock) currentBlock.style.display = isGoogleUser ? 'none' : '';
+  if (googleNote)   googleNote.style.display   = isGoogleUser ? '' : 'none';
+  if (modalSubtitle) {
+    modalSubtitle.textContent = isGoogleUser
+      ? 'You signed in with Google. Set an app password to also enable email login.'
+      : 'Enter your current password to confirm, then set a new one.';
+  }
+  const submitBtn = document.getElementById('cp-submit-btn');
+  if (submitBtn) submitBtn.textContent = isGoogleUser ? 'Set App Password' : 'Update Password';
+
   openModal('modal-change-password');
 }
 
@@ -619,22 +636,27 @@ async function submitChangePassword() {
 
   errEl.textContent = '';
 
-  // Client-side validations
-  if (!currentPass)            { errEl.textContent = 'Please enter your current password.'; return; }
-  if (!newPass)                { errEl.textContent = 'Please enter a new password.'; return; }
-  if (newPass.length < 6)      { errEl.textContent = 'New password must be at least 6 characters.'; return; }
-  if (newPass !== confirmPass)  { errEl.textContent = 'New passwords do not match.'; return; }
-  if (newPass === currentPass)  { errEl.textContent = 'New password must be different from current password.'; return; }
-
-  // Verify current password by attempting login
   const user = APP.currentUser;
-  btn.disabled = true; btn.textContent = 'Verifying…';
+  const isGoogleUser = user?.id?.startsWith('u_g_') || user?.authType === 'google';
 
-  const verify = await attemptLogin(user.email, currentPass);
-  if (!verify.success) {
-    btn.disabled = false; btn.textContent = 'Update Password';
-    errEl.textContent = 'Current password is incorrect.';
-    return;
+  // Validations
+  if (!isGoogleUser && !currentPass) { errEl.textContent = 'Please enter your current password.'; return; }
+  if (!newPass)                      { errEl.textContent = 'Please enter a new password.'; return; }
+  if (newPass.length < 6)            { errEl.textContent = 'New password must be at least 6 characters.'; return; }
+  if (newPass !== confirmPass)       { errEl.textContent = 'New passwords do not match.'; return; }
+  if (!isGoogleUser && newPass === currentPass) { errEl.textContent = 'New password must be different from current password.'; return; }
+
+  btn.disabled = true;
+
+  if (!isGoogleUser) {
+    // Normal user — verify current password first
+    btn.textContent = 'Verifying…';
+    const verify = await attemptLogin(user.email, currentPass);
+    if (!verify.success) {
+      btn.disabled = false; btn.textContent = 'Update Password';
+      errEl.textContent = 'Current password is incorrect.';
+      return;
+    }
   }
 
   btn.textContent = 'Saving…';
@@ -659,7 +681,15 @@ async function submitChangePassword() {
   if (!saved) { errEl.textContent = 'Failed to save. Please try again.'; return; }
 
   closeModal('modal-change-password');
-  showToast('Password updated successfully! 🔐', 'success');
+  if (isGoogleUser) {
+    // Update session to reflect they now have a password
+    const session = Store.getSession();
+    if (session) { session.authType = 'google_with_password'; Store.saveSession(session); }
+    if (APP.currentUser) APP.currentUser.authType = 'google_with_password';
+    showToast('App password set! You can now also log in with email. 🔐', 'success');
+  } else {
+    showToast('Password updated successfully! 🔐', 'success');
+  }
 }
 
 // ── LOGOUT ────────────────────────────────────────────────────────
@@ -1072,7 +1102,7 @@ async function handleGoogleLogin(response) {
     if (btn) { btn.classList.remove('loading'); btn.disabled = false; }
 
     if (res?.success && res.user) {
-      const googleUser = res.user;
+      const googleUser = { ...res.user, authType: 'google' };
       // Check if this is a brand new Google user (created just now)
       // New Google users need onboarding to set up their profile
       const isNewGoogleUser = googleUser.id && googleUser.id.startsWith('u_g_');
