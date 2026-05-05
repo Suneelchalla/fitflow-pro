@@ -3,7 +3,7 @@
 // Updated for PWABuilder / Play Store compatibility
 // ════════════════════════════════════════════════════════════════
 
-const CACHE = 'fitflow-v51';
+const CACHE = 'fitflow-v52';
 const ASSETS = [
   './',
   './index.html',
