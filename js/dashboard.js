@@ -1464,7 +1464,10 @@ function _renderDayActivityLog(allLogs) {
             <div style="flex:1;min-width:0">
               <div style="font-weight:700;font-size:15px">${isRun && runLog?.title ? runLog.title : getModuleName(l.module)}</div>
               <div style="font-size:12px;color:var(--text3);margin-top:2px">
-                ${l.day || ''}${isRun && l._runKm ? ' · ' + l._runKm.toFixed(2) + ' km' : ''}
+                ${(() => {
+                  const dt = new Date((l.date||'') + 'T12:00:00');
+                  return isNaN(dt.getTime()) ? (l.day||'') : dt.toLocaleDateString('en-IN', { weekday: 'long' });
+                })()}${isRun && l._runKm ? ' · ' + l._runKm.toFixed(2) + ' km' : ''}
               </div>
             </div>
             <div style="display:flex;align-items:center;gap:6px;flex-shrink:0">
