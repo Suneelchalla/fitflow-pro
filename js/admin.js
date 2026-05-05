@@ -3358,8 +3358,14 @@ async function _sendAdminNotification() {
       sentBy: APP.currentUser?.email || 'admin',
     });
     if (res?.success) {
-      showToast(`✅ Sent to ${res.recipients || 0} subscribers!`, 'success');
-      _clearNotifyForm();
+      // res.targeted = devices we sent to (reliable)
+      // res.recipients = OneSignal API field (often missing/0, unreliable)
+      const targeted = res.targeted || res.recipients || 0;
+      const msg = targeted > 0
+        ? `✅ Push sent to ${targeted} device${targeted === 1 ? '' : 's'}!`
+        : '⚠️ No subscribed devices yet. Have users opted in via the bell?';
+      showToast(msg, targeted > 0 ? 'success' : 'info');
+      if (targeted > 0) _clearNotifyForm();
       _loadNotifyHistory();
     } else {
       showToast('Failed: ' + (res?.error || 'unknown'), 'error');
