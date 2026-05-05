@@ -178,7 +178,7 @@ function showPage(id, addToHistory = true) {
   if (pg) { pg.classList.add('active'); APP.currentPage = id; pg.scrollTop = 0; }
   window.history.pushState({ page: id }, '', '#' + id);
   // Persist last page so refresh restores user to same page
-  // Don't persist transient pages that need context to render properly
+  // Don't persist transient pages that need fresh context
   const _skipPersist = ['page-weekly-report', 'page-quote', 'page-onboarding'];
   if (APP.currentUser && !_skipPersist.includes(id)) {
     Store.set('ff_last_page_' + APP.currentUser.id, id);
@@ -457,18 +457,27 @@ function getMonday() {
   d.setDate(d.getDate() - day + (day === 0 ? -6 : 1));
   return d.toISOString().split('T')[0];
 }
-function calcStreak(uid) {
+function calcStreak(uid, asOfDate) {
   // Merge workout dates AND run dates — a run day counts toward streak
   const workoutDates = Store.getUserLogs(uid).map(l => l.date);
   const runDates     = Store.getUserRunLogs(uid).map(r => r.date);
   const dates = [...new Set([...workoutDates, ...runDates])].sort().reverse();
   if (!dates.length) return 0;
-  let streak = 0, cur = new Date();
-  for (let i = 0; i < 60; i++) {
+
+  // Start from asOfDate if given (for weekly report), else today
+  const ref = asOfDate || new Date().toISOString().split('T')[0];
+
+  // Find most recent active date on or before ref
+  const startDate = dates.find(d => d <= ref);
+  if (!startDate) return 0;
+
+  // Count consecutive days backwards
+  const cur = new Date(startDate + 'T12:00:00');
+  let streak = 0;
+  for (let i = 0; i < 366; i++) {
     const d = cur.toISOString().split('T')[0];
     if (dates.includes(d)) { streak++; cur.setDate(cur.getDate() - 1); }
-    else if (i > 0) break;
-    else { cur.setDate(cur.getDate() - 1); if (!dates.includes(cur.toISOString().split('T')[0])) break; }
+    else break;
   }
   return streak;
 }
@@ -538,7 +547,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (session) {
     APP.currentUser = session;
 
-    // Clear stale last-page values that can't be restored cleanly
+    // Clear stale last-page values that restore badly
     const _stalePage = Store.get('ff_last_page_' + session.id);
     if (_stalePage === 'page-weekly-report' || _stalePage === 'page-quote') {
       Store.set('ff_last_page_' + session.id, 'page-dashboard');
@@ -591,7 +600,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (typeof renderCustomWorkoutsList === 'function') renderCustomWorkoutsList();
       setActiveNav('home');
     } else if (targetPage === 'page-weekly-report') {
-      // Redirect to dashboard — weekly report needs fresh sync, don't restore it directly
+      // Redirect to dashboard — weekly report needs fresh sync
       const dashEl = document.getElementById('page-dashboard');
       if (dashEl) { dashEl.classList.add('active'); APP.currentPage = 'page-dashboard'; }
       setActiveNav('home');
