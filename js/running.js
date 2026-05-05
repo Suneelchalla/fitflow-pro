@@ -929,7 +929,7 @@ function updateRunDisplay() {
   const distEl  = document.getElementById('run-dist');
   const paceEl  = document.getElementById('run-pace');
   const speedEl = document.getElementById('run-speed');
-  const calEl   = document.getElementById('run-cal');
+  const calEl   = document.getElementById('run-kcal-stat');
 
   if (timerEl) timerEl.textContent = fmtTime(elapsed);
   if (distEl)  distEl.textContent  = s.distance.toFixed(2);
