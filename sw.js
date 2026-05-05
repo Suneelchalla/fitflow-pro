@@ -3,21 +3,21 @@
 // Updated for PWABuilder / Play Store compatibility
 // ════════════════════════════════════════════════════════════════
 
-const CACHE = 'fitflow-v43';
+const CACHE = 'fitflow-v44';
 const ASSETS = [
   './',
   './index.html',
   './css/style.css',
-  './js/data.js?v=43',
-  './js/data-cali.js?v=43',
-  './js/app.js?v=43',
-  './js/auth.js?v=43',
-  './js/dashboard.js?v=43',
-  './js/running.js?v=43',
-  './js/admin.js?v=43',
-  './push.js?v=43',
-  './js/custom-workouts.js?v=43',
-  './js/weekly-report.js?v=43',
+  './js/data.js?v=44',
+  './js/data-cali.js?v=44',
+  './js/app.js?v=44',
+  './js/auth.js?v=44',
+  './js/dashboard.js?v=44',
+  './js/running.js?v=44',
+  './js/admin.js?v=44',
+  './push.js?v=44',
+  './js/custom-workouts.js?v=44',
+  './js/weekly-report.js?v=44',
   './manifest.json',
   './privacy.html',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
