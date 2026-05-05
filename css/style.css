@@ -202,6 +202,21 @@ textarea.form-input { resize: vertical; min-height: 90px; line-height: 1.5; }
 .set-check .check-label { font-size: 14px; color: var(--text2); }
 .set-check.checked .check-label { color: var(--text); }
 
+/* ── GYM SET ROWS (no checkbox, plain text) ─────────────────────── */
+.set-row-gym {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; border-radius: var(--radius-sm);
+  background: var(--bg3); border: 1px solid var(--border);
+  margin-bottom: 0;
+}
+.set-row-label {
+  font-size: 13px; font-weight: 600; color: var(--g5);
+  font-family: var(--font-mono);
+}
+.set-row-reps {
+  font-size: 13px; color: var(--text2); font-weight: 500;
+}
+
 /* ── TABS ──────────────────────────────────────────────────────── */
 .tab-strip {
   display: flex; gap: 4px; overflow-x: auto; padding: 0 0 4px;
