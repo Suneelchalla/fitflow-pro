@@ -328,26 +328,12 @@ function renderAnnouncementBanner() {
 
 // ── OPEN MODULE ───────────────────────────────────────────────────
 function openModule(moduleId) {
-  // Clear rest timer when leaving current module so it doesn't block other pages
   _clearRestTimer();
   APP.currentModule = moduleId;
-  // Persist so page refresh can restore the user to this module
   if (APP.currentUser) Store.set('ff_last_module_' + APP.currentUser.id, moduleId);
-  if (moduleId === 'running') {
-    showPage('page-running');
-    initRunningPage();
-    return;
-  }
-  if (moduleId === 'calisthenics') {
-    showPage('page-calisthenics');
-    if (typeof initCalisthenicsPage === 'function') initCalisthenicsPage();
-    return;
-  }
-  if (moduleId === 'yoga') {
-    showPage('page-module');
-    renderYogaProgressivePage();
-    return;
-  }
+  if (moduleId === 'running') { showPage('page-running'); initRunningPage(); return; }
+  if (moduleId === 'calisthenics') { showPage('page-calisthenics'); if (typeof initCalisthenicsPage === 'function') initCalisthenicsPage(); return; }
+  if (moduleId === 'yoga') { showPage('page-module'); renderYogaProgressivePage(); return; }
   showPage('page-module');
   renderModulePage(moduleId);
 }
@@ -400,10 +386,6 @@ function selectDay(day, btn) {
   renderExercises(APP.currentModule, day);
   updateCompleteBtn();
 }
-
-// ════════════════════════════════════════════════════════════════
-// YOGA PROGRESSIVE SYSTEM — Day 1 to Day 90
-// ════════════════════════════════════════════════════════════════
 
 function renderYogaProgressivePage() {
   const user         = APP.currentUser;
@@ -694,8 +676,23 @@ function renderExercises(moduleId, day) {
   const container = document.getElementById('exercises-list');
   if (!container) return;
 
-  // Hold-based modules (yoga + stretching) — one checkbox per pose/stretch, no set repetitions
+  // Hold-based modules
   const isHoldBased = moduleId === 'yoga' || moduleId === 'stretching';
+
+  // Gym: show muscle group label for the day
+  if (moduleId === 'gym') {
+    const savedContent = Store.getContent('exercises_gym');
+    const gymBase = window.APP_DATA_DEFAULT?.modules?.gym || window.APP_DATA?.modules?.gym;
+    const savedLabels = savedContent?.dayLabels || {};
+    const defaultLabels = gymBase?.dayLabels || {};
+    const dayLabel = savedLabels[day] || defaultLabels[day] || day + ' — Gym Workout';
+    document.getElementById('gym-day-label')?.remove();
+    const labelEl = document.createElement('div');
+    labelEl.id = 'gym-day-label';
+    labelEl.style.cssText = 'background:linear-gradient(135deg,rgba(46,125,70,0.25),rgba(30,100,50,0.15));border:1px solid rgba(46,125,70,0.4);border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:15px;font-weight:700;color:var(--g5);letter-spacing:0.02em;';
+    labelEl.textContent = dayLabel;
+    container.parentElement.insertBefore(labelEl, container);
+  }
 
   container.innerHTML = allExercises.map((ex, i) => {
     let hdr = '';
@@ -721,8 +718,13 @@ function renderExercises(moduleId, day) {
         ? `<img src="${ex.image}" alt="${ex.name}" loading="lazy" onerror="this.style.display='none'">`
         : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:${_bg}33"><span style="font-size:36px;font-weight:700;color:${_bg}">${_lt}</span></div>`;
 
-    // For yoga: single hold checkbox. For others: set-by-set checkboxes
-    const checksHtml = isHoldBased
+    // Gym: plain text rows. Yoga/Stretching: single hold checkbox. Others: set checkboxes
+    const isGymModule = moduleId === 'gym';
+    const checksHtml = isGymModule
+      ? Array.from({ length: parseInt(ex.sets) || 1 }, (_, s) =>
+          `<div class="set-row-gym"><span class="set-row-label">Set ${s + 1}</span><span class="set-row-reps">${ex.reps || ''}</span></div>`
+        ).join('')
+      : isHoldBased
       ? `<div class="set-check ${checked.includes(0) ? 'checked' : ''}"
            onclick="toggleSet('${moduleId}','${day}',${i},0)"
            style="padding:12px 14px;border-radius:10px">
@@ -791,7 +793,8 @@ function toggleSet(moduleId, day, exIdx, setIdx) {
   // Haptic feedback
   navigator.vibrate && navigator.vibrate(wasChecked ? 20 : 40);
 
-  // Start rest timer if set was just CHECKED (not unchecked) and not hold-based
+  // Start rest timer — skip for gym (plain rows) and yoga/stretching
+  if (moduleId === 'gym') return;
   if (!wasChecked && moduleId !== 'yoga' && moduleId !== 'stretching') {
     const mod     = (window.APP_DATA_DEFAULT||window.APP_DATA).modules[moduleId];
     const exOv    = Store.getContent('exercises_' + moduleId);
