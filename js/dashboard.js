@@ -435,6 +435,32 @@ function renderExercises(moduleId, day) {
   // Hold-based modules (yoga + stretching) — one checkbox per pose/stretch, no set repetitions
   const isHoldBased = moduleId === 'yoga' || moduleId === 'stretching';
 
+  // Gym: show muscle group label for the day at top
+  if (moduleId === 'gym') {
+    const savedContent = Store.getContent('exercises_' + moduleId);
+    const gymData = window.APP_DATA_DEFAULT?.modules?.gym || window.APP_DATA?.modules?.gym;
+    const savedLabels = savedContent?.dayLabels || {};
+    const defaultLabels = gymData?.dayLabels || {};
+    const dayLabel = savedLabels[day] || defaultLabels[day] || `${day} — Gym Workout`;
+    // Remove old label if exists
+    document.getElementById('gym-day-label')?.remove();
+    const labelEl = document.createElement('div');
+    labelEl.id = 'gym-day-label';
+    labelEl.style.cssText = `
+      background: linear-gradient(135deg, rgba(46,125,70,0.25), rgba(30,100,50,0.15));
+      border: 1px solid rgba(46,125,70,0.4);
+      border-radius: 12px;
+      padding: 12px 16px;
+      margin-bottom: 14px;
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--g5);
+      letter-spacing: 0.02em;
+    `;
+    labelEl.textContent = dayLabel;
+    container.parentElement.insertBefore(labelEl, container);
+  }
+
   container.innerHTML = allExercises.map((ex, i) => {
     let hdr = '';
     if (ex._section !== prevSection) {
@@ -459,8 +485,18 @@ function renderExercises(moduleId, day) {
         ? `<img src="${ex.image}" alt="${ex.name}" loading="lazy" onerror="this.style.display='none'">`
         : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:${_bg}33"><span style="font-size:36px;font-weight:700;color:${_bg}">${_lt}</span></div>`;
 
-    // For yoga: single hold checkbox. For others: set-by-set checkboxes
-    const checksHtml = isHoldBased
+    // For gym: show sets/reps as plain text rows — no checkboxes, no timer
+    // For yoga/stretching: single hold checkbox
+    // For others: set-by-set checkboxes
+    const isGymModule = moduleId === 'gym';
+    const checksHtml = isGymModule
+      ? Array.from({ length: parseInt(ex.sets) || 1 }, (_, s) => {
+          return `<div class="set-row-gym">
+            <span class="set-row-label">Set ${s + 1}</span>
+            <span class="set-row-reps">${ex.reps || ''}</span>
+          </div>`;
+        }).join('')
+      : isHoldBased
       ? `<div class="set-check ${checked.includes(0) ? 'checked' : ''}"
            onclick="toggleSet('${moduleId}','${day}',${i},0)"
            style="padding:12px 14px;border-radius:10px">
@@ -529,7 +565,8 @@ function toggleSet(moduleId, day, exIdx, setIdx) {
   // Haptic feedback
   navigator.vibrate && navigator.vibrate(wasChecked ? 20 : 40);
 
-  // Start rest timer if set was just CHECKED (not unchecked) and not hold-based
+  // Start rest timer if set was just CHECKED (not unchecked), not hold-based, and not gym module
+  if (moduleId === 'gym') return; // gym uses plain text sets — no timer needed
   if (!wasChecked && moduleId !== 'yoga' && moduleId !== 'stretching') {
     const mod     = (window.APP_DATA_DEFAULT||window.APP_DATA).modules[moduleId];
     const exOv    = Store.getContent('exercises_' + moduleId);
