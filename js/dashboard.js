@@ -343,6 +343,11 @@ function openModule(moduleId) {
     if (typeof initCalisthenicsPage === 'function') initCalisthenicsPage();
     return;
   }
+  if (moduleId === 'yoga') {
+    showPage('page-module');
+    renderYogaProgressivePage();
+    return;
+  }
   showPage('page-module');
   renderModulePage(moduleId);
 }
@@ -396,6 +401,263 @@ function selectDay(day, btn) {
   updateCompleteBtn();
 }
 
+// ════════════════════════════════════════════════════════════════
+// YOGA PROGRESSIVE SYSTEM — Day 1 to Day 90
+// ════════════════════════════════════════════════════════════════
+
+function renderYogaProgressivePage() {
+  const user         = APP.currentUser;
+  const baseYogaData = (window.APP_DATA_DEFAULT || window.APP_DATA).modules?.yoga;
+  const savedYoga    = Store.getContent('exercises_yoga');
+  const yogaData     = savedYoga
+    ? { ...baseYogaData, schedule: savedYoga.schedule || baseYogaData?.schedule }
+    : baseYogaData;
+
+  document.getElementById('module-title').textContent        = 'Yoga';
+  document.getElementById('module-emoji-header').textContent = '\U0001f9d8';
+
+  const schedule  = yogaData?.schedule || {};
+  const allDays   = Object.keys(schedule).sort((a,b) =>
+    parseInt(a.replace('Day ','')) - parseInt(b.replace('Day ',''))
+  );
+  const totalDays = allDays.length;
+
+  // Option 1: Auto-jump to current day
+  const yogaProgress  = Store.get('ff_yoga_progress_' + user.id) || {};
+  const completedCount = Object.keys(yogaProgress).filter(d => yogaProgress[d]).length;
+  const currentDayNum = Math.min(completedCount + 1, totalDays);
+  APP.currentDay = 'Day ' + currentDayNum;
+
+  const dayTabStrip = document.getElementById('day-tab-strip');
+  if (dayTabStrip) dayTabStrip.style.display = 'none';
+
+  document.querySelectorAll('.module-inner-tab').forEach(t => t.classList.remove('active'));
+  document.querySelector('.module-inner-tab')?.classList.add('active');
+  document.querySelectorAll('.module-tab-content').forEach(el => el.classList.remove('active'));
+  document.getElementById('module-workout-tab')?.classList.add('active');
+
+  renderYogaDayView('Day ' + currentDayNum, allDays, yogaProgress, yogaData, user);
+}
+
+function renderYogaDayView(dayKey, allDays, yogaProgress, yogaData, user) {
+  APP.currentDay       = dayKey;
+  const dayNum         = parseInt(dayKey.replace('Day ',''));
+  const totalDays      = allDays.length;
+  const schedule       = yogaData?.schedule || {};
+  const dayData        = schedule[dayKey];
+  const phases         = yogaData?.phases || [];
+  const phase          = phases.find(p => dayNum >= p.from && dayNum <= p.to) || phases[0];
+  const isCompleted    = !!(yogaProgress)[dayKey];
+  const completedCount = Object.values(yogaProgress).filter(Boolean).length;
+  const phaseColor     = phase?.color || '#7b1fa2';
+
+  const moduleWorkoutTab = document.getElementById('module-workout-tab');
+  if (!moduleWorkoutTab) return;
+
+  // Top nav: prev | Day X (tap to pick) | next
+  const dayTabStrip = document.getElementById('day-tab-strip');
+  if (dayTabStrip) {
+    dayTabStrip.style.cssText = 'display:flex;gap:8px;padding:10px 16px;align-items:center;background:var(--bg);border-bottom:1px solid var(--border);flex-shrink:0;';
+    dayTabStrip.innerHTML = `
+      <button onclick="yogaNavigateDay(${dayNum-1})"
+        style="background:var(--surface);border:1px solid var(--border);border-radius:50%;width:36px;height:36px;
+        display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--text2);flex-shrink:0;
+        ${dayNum<=1?'opacity:0.3;pointer-events:none':''}">\u2039</button>
+      <button onclick="openYogaDayPicker()" style="flex:1;background:rgba(103,58,183,0.15);
+        border:1.5px solid rgba(103,58,183,0.4);border-radius:12px;padding:8px 12px;cursor:pointer;">
+        <div style="font-family:var(--font-display);font-size:22px;color:#ce93d8;line-height:1;text-align:center">${dayKey}</div>
+        <div style="font-size:10px;color:var(--text3);text-align:center;margin-top:2px">${completedCount}/${totalDays} done &middot; Tap to jump \u25be</div>
+      </button>
+      <button onclick="yogaNavigateDay(${dayNum+1})"
+        style="background:var(--surface);border:1px solid var(--border);border-radius:50%;width:36px;height:36px;
+        display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--text2);flex-shrink:0;
+        ${dayNum>=totalDays?'opacity:0.3;pointer-events:none':''}">\u203a</button>
+    `;
+  }
+
+  if (!dayData) {
+    moduleWorkoutTab.innerHTML = `<div style="padding:40px 16px;text-align:center;color:var(--text3)">
+      <div style="font-size:48px;margin-bottom:12px">\U0001f9d8</div>
+      <div style="font-size:15px">Content for this day coming soon.</div></div>`;
+    return;
+  }
+
+  const poses = dayData.poses || [];
+
+  moduleWorkoutTab.innerHTML = `
+    <div style="margin:14px 16px 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+      <div style="display:inline-flex;align-items:center;gap:6px;background:${phaseColor}22;border:1px solid ${phaseColor}55;border-radius:50px;padding:4px 12px;">
+        <span style="width:7px;height:7px;border-radius:50%;background:${phaseColor};flex-shrink:0"></span>
+        <span style="font-size:11px;font-weight:600;color:${phaseColor}">${phase?.label||'Yoga'}</span>
+      </div>
+      ${isCompleted ? '<span style="background:rgba(46,125,70,0.2);border:1px solid var(--g3);border-radius:50px;padding:4px 12px;font-size:11px;color:var(--g5);">\u2705 Completed</span>' : ''}
+    </div>
+    <div style="margin:0 16px 14px;background:linear-gradient(135deg,rgba(103,58,183,0.18),rgba(74,20,140,0.12));border:1px solid rgba(103,58,183,0.3);border-radius:12px;padding:12px 14px;">
+      <div style="font-size:10px;color:rgba(179,136,255,0.6);text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px">Today's Focus</div>
+      <div style="font-size:15px;font-weight:700;color:#ce93d8">${dayData.focus||''}</div>
+    </div>
+    <div style="margin:0 16px 16px;">
+      <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+        <span style="font-size:11px;color:var(--text3)">Journey Progress</span>
+        <span style="font-size:11px;font-weight:600;color:#ce93d8">${Math.round(completedCount/totalDays*100)}%</span>
+      </div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${completedCount/totalDays*100}%;background:linear-gradient(90deg,#7b1fa2,#ce93d8)"></div></div>
+    </div>
+    <div style="padding:0 16px;">
+      ${poses.map((pose,i) => `
+        <div class="exercise-card animate-in animate-in-${Math.min(i+1,5)}" style="margin-bottom:12px;border-color:rgba(103,58,183,0.25);">
+          <div style="background:linear-gradient(135deg,rgba(103,58,183,0.12),rgba(74,20,140,0.08));height:72px;display:flex;align-items:center;justify-content:center;">
+            <span style="font-family:var(--font-display);font-size:40px;color:rgba(179,136,255,0.5)">${(pose.name||'').charAt(0)}</span>
+          </div>
+          <div class="exercise-body">
+            <div class="exercise-name" style="margin-bottom:5px">${i+1}. ${pose.name}</div>
+            <div class="exercise-meta"><span>\u23f1 ${pose.hold||''}</span></div>
+            <div class="exercise-desc">${pose.desc||''}</div>
+            ${pose.demo?`<a href="${pose.demo}" target="_blank" rel="noopener" class="demo-link">\u25b6 Watch Demo</a>`:''}
+          </div>
+        </div>`).join('')}
+    </div>
+    <div style="padding:16px;padding-bottom:80px;">
+      ${isCompleted
+        ? `<div style="display:flex;align-items:center;gap:12px;padding:16px;background:rgba(46,125,70,0.12);border:1px solid var(--g3);border-radius:14px;">
+            <span style="font-size:24px">\u2705</span>
+            <div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--g5)">Day ${dayNum} Complete!</div><div style="font-size:11px;color:var(--text3)">Logged to your record</div></div>
+            ${dayNum<totalDays?`<button onclick="yogaNavigateDay(${dayNum+1})" style="background:linear-gradient(135deg,var(--g3),var(--g4));color:white;border:none;border-radius:10px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;flex-shrink:0;">Day ${dayNum+1} \u2192</button>`:''}
+          </div>`
+        : `<button onclick="completeYogaDay('${dayKey}')" id="yoga-complete-btn"
+            style="width:100%;padding:18px;background:linear-gradient(135deg,#7b1fa2,#9c27b0);color:white;border:none;border-radius:14px;font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 4px 20px rgba(123,31,162,0.35);">
+            \U0001f9d8 Mark Day ${dayNum} Complete
+          </button>
+          <div style="text-align:center;margin-top:7px;font-size:11px;color:var(--text3)">Logs your session and unlocks Day ${Math.min(dayNum+1,totalDays)}</div>`
+      }
+    </div>
+
+    <!-- Day Picker Modal -->
+    <div id="yoga-day-picker" onclick="if(event.target===this)closeYogaDayPicker()"
+      style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.75);backdrop-filter:blur(6px);align-items:flex-end;justify-content:center;">
+      <div style="width:100%;max-width:480px;background:var(--bg2);border-radius:24px 24px 0 0;border:1px solid var(--border);border-bottom:none;max-height:82vh;display:flex;flex-direction:column;">
+        <div style="padding:16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);flex-shrink:0;">
+          <div style="font-size:16px;font-weight:700;">Jump to Day</div>
+          <button onclick="closeYogaDayPicker()" style="background:var(--surface);border:1px solid var(--border);border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;color:var(--text2);font-size:16px;cursor:pointer;">\u2715</button>
+        </div>
+        <div style="display:flex;gap:6px;padding:10px 16px;overflow-x:auto;flex-shrink:0;scrollbar-width:none;">
+          ${phases.map((p,pi) => `
+            <button onclick="yogaPickerPhase(${pi})" id="yoga-phase-tab-${pi}"
+              style="flex-shrink:0;padding:6px 14px;border-radius:50px;font-size:12px;font-weight:600;
+              border:1.5px solid ${p.color}55;cursor:pointer;white-space:nowrap;transition:all 0.2s;
+              ${pi===0?`background:${p.color}33;color:${p.color};border-color:${p.color};`:'background:transparent;color:var(--text3);'}">
+              ${p.label.split('\u2014')[1]?.trim()||p.label.replace('Phase '+( pi+1)+' \u2014 ','')||p.label}
+            </button>`).join('')}
+        </div>
+        <div id="yoga-picker-grid" style="overflow-y:auto;padding:0 16px 28px;flex:1;"></div>
+      </div>
+    </div>
+  `;
+
+  // Render default phase grid (phase containing current day)
+  const defaultPhaseIdx = phases.findIndex(p => dayNum >= p.from && dayNum <= p.to);
+  _renderYogaPickerGrid(Math.max(defaultPhaseIdx,0), phases, allDays, yogaProgress, dayNum);
+}
+
+function openYogaDayPicker() {
+  const p = document.getElementById('yoga-day-picker');
+  if (p) p.style.display = 'flex';
+}
+function closeYogaDayPicker() {
+  const p = document.getElementById('yoga-day-picker');
+  if (p) p.style.display = 'none';
+}
+
+function yogaPickerPhase(phaseIdx) {
+  const user      = APP.currentUser;
+  const baseYoga  = (window.APP_DATA_DEFAULT || window.APP_DATA).modules?.yoga;
+  const savedYoga = Store.getContent('exercises_yoga');
+  const yogaData  = savedYoga ? { ...baseYoga, schedule: savedYoga.schedule || baseYoga?.schedule } : baseYoga;
+  const schedule  = yogaData?.schedule || {};
+  const allDays   = Object.keys(schedule).sort((a,b) => parseInt(a.replace('Day ','')) - parseInt(b.replace('Day ','')));
+  const phases    = yogaData?.phases || [];
+  const progress  = Store.get('ff_yoga_progress_' + user.id) || {};
+  const curNum    = parseInt((APP.currentDay||'Day 1').replace('Day ',''));
+
+  phases.forEach((p,i) => {
+    const tab = document.getElementById('yoga-phase-tab-'+i);
+    if (!tab) return;
+    if (i===phaseIdx) { tab.style.background=p.color+'33'; tab.style.color=p.color; tab.style.borderColor=p.color; }
+    else { tab.style.background='transparent'; tab.style.color='var(--text3)'; tab.style.borderColor=p.color+'55'; }
+  });
+  _renderYogaPickerGrid(phaseIdx, phases, allDays, progress, curNum);
+}
+
+function _renderYogaPickerGrid(phaseIdx, phases, allDays, progress, currentDayNum) {
+  const grid = document.getElementById('yoga-picker-grid');
+  if (!grid) return;
+  const phase = phases[phaseIdx];
+  if (!phase) return;
+  const phaseDays = allDays.filter(d => { const n=parseInt(d.replace('Day ','')); return n>=phase.from && n<=phase.to; });
+  grid.innerHTML = `
+    <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:7px;padding-top:6px;">
+      ${phaseDays.map(dk => {
+        const n=parseInt(dk.replace('Day ','')), done=!!progress[dk], cur=n===currentDayNum;
+        return `<button onclick="yogaPickerSelectDay(${n})"
+          style="aspect-ratio:1;border-radius:10px;display:flex;flex-direction:column;align-items:center;
+          justify-content:center;position:relative;cursor:pointer;transition:all 0.15s;
+          background:${done?phase.color+'33':cur?'rgba(103,58,183,0.25)':'var(--surface)'};
+          border:${cur?'2px solid #ce93d8':done?'1.5px solid '+phase.color+'66':'1px solid var(--border)'};
+          ">
+          ${done?'<span style="position:absolute;top:2px;right:3px;font-size:8px;color:'+phase.color+'">\u2713</span>':''}
+          <span style="font-size:12px;font-weight:700;color:${done?phase.color:cur?'#ce93d8':'var(--text2)'}">${n}</span>
+        </button>`;
+      }).join('')}
+    </div>
+    <div style="display:flex;gap:12px;margin-top:10px;font-size:11px;color:var(--text3);">
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:${phase.color}33;border:1.5px solid ${phase.color}66;margin-right:4px;vertical-align:middle;"></span>Done</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:rgba(103,58,183,0.25);border:2px solid #ce93d8;margin-right:4px;vertical-align:middle;"></span>Current</span>
+      <span><span style="display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--surface);border:1px solid var(--border);margin-right:4px;vertical-align:middle;"></span>Upcoming</span>
+    </div>`;
+}
+
+function yogaPickerSelectDay(n) {
+  closeYogaDayPicker();
+  yogaNavigateDay(n);
+}
+
+function yogaNavigateDay(dayNum) {
+  const user      = APP.currentUser;
+  const baseYoga  = (window.APP_DATA_DEFAULT || window.APP_DATA).modules?.yoga;
+  const savedYoga = Store.getContent('exercises_yoga');
+  const yogaData  = savedYoga ? { ...baseYoga, schedule: savedYoga.schedule || baseYoga?.schedule } : baseYoga;
+  const schedule  = yogaData?.schedule || {};
+  const allDays   = Object.keys(schedule).sort((a,b) => parseInt(a.replace('Day ','')) - parseInt(b.replace('Day ','')));
+  const totalDays = allDays.length;
+  if (dayNum < 1 || dayNum > totalDays) return;
+  const progress = Store.get('ff_yoga_progress_' + user.id) || {};
+  renderYogaDayView('Day ' + dayNum, allDays, progress, yogaData, user);
+  document.querySelector('.scroll-content')?.scrollTo?.(0,0);
+}
+
+async function completeYogaDay(dayKey) {
+  const user = APP.currentUser;
+  const btn  = document.getElementById('yoga-complete-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving\u2026'; }
+
+  const yogaProgress   = Store.get('ff_yoga_progress_' + user.id) || {};
+  yogaProgress[dayKey] = true;
+  Store.set('ff_yoga_progress_' + user.id, yogaProgress);
+
+  const today = todayStr();
+  const logResult = Store.addLog({ userId:user.id, email:user.email, module:'yoga', day:dayKey, date:today });
+  if (logResult) Sheets.post('logCompletion', { userId:user.id, email:user.email, module:'yoga', day:dayKey, date:today }).catch(()=>{});
+
+  showToast('\u2705 ' + dayKey + ' complete! Great practice \U0001f9d8', 'success');
+
+  const baseYoga  = (window.APP_DATA_DEFAULT || window.APP_DATA).modules?.yoga;
+  const savedYoga = Store.getContent('exercises_yoga');
+  const yogaData  = savedYoga ? { ...baseYoga, schedule: savedYoga.schedule || baseYoga?.schedule } : baseYoga;
+  const schedule  = yogaData?.schedule || {};
+  const allDays   = Object.keys(schedule).sort((a,b) => parseInt(a.replace('Day ','')) - parseInt(b.replace('Day ','')));
+  renderYogaDayView(dayKey, allDays, yogaProgress, yogaData, user);
+}
+
 // ── RENDER EXERCISES ──────────────────────────────────────────────
 // ── REST TIMER ───────────────────────────────────────────────────
 function renderExercises(moduleId, day) {
@@ -435,32 +697,6 @@ function renderExercises(moduleId, day) {
   // Hold-based modules (yoga + stretching) — one checkbox per pose/stretch, no set repetitions
   const isHoldBased = moduleId === 'yoga' || moduleId === 'stretching';
 
-  // Gym: show muscle group label for the day at top
-  if (moduleId === 'gym') {
-    const savedContent = Store.getContent('exercises_' + moduleId);
-    const gymData = window.APP_DATA_DEFAULT?.modules?.gym || window.APP_DATA?.modules?.gym;
-    const savedLabels = savedContent?.dayLabels || {};
-    const defaultLabels = gymData?.dayLabels || {};
-    const dayLabel = savedLabels[day] || defaultLabels[day] || `${day} — Gym Workout`;
-    // Remove old label if exists
-    document.getElementById('gym-day-label')?.remove();
-    const labelEl = document.createElement('div');
-    labelEl.id = 'gym-day-label';
-    labelEl.style.cssText = `
-      background: linear-gradient(135deg, rgba(46,125,70,0.25), rgba(30,100,50,0.15));
-      border: 1px solid rgba(46,125,70,0.4);
-      border-radius: 12px;
-      padding: 12px 16px;
-      margin-bottom: 14px;
-      font-size: 15px;
-      font-weight: 700;
-      color: var(--g5);
-      letter-spacing: 0.02em;
-    `;
-    labelEl.textContent = dayLabel;
-    container.parentElement.insertBefore(labelEl, container);
-  }
-
   container.innerHTML = allExercises.map((ex, i) => {
     let hdr = '';
     if (ex._section !== prevSection) {
@@ -485,18 +721,8 @@ function renderExercises(moduleId, day) {
         ? `<img src="${ex.image}" alt="${ex.name}" loading="lazy" onerror="this.style.display='none'">`
         : `<div style="width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:${_bg}33"><span style="font-size:36px;font-weight:700;color:${_bg}">${_lt}</span></div>`;
 
-    // For gym: show sets/reps as plain text rows — no checkboxes, no timer
-    // For yoga/stretching: single hold checkbox
-    // For others: set-by-set checkboxes
-    const isGymModule = moduleId === 'gym';
-    const checksHtml = isGymModule
-      ? Array.from({ length: parseInt(ex.sets) || 1 }, (_, s) => {
-          return `<div class="set-row-gym">
-            <span class="set-row-label">Set ${s + 1}</span>
-            <span class="set-row-reps">${ex.reps || ''}</span>
-          </div>`;
-        }).join('')
-      : isHoldBased
+    // For yoga: single hold checkbox. For others: set-by-set checkboxes
+    const checksHtml = isHoldBased
       ? `<div class="set-check ${checked.includes(0) ? 'checked' : ''}"
            onclick="toggleSet('${moduleId}','${day}',${i},0)"
            style="padding:12px 14px;border-radius:10px">
@@ -565,8 +791,7 @@ function toggleSet(moduleId, day, exIdx, setIdx) {
   // Haptic feedback
   navigator.vibrate && navigator.vibrate(wasChecked ? 20 : 40);
 
-  // Start rest timer if set was just CHECKED (not unchecked), not hold-based, and not gym module
-  if (moduleId === 'gym') return; // gym uses plain text sets — no timer needed
+  // Start rest timer if set was just CHECKED (not unchecked) and not hold-based
   if (!wasChecked && moduleId !== 'yoga' && moduleId !== 'stretching') {
     const mod     = (window.APP_DATA_DEFAULT||window.APP_DATA).modules[moduleId];
     const exOv    = Store.getContent('exercises_' + moduleId);
