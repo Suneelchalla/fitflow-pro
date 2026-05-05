@@ -21,7 +21,7 @@ function renderAdminPanel() {
   if (nameEl) nameEl.textContent = '👑 ' + (APP.currentUser.name || 'Admin');
   renderAdminStats();
   // Default to users tab
-  const firstBtn = document.querySelector('.admin-tab-btn');
+  const firstBtn = document.querySelector('.admin-nav-btn, .admin-tab-btn');
   if (firstBtn) switchAdminTab('users', firstBtn);
 }
 
@@ -41,7 +41,8 @@ function renderAdminStats() {
 
 // ── ADMIN TABS ────────────────────────────────────────────────────
 function switchAdminTab(tab, btn) {
-  document.querySelectorAll('.admin-tab-btn').forEach(b => b.classList.remove('active'));
+  // Support both new sidebar nav (.admin-nav-btn) and legacy tab buttons (.admin-tab-btn)
+  document.querySelectorAll('.admin-tab-btn, .admin-nav-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
   document.querySelectorAll('.admin-tab-content').forEach(el => el.style.display = 'none');
   const tabEl = document.getElementById('admin-tab-' + tab);
@@ -88,14 +89,77 @@ async function loadAdminUsers() {
   renderUsersList(users);
 }
 
+// Cache the latest fetched users so filter can re-render without re-fetching
+let _cachedAdminUsers = [];
+
 function renderUsersList(users) {
-  const logs      = Store.getLogs();
+  _cachedAdminUsers = users || [];
   const container = document.getElementById('admin-users-list');
-  if (!users.length) {
+  if (!_cachedAdminUsers.length) {
     container.innerHTML = `<div class="empty-state"><div class="empty-icon">👥</div><p>No users yet.</p></div>`;
     return;
   }
-  container.innerHTML = users.map(u => {
+  // Render search bar + filter chips + list
+  container.innerHTML = `
+    <div class="admin-user-controls">
+      <input id="admin-user-search" type="text" placeholder="🔍 Search by name or email…"
+        oninput="_filterAdminUsers()" class="admin-search-input">
+      <div class="admin-filter-chips">
+        <button class="admin-chip active" data-filter="all"      onclick="_setAdminUserFilter('all',this)">All</button>
+        <button class="admin-chip"        data-filter="active"   onclick="_setAdminUserFilter('active',this)">Active</button>
+        <button class="admin-chip"        data-filter="inactive" onclick="_setAdminUserFilter('inactive',this)">Inactive</button>
+        <button class="admin-chip"        data-filter="first"    onclick="_setAdminUserFilter('first',this)">Awaiting login</button>
+        <button class="admin-chip"        data-filter="google"   onclick="_setAdminUserFilter('google',this)">Google</button>
+      </div>
+    </div>
+    <div id="admin-users-rows"></div>`;
+  _renderAdminUsersFiltered();
+}
+
+let _adminUserFilter = 'all';
+
+function _setAdminUserFilter(f, btn) {
+  _adminUserFilter = f;
+  document.querySelectorAll('.admin-chip').forEach(c => c.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  _renderAdminUsersFiltered();
+}
+
+function _filterAdminUsers() {
+  _renderAdminUsersFiltered();
+}
+
+function _renderAdminUsersFiltered() {
+  const rows = document.getElementById('admin-users-rows');
+  if (!rows) return;
+  const q = (document.getElementById('admin-user-search')?.value || '').trim().toLowerCase();
+  const logs = Store.getLogs();
+
+  const matches = _cachedAdminUsers.filter(u => {
+    const role     = (u.role   || 'USER').toUpperCase().trim();
+    const status   = (u.status || 'ACTIVE').toUpperCase().trim();
+    const isFirst  = u.isFirstLogin === true || String(u.isFirstLogin).toUpperCase() === 'TRUE';
+    const isGoogleUser = (u.id||'').startsWith('u_g_') || (u.createdBy||'').toLowerCase() === 'google';
+    // Filter chip
+    if (_adminUserFilter === 'active'   && status !== 'ACTIVE')   return false;
+    if (_adminUserFilter === 'inactive' && status !== 'INACTIVE') return false;
+    if (_adminUserFilter === 'first'    && !isFirst)              return false;
+    if (_adminUserFilter === 'google'   && !isGoogleUser)         return false;
+    // Search
+    if (q) {
+      const haystack = (u.name || '').toLowerCase() + ' ' + (u.email || '').toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  });
+
+  if (!matches.length) {
+    rows.innerHTML = `<div class="empty-state" style="padding:32px"><div class="empty-icon">🔍</div>
+      <p>No users match this filter.</p></div>`;
+    return;
+  }
+
+  rows.innerHTML = `<div class="admin-user-count">${matches.length} ${matches.length === 1 ? 'user' : 'users'}</div>` + matches.map(u => {
     const role     = (u.role   || 'USER').toUpperCase().trim();
     const status   = (u.status || 'ACTIVE').toUpperCase().trim();
     const isAdmin      = role   === 'ADMIN';
