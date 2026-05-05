@@ -2161,12 +2161,16 @@ function openCreateWorkout() {
 }
 
 function openWeeklyReport() {
+  // weekly-report.js handles sync + week navigation
+  const jsDay = new Date().getDay();
+  window._weekOffset = (jsDay === 1 || jsDay === 2) ? -1 : 0;
   showPage('page-weekly-report');
-  if (typeof renderWeeklyReport === 'function') {
-    renderWeeklyReport();
+  if (typeof _loadAndRender === 'function') {
+    _loadAndRender();
   } else {
     setTimeout(() => {
-      if (typeof renderWeeklyReport === 'function') renderWeeklyReport();
+      if (typeof _loadAndRender === 'function') _loadAndRender();
+      else if (typeof renderWeeklyReport === 'function') renderWeeklyReport();
     }, 300);
   }
 }
