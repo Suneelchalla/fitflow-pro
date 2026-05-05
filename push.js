@@ -1,123 +1,179 @@
 // ════════════════════════════════════════════════════════════════
-// FITFLOW PRO — Push Notification Manager (Pure VAPID, no Firebase)
+// FITFLOW PRO — Push Notification Manager (OneSignal)
 //
 // HOW THIS WORKS:
-//   • VAPID public key lives here in client code — this is SAFE.
-//     Public keys are meant to be public.
-//   • VAPID private key lives ONLY in Apps Script → Project Settings
-//     → Script Properties as "VAPID_PRIVATE_KEY". Never in code.
-//     Never in git. Never anywhere visible.
-//   • Apps Script signs and sends push directly to each browser's
-//     push endpoint (Chrome/Firefox/Edge all have their own).
-//     No Firebase. No FCM. No service account JSON.
+//   • OneSignal handles all the broken VAPID/ECDSA stuff for us.
+//   • Frontend uses OneSignal Web SDK to subscribe users.
+//   • Apps Script calls OneSignal REST API to send notifications.
+//   • Subscription state is stored in BOTH:
+//       - OneSignal's own database (so they can deliver pushes)
+//       - Your Google Sheet (so you can correlate users)
 //
-// TO SET UP (one time only):
-//   1. Go to your Apps Script project
-//   2. Project Settings (⚙️) → Script Properties
-//   3. Add property: VAPID_PRIVATE_KEY = <the private key>
-//   4. Add property: VAPID_SUBJECT = mailto:admin@fitflow.com
-//      (replace with your actual admin email)
-//   5. Paste the new google-apps-script.js backend code
-//   6. Redeploy as New Version
+// SETUP REQUIRED (one time only):
+//   1. Add this script tag to <head> of index.html (BEFORE this push.js):
+//        <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+//   2. Upload OneSignalSDKWorker.js to GitHub repo ROOT (same folder as index.html)
+//   3. In Apps Script Project Settings → Script Properties, add:
+//        ONESIGNAL_APP_ID       = 5dfd18d7-bde4-4f26-a478-0f522b2f299f
+//        ONESIGNAL_REST_API_KEY = <your REST API key>
 // ════════════════════════════════════════════════════════════════
 
 const PUSH = {
 
-  // ✅ SAFE TO BE PUBLIC — this is a VAPID public key, not a secret.
-  // It is mathematically paired with the private key that sits only
-  // in Apps Script Script Properties, never in any source file.
-  VAPID_PUBLIC_KEY: 'BHpguNhH05jGBBHaj0oU5LNYKvOlyrz0xFUSNhoUm89pDz-eXtVTHNwJW4IAQLyn_Gl2HjN_W9STa9fXsAlBOWk',
+  ONESIGNAL_APP_ID: '5dfd18d7-bde4-4f26-a478-0f522b2f299f',
+
+  _initPromise: null,
+  _initStarted: false,
+
+  // ── Initialize OneSignal SDK once per page load ─────────────────
+  async _ensureInit() {
+    if (this._initPromise) return this._initPromise;
+    if (typeof window.OneSignalDeferred === 'undefined') return null;
+
+    this._initPromise = new Promise(resolve => {
+      window.OneSignalDeferred.push(async OneSignal => {
+        if (!this._initStarted) {
+          this._initStarted = true;
+          try {
+            await OneSignal.init({
+              appId: this.ONESIGNAL_APP_ID,
+              serviceWorkerPath: '/fitflow-pro/OneSignalSDKWorker.js',
+              serviceWorkerParam: { scope: '/fitflow-pro/' },
+              allowLocalhostAsSecureOrigin: true,
+              notifyButton: { enable: false },        // we use our own toggle
+              autoRegister: false,                     // we control prompting
+              autoResubscribe: true,
+            });
+          } catch (e) {
+            console.warn('OneSignal init error:', e?.message || e);
+          }
+        }
+        resolve(OneSignal);
+      });
+    });
+    return this._initPromise;
+  },
 
   isSupported() {
-    return 'serviceWorker' in navigator
-        && 'PushManager'   in window
-        && 'Notification'  in window;
+    return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
   },
 
   getPermission() {
-    return Notification.permission;
+    return typeof Notification !== 'undefined' ? Notification.permission : 'denied';
   },
 
-  _toUint8Array(base64) {
-    const pad = '='.repeat((4 - base64.length % 4) % 4);
-    const b64 = (base64 + pad).replace(/-/g, '+').replace(/_/g, '/');
-    const raw = atob(b64);
-    return Uint8Array.from([...raw].map(c => c.charCodeAt(0)));
-  },
-
+  // ── Subscribe (asks for permission if needed) ───────────────────
   async subscribe() {
     if (!this.isSupported()) return null;
     try {
-      const perm = await Notification.requestPermission();
-      if (perm !== 'granted') return null;
+      const OneSignal = await this._ensureInit();
+      if (!OneSignal) return null;
 
-      const reg = await navigator.serviceWorker.ready;
-      let sub   = await reg.pushManager.getSubscription();
-
-      if (!sub) {
-        sub = await reg.pushManager.subscribe({
-          userVisibleOnly:      true,
-          applicationServerKey: this._toUint8Array(this.VAPID_PUBLIC_KEY),
-        });
+      // Show OneSignal's prompt OR request permission directly
+      // Modern OneSignal v16 API:
+      const supported = OneSignal.Notifications.permission;
+      if (supported === false) {
+        // Not yet granted — ask now
+        await OneSignal.Notifications.requestPermission();
       }
 
-      await this._save(sub);
-      return sub;
+      // Wait briefly for subscription to register with OneSignal servers
+      await new Promise(r => setTimeout(r, 800));
+
+      // Save the subscription details to our own sheet
+      await this._save();
+      return true;
     } catch (e) {
-      console.error('Push subscribe failed:', e);
+      console.error('Push subscribe failed:', e?.message || e);
       return null;
     }
   },
 
+  // ── Unsubscribe ─────────────────────────────────────────────────
   async unsubscribe() {
     try {
-      const reg = await navigator.serviceWorker.ready;
-      const sub = await reg.pushManager.getSubscription();
-      if (sub) {
-        await sub.unsubscribe();
-        await this._remove(sub);
-      }
-    } catch {}
+      const OneSignal = await this._ensureInit();
+      if (!OneSignal) return;
+      // Opt the user out of receiving pushes
+      await OneSignal.User.PushSubscription.optOut();
+      await this._remove();
+    } catch (e) {
+      console.warn('Push unsubscribe error:', e?.message || e);
+    }
   },
 
+  // ── Check current subscription state ────────────────────────────
   async isSubscribed() {
     if (!this.isSupported()) return false;
     try {
-      const reg = await navigator.serviceWorker.ready;
-      return !!(await reg.pushManager.getSubscription());
-    } catch { return false; }
+      const OneSignal = await this._ensureInit();
+      if (!OneSignal) return false;
+      // optedIn is the OneSignal v16 flag for "this user wants pushes"
+      return !!OneSignal.User.PushSubscription.optedIn;
+    } catch {
+      return false;
+    }
   },
 
-  async _save(sub) {
+  // ── Get the OneSignal Subscription ID (a UUID per device/browser) ─
+  async getSubscriptionId() {
+    try {
+      const OneSignal = await this._ensureInit();
+      if (!OneSignal) return null;
+      return OneSignal.User.PushSubscription.id || null;
+    } catch {
+      return null;
+    }
+  },
+
+  // ── Save subscription to our Google Sheet (for analytics + cleanup) ─
+  async _save() {
     const user = APP.currentUser;
     if (!user) return;
-    // Extract the keys from the subscription
-    const p256dh = sub.getKey('p256dh')
-      ? btoa(String.fromCharCode(...new Uint8Array(sub.getKey('p256dh'))))
-      : '';
-    const auth = sub.getKey('auth')
-      ? btoa(String.fromCharCode(...new Uint8Array(sub.getKey('auth'))))
-      : '';
+    const subId = await this.getSubscriptionId();
+    if (!subId) return; // OneSignal hasn't registered yet — will retry next time
 
-    await Sheets.post('savePushSubscription', {
-      userId:   user.id,
-      name:     user.name,
-      email:    user.email,
-      endpoint: sub.endpoint,
-      p256dh,
-      auth,
-      savedAt:  new Date().toISOString(),
-    });
+    // Tag the user in OneSignal so we can target by userId
+    try {
+      const OneSignal = await this._ensureInit();
+      if (OneSignal) {
+        await OneSignal.login(user.id);
+        await OneSignal.User.addTags({
+          email:  user.email || '',
+          name:   user.name  || '',
+          role:   user.role  || 'USER',
+        });
+      }
+    } catch (e) { console.warn('OneSignal user tag failed:', e?.message); }
+
+    // Save reference in your sheet too (for admin dashboard / cleanup)
+    try {
+      await Sheets.post('savePushSubscription', {
+        userId:        user.id,
+        name:          user.name,
+        email:         user.email,
+        endpoint:      'onesignal:' + subId,  // prefix to distinguish from old VAPID
+        p256dh:        '',
+        auth:          '',
+        savedAt:       new Date().toISOString(),
+        provider:      'onesignal',
+        onesignalSubId: subId,
+      });
+    } catch (e) { console.warn('Sheet save failed:', e?.message); }
+
     Store.set('ff_push_subscribed', true);
   },
 
-  async _remove(sub) {
+  async _remove() {
     const user = APP.currentUser;
     if (!user) return;
-    await Sheets.post('removePushSubscription', {
-      userId:   user.id,
-      endpoint: sub.endpoint,
-    });
+    const subId = await this.getSubscriptionId();
+    try {
+      await Sheets.post('removePushSubscription', {
+        userId:   user.id,
+        endpoint: subId ? 'onesignal:' + subId : 'unknown',
+      });
+    } catch {}
     Store.set('ff_push_subscribed', false);
   },
 };
@@ -125,17 +181,19 @@ const PUSH = {
 // ── AUTO-INIT AFTER LOGIN ─────────────────────────────────────────
 async function initPushNotifications() {
   if (!PUSH.isSupported()) return;
-  if (Notification.permission === 'granted') {
-    await PUSH.subscribe(); // silently renew subscription on every login
-  } else if (Notification.permission === 'default') {
-    setTimeout(showPushPrompt, 5000); // ask after 5 s on dashboard
+  // Initialize OneSignal SDK so it can register the service worker
+  await PUSH._ensureInit();
+
+  // If already subscribed, refresh the user tag on Sheets
+  if (await PUSH.isSubscribed()) {
+    await PUSH._save();
   }
+  // Don't auto-prompt — let the user toggle it themselves from the menu
 }
 
 function showPushPrompt(force = false) {
   if (!APP.currentUser) return;
   if (APP.currentUser.role === 'ADMIN') return;
-  // Only auto-show on dashboard; but can be forced from profile menu
   if (!force && APP.currentPage !== 'page-dashboard') return;
   if (!force && Store.get('ff_push_dismissed_today') === new Date().toDateString()) return;
   const banner = document.getElementById('push-banner');
@@ -148,10 +206,10 @@ function showPushPrompt(force = false) {
 async function acceptPushNotifications() {
   const b = document.getElementById('push-banner');
   if (b) { b.classList.add('hidden'); b.style.display = 'none'; }
-  const sub = await PUSH.subscribe();
+  const ok = await PUSH.subscribe();
   showToast(
-    sub ? '🔔 Daily workout reminders enabled!' : 'Could not enable — check browser settings.',
-    sub ? 'success' : 'error'
+    ok ? '🔔 Daily workout reminders enabled!' : 'Could not enable — check browser notification settings.',
+    ok ? 'success' : 'error'
   );
 }
 

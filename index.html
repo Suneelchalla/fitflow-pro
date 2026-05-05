@@ -19,6 +19,13 @@
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
   <!-- Google Identity Services (One Tap + Sign In With Google) -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+  <!-- OneSignal Web Push SDK -->
+  <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+  <script>
+    window.OneSignalDeferred = window.OneSignalDeferred || [];
+    // Init handled inside push.js so we can wait for APP context.
+  </script>
 </head>
 <body>
 
@@ -1404,7 +1411,7 @@ window.addEventListener('DOMContentLoaded', function() {
 <script src="js/dashboard.js?v=42"></script>
 <script src="js/running.js?v=42"></script>
 <script src="js/admin.js?v=42"></script>
-<script src="push.js?v=42"></script>
+<script src="push.js"></script>
 <script src="js/custom-workouts.js?v=42"></script>
 <script src="js/weekly-report.js?v=42"></script>
 <script>
