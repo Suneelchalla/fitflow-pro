@@ -430,24 +430,26 @@ async function _collectAndSave() {
   const { module: moduleId, section } = AdminEdit;
 
   if (section === 'exercises') {
-    // Yoga uses progressive Day 1-90 schedule — collect differently
-    if (moduleId === 'yoga') {
-      await _collectAndSaveYoga();
-      return;
-    }
+    // Yoga: separate save handler
+    if (moduleId === 'yoga') { await _collectAndSaveYoga(); return; }
 
     const days   = getWeekDays();
+    const gymDayLabels = {
+      Monday:    'Monday — Chest 🫁',    Tuesday:   'Tuesday — Shoulders 🏋️',
+      Wednesday: 'Wednesday — Lats / Back 🦾', Thursday: 'Thursday — Biceps 💪',
+      Friday:    'Friday — Triceps 🔱',  Saturday:  'Saturday — Legs / Squats 🦵',
+    };
     const result = { days: {} };
+    if (moduleId === 'gym') result.dayLabels = gymDayLabels;
     days.forEach(day => {
       const dayEl = document.querySelector(`[data-day="${day}"]`);
       if (!dayEl) {
-        // Day not in DOM — always use APP_DATA_DEFAULT as the ground truth
         const _D = window.APP_DATA_DEFAULT || window.APP_DATA;
         result.days[day] = _D.modules?.[moduleId]?.days?.[day] || [];
         return;
       }
       result.days[day] = Array.from(dayEl.querySelectorAll('.ex-row')).map(row => {
-        const isHoldBased = moduleId === 'yoga' || moduleId === 'stretching';
+        const isHoldBased = moduleId === 'stretching';
         if (isHoldBased) {
           const monthVal = _text(row, 'month');
           return {
@@ -461,12 +463,13 @@ async function _collectAndSave() {
           };
         }
         return {
-          name:  _text(row, 'name'),
-          sets:  parseInt(_text(row, 'sets')) || 3,
-          reps:  _text(row, 'reps'),
-          desc:  _text(row, 'desc'),
-          demo:  _text(row, 'demo'),
-          image: _text(row, 'image'),
+          name:     _text(row, 'name'),
+          sets:     parseInt(_text(row, 'sets')) || 3,
+          reps:     _text(row, 'reps'),
+          desc:     _text(row, 'desc'),
+          demo:     _text(row, 'demo'),
+          image:    _text(row, 'image'),
+          _section: 'main',
         };
       });
     });
@@ -529,38 +532,120 @@ async function _collectAndSave() {
 
 function _text(el, field)   { return (el.querySelector(`[data-field="${field}"]`)?.innerText || '').trim(); }
 function _innerText(id)     { return (document.getElementById(id)?.innerText || '').trim(); }
+// ── YOGA PROGRESSIVE EDITOR ───────────────────────────────────────
+function renderYogaProgressiveEditor(body) {
+  const yogaData = (window.APP_DATA_DEFAULT || window.APP_DATA).modules?.yoga;
+  const saved    = Store.getContent('exercises_yoga') || {};
+  const schedule = saved.schedule || yogaData?.schedule || {};
+  const phases   = yogaData?.phases || [];
+  const allDays  = Object.keys(schedule).sort((a,b) => parseInt(a.replace('Day ','')) - parseInt(b.replace('Day ','')));
 
-// ── YOGA PROGRESSIVE SAVE ─────────────────────────────────────────
+  body.innerHTML = `
+    <div style="font-size:13px;color:var(--text2);padding:0 16px 12px;line-height:1.5">
+      ✏️ <strong>Tap any field</strong> to edit yoga poses. Changes sync to all users after saving.<br>
+      📅 <strong>${allDays.length} progressive days</strong> — beginner to professional.
+    </div>
+    ${phases.map(phase => {
+      const phaseDays = allDays.filter(d => { const n=parseInt(d.replace('Day ','')); return n>=phase.from && n<=phase.to; });
+      return `
+        <div style="margin-bottom:16px;">
+          <div style="padding:12px 16px;background:${phase.color}22;border:1px solid ${phase.color}44;border-radius:10px;margin:0 16px 8px;display:flex;align-items:center;gap:10px">
+            <span style="width:10px;height:10px;border-radius:50%;background:${phase.color};flex-shrink:0"></span>
+            <span style="font-weight:700;font-size:14px;color:${phase.color}">${phase.label}</span>
+            <span style="font-size:12px;color:var(--text3);margin-left:auto">Days ${phase.from}–${phase.to}</span>
+          </div>
+          <div style="padding:0 16px">
+          ${phaseDays.map(dayKey => {
+            const dayData = schedule[dayKey] || {};
+            const poses   = dayData.poses || [];
+            return `
+              <div style="margin-bottom:6px;border:1px solid var(--border);border-radius:10px;overflow:hidden">
+                <div style="padding:10px 16px;background:rgba(103,58,183,0.15);display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleYogaDayEditor('${dayKey.replace(' ','')}')">
+                  <div>
+                    <span style="font-weight:700;font-size:13px;color:#ce93d8">${dayKey}</span>
+                    <span style="font-size:11px;color:var(--text3);margin-left:8px">${dayData.focus || ''}</span>
+                  </div>
+                  <span style="font-size:12px;color:var(--text3)">${poses.length} poses ▾</span>
+                </div>
+                <div id="yoga-day-editor-${dayKey.replace(' ','')}" style="display:none;padding:0 12px 8px">
+                  <div style="margin:8px 0 4px;">
+                    <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;margin-bottom:3px">Day Focus</div>
+                    <div class="editable" data-yoga-day="${dayKey}" data-field="focus" contenteditable="true" style="font-size:13px;font-weight:600;color:#ce93d8">${dayData.focus || ''}</div>
+                  </div>
+                  <div data-yoga-poses="${dayKey}">
+                    ${poses.map((pose,i) => _yogaPoseCard(pose,i,dayKey)).join('')}
+                  </div>
+                  <button class="add-exercise-btn" onclick="addYogaPose('${dayKey}')" style="border-color:rgba(103,58,183,0.4);color:#ce93d8">+ Add Pose to ${dayKey}</button>
+                </div>
+              </div>`;
+          }).join('')}
+          </div>
+        </div>`;
+    }).join('')}`;
+  activateEditing(body);
+}
+
+function toggleYogaDayEditor(dayKeyNoSpace) {
+  const el = document.getElementById('yoga-day-editor-' + dayKeyNoSpace);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+function _yogaPoseCard(pose, idx, dayKey) {
+  return `
+    <div class="exercise-card ex-row" data-idx="${idx}" style="margin:8px 0;position:relative;border-color:rgba(103,58,183,0.3)">
+      <button class="delete-ex-btn" onclick="this.closest('.ex-row').remove();markDirty()" title="Delete">✕</button>
+      <div class="exercise-body" style="padding:12px">
+        <div style="margin-bottom:8px">
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;margin-bottom:3px">Pose Name</div>
+          <div class="exercise-name editable" data-field="name" contenteditable="true">${pose.name || ''}</div>
+        </div>
+        <div style="margin-bottom:8px">
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;margin-bottom:3px">Hold / Duration</div>
+          <div class="editable" data-field="hold" contenteditable="true" style="font-weight:600;color:#ce93d8">${pose.hold || ''}</div>
+        </div>
+        <div style="margin-bottom:8px">
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;margin-bottom:3px">Description</div>
+          <div class="editable-block editable" data-field="desc" contenteditable="true" style="font-size:13px;color:var(--text2);line-height:1.6">${pose.desc || ''}</div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;margin-bottom:3px">Demo Link</div>
+          <div class="editable" data-field="demo" contenteditable="true" style="font-size:12px;color:var(--g5);word-break:break-all">${pose.demo || ''}</div>
+        </div>
+      </div>
+    </div>`;
+}
+
+function addYogaPose(dayKey) {
+  const container = document.querySelector(`[data-yoga-poses="${dayKey}"]`);
+  if (!container) return;
+  const div = document.createElement('div');
+  div.innerHTML = _yogaPoseCard({ name:'New Pose', hold:'60 sec', desc:'Enter description.', demo:'' }, 999, dayKey);
+  const card = div.firstElementChild;
+  activateEditing(card);
+  container.appendChild(card);
+  markDirty();
+  card.querySelector('[data-field="name"]')?.focus();
+}
+
 async function _collectAndSaveYoga() {
   const yogaData = (window.APP_DATA_DEFAULT || window.APP_DATA).modules?.yoga;
   const result   = { schedule: {}, phases: yogaData?.phases || [] };
 
-  // Collect all day editors that are in the DOM
   document.querySelectorAll('[data-yoga-poses]').forEach(container => {
-    const dayKey = container.getAttribute('data-yoga-poses');
+    const dayKey  = container.getAttribute('data-yoga-poses');
     if (!dayKey) return;
-
-    // Get focus for this day
     const focusEl = document.querySelector(`[data-yoga-day="${dayKey}"][data-field="focus"]`);
     const focus   = (focusEl?.innerText || '').trim();
-
-    // Get all poses in this day
-    const poses = Array.from(container.querySelectorAll('.ex-row')).map(row => ({
-      name: _text(row, 'name'),
-      hold: _text(row, 'hold'),
-      desc: _text(row, 'desc'),
-      demo: _text(row, 'demo'),
+    const poses   = Array.from(container.querySelectorAll('.ex-row')).map(row => ({
+      name: _text(row, 'name'), hold: _text(row, 'hold'),
+      desc: _text(row, 'desc'), demo: _text(row, 'demo'),
     }));
-
     result.schedule[dayKey] = { focus, poses };
   });
 
-  // For days NOT in DOM, preserve original data
   const origSchedule = yogaData?.schedule || {};
   Object.keys(origSchedule).forEach(dayKey => {
-    if (!result.schedule[dayKey]) {
-      result.schedule[dayKey] = origSchedule[dayKey];
-    }
+    if (!result.schedule[dayKey]) result.schedule[dayKey] = origSchedule[dayKey];
   });
 
   Store.setContent('exercises_yoga', result);
@@ -585,30 +670,38 @@ function activateEditing(container) {
 // EXERCISE EDITOR
 // ════════════════════════════════════════════════════════════════
 function renderExerciseEditor(moduleId, body) {
-  // Yoga uses progressive Day 1-90 schedule — use special renderer
-  if (moduleId === 'yoga') {
-    renderYogaProgressiveEditor(body);
-    return;
-  }
+  // Yoga uses progressive Day 1-90 — special renderer
+  if (moduleId === 'yoga') { renderYogaProgressiveEditor(body); return; }
+
   const days = getWeekDays();
+  const gymDayLabels = {
+    Monday:    'Monday — Chest 🫁',
+    Tuesday:   'Tuesday — Shoulders 🏋️',
+    Wednesday: 'Wednesday — Lats / Back 🦾',
+    Thursday:  'Thursday — Biceps 💪',
+    Friday:    'Friday — Triceps 🔱',
+    Saturday:  'Saturday — Legs / Squats 🦵',
+  };
   body.innerHTML = `
     <div style="font-size:13px;color:var(--text2);padding:0 16px 12px;line-height:1.5">
       ✏️ <strong>Tap any field</strong> to edit. Applies to all users after saving.
     </div>
     ${days.map(day => {
-      // Use APP_DATA_DEFAULT (immutable backup from data.js) as ground truth
-      // so Sheets sync can never wipe the default exercises
       const defaults   = window.APP_DATA_DEFAULT || window.APP_DATA;
       const appDefault = defaults.modules?.[moduleId]?.days?.[day] || [];
       const saved      = Store.getContent('exercises_' + moduleId);
       const savedDay   = saved?.days?.[day] || [];
-      // Only use Sheets saved version if admin explicitly added MORE exercises
       const exercises  = savedDay.length > appDefault.length ? savedDay : appDefault;
+      const isGym      = moduleId === 'gym';
+      const dayTitle   = isGym ? (gymDayLabels[day] || day) : ('📅 ' + day);
+      const dayBg      = isGym
+        ? 'linear-gradient(135deg,rgba(46,125,70,0.3),rgba(30,100,50,0.2))'
+        : 'rgba(46,125,70,0.15)';
       return `
         <div style="margin-bottom:8px">
-          <div style="padding:10px 16px;background:rgba(46,125,70,0.15);font-weight:700;font-size:14px;
-            display:flex;justify-content:space-between;align-items:center">
-            <span>📅 ${day}</span>
+          <div style="padding:10px 16px;background:${dayBg};font-weight:700;font-size:14px;
+            display:flex;justify-content:space-between;align-items:center;border-radius:10px 10px 0 0">
+            <span>${dayTitle}</span>
             <span style="font-size:12px;color:var(--text3)">${exercises.length} exercises</span>
           </div>
           <div data-day="${day}" style="padding:0 16px">
@@ -683,124 +776,15 @@ function _exerciseCard(ex, idx, day) {
     </div>`;
 }
 
-// ── YOGA PROGRESSIVE EDITOR ───────────────────────────────────────
-function renderYogaProgressiveEditor(body) {
-  const yogaData = (window.APP_DATA_DEFAULT || window.APP_DATA).modules?.yoga;
-  const saved    = Store.getContent('exercises_yoga') || {};
-  const schedule = saved.schedule || yogaData?.schedule || {};
-  const phases   = yogaData?.phases || [];
-
-  const allDays = Object.keys(schedule).sort((a, b) =>
-    parseInt(a.replace('Day ','')) - parseInt(b.replace('Day ',''))
-  );
-
-  body.innerHTML = `
-    <div style="font-size:13px;color:var(--text2);padding:0 16px 12px;line-height:1.5">
-      ✏️ <strong>Tap any field</strong> to edit yoga poses. Changes sync to all users after saving.
-      <br>📅 <strong>${allDays.length} progressive days</strong> — beginner to professional.
-    </div>
-    ${phases.map(phase => {
-      const phaseDays = allDays.filter(d => {
-        const n = parseInt(d.replace('Day ',''));
-        return n >= phase.from && n <= phase.to;
-      });
-      return `
-        <div style="margin-bottom:16px;">
-          <div style="padding:12px 16px;background:${phase.color}22;border:1px solid ${phase.color}44;
-            border-radius:10px;margin:0 16px 8px;display:flex;align-items:center;gap:10px">
-            <span style="width:10px;height:10px;border-radius:50%;background:${phase.color};flex-shrink:0"></span>
-            <span style="font-weight:700;font-size:14px;color:${phase.color}">${phase.label}</span>
-            <span style="font-size:12px;color:var(--text3);margin-left:auto">Days ${phase.from}–${phase.to}</span>
-          </div>
-          <div style="padding:0 16px">
-          ${phaseDays.map(dayKey => {
-            const dayData = schedule[dayKey] || {};
-            const poses   = dayData.poses || [];
-            return `
-              <div style="margin-bottom:6px;border:1px solid var(--border);border-radius:10px;overflow:hidden">
-                <div style="padding:10px 16px;background:rgba(103,58,183,0.15);
-                  display:flex;justify-content:space-between;align-items:center;cursor:pointer"
-                  onclick="toggleYogaDayEditor('${dayKey.replace(' ','')}')">
-                  <div>
-                    <span style="font-weight:700;font-size:13px;color:#ce93d8">${dayKey}</span>
-                    <span style="font-size:11px;color:var(--text3);margin-left:8px">${dayData.focus || ''}</span>
-                  </div>
-                  <span style="font-size:12px;color:var(--text3)">${poses.length} poses ▾</span>
-                </div>
-                <div id="yoga-day-editor-${dayKey.replace(' ','')}" style="display:none;padding:0 12px 8px">
-                  <div style="margin:8px 0 4px;">
-                    <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;margin-bottom:3px">Day Focus</div>
-                    <div class="editable" data-yoga-day="${dayKey}" data-field="focus" contenteditable="true"
-                      style="font-size:13px;font-weight:600;color:#ce93d8">${dayData.focus || ''}</div>
-                  </div>
-                  <div data-yoga-poses="${dayKey}">
-                    ${poses.map((pose, i) => _yogaPoseCard(pose, i, dayKey)).join('')}
-                  </div>
-                  <button class="add-exercise-btn" onclick="addYogaPose('${dayKey}')"
-                    style="border-color:rgba(103,58,183,0.4);color:#ce93d8">+ Add Pose to ${dayKey}</button>
-                </div>
-              </div>`;
-          }).join('')}
-          </div>
-        </div>`;
-    }).join('')}`;
-  activateEditing(body);
-}
-
-function toggleYogaDayEditor(dayKeyNoSpace) {
-  const el = document.getElementById('yoga-day-editor-' + dayKeyNoSpace);
-  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
-}
-
-function _yogaPoseCard(pose, idx, dayKey) {
-  return `
-    <div class="exercise-card ex-row" data-idx="${idx}" data-yoga-pose-day="${dayKey}"
-      style="margin:8px 0;position:relative;border-color:rgba(103,58,183,0.3)">
-      <button class="delete-ex-btn" onclick="this.closest('.ex-row').remove();markDirty()" title="Delete">✕</button>
-      <div class="exercise-body" style="padding:12px">
-        <div style="margin-bottom:8px">
-          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;margin-bottom:3px">Pose Name</div>
-          <div class="exercise-name editable" data-field="name" contenteditable="true">${pose.name || ''}</div>
-        </div>
-        <div style="margin-bottom:8px">
-          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;margin-bottom:3px">Hold / Duration</div>
-          <div class="editable" data-field="hold" contenteditable="true" style="font-weight:600;color:#ce93d8">${pose.hold || ''}</div>
-        </div>
-        <div style="margin-bottom:8px">
-          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;margin-bottom:3px">Description</div>
-          <div class="editable-block editable" data-field="desc" contenteditable="true"
-            style="font-size:13px;color:var(--text2);line-height:1.6">${pose.desc || ''}</div>
-        </div>
-        <div>
-          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;margin-bottom:3px">Demo Link</div>
-          <div class="editable" data-field="demo" contenteditable="true"
-            style="font-size:12px;color:var(--g5);word-break:break-all">${pose.demo || ''}</div>
-        </div>
-      </div>
-    </div>`;
-}
-
-function addYogaPose(dayKey) {
-  const container = document.querySelector(`[data-yoga-poses="${dayKey}"]`);
-  if (!container) return;
-  const div = document.createElement('div');
-  div.innerHTML = _yogaPoseCard({ name:'New Pose', hold:'60 sec', desc:'Enter description.', demo:'' }, 999, dayKey);
-  const card = div.firstElementChild;
-  activateEditing(card);
-  container.appendChild(card);
-  markDirty();
-  card.querySelector('[data-field="name"]')?.focus();
-}
-
 function addExercise(day) {
   const container = document.querySelector(`[data-day="${day}"]`);
   if (!container) return;
   const addBtn = container.querySelector('.add-exercise-btn');
   const div    = document.createElement('div');
-  const isHoldBased = AdminEdit.module === 'yoga' || AdminEdit.module === 'stretching';
+  const isHoldBased = AdminEdit.module === 'stretching';
   const newEx  = isHoldBased
-    ? { name: 'New Pose', hold: '30 sec', rounds: 1, desc: 'Enter description.', demo: '', image: AdminEdit.module === 'yoga' ? '🧘' : '🤸' }
-    : { name: 'New Exercise', sets: 3, reps: '10 reps', desc: 'Enter description.', demo: '', image: '' };
+    ? { name: 'New Stretch', hold: '30 sec', rounds: 1, desc: 'Enter description.', demo: '', image: '🤸' }
+    : { name: 'New Exercise', sets: 3, reps: '10 reps', desc: 'Enter description.', demo: '', image: '', _section: 'main' };
   div.innerHTML = _exerciseCard(newEx, 999, day);
   const card = div.firstElementChild;
   activateEditing(card);
