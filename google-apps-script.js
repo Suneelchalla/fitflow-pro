@@ -8,6 +8,12 @@
 // • googleLogin returns isGoogleUser + authType
 // ════════════════════════════════════════════════════════════════
 
+
+// LOCAL date helper (uses script timezone Asia/Calcutta, not UTC)
+function _ymdLocal(d) {
+  return Utilities.formatDate(d || new Date(), Session.getScriptTimeZone() || 'Asia/Calcutta', 'yyyy-MM-dd');
+}
+
 const SHEETS = {
   USERS:           'Users',
   LOGS:            'CompletionLog',
@@ -17,6 +23,7 @@ const SHEETS = {
   FEEDBACK:        'UserFeedback',
   CUSTOM_WORKOUTS: 'CustomWorkouts',
   PUSH_SUBS:       'PushSubscriptions',
+  ONBOARDING:      'UserOnboarding',
 };
 
 const COL = {
@@ -30,6 +37,35 @@ const RCOL = {
   DISTANCE: 4, DURATION: 5, PACE: 6, PLAN_TYPE: 7,
   TIMESTAMP: 8, ACTIVITY_TYPE: 9, COORDS_JSON: 10,
 };
+
+// ── DATE HELPERS ──────────────────────────────────────────────────
+function toYMD(v) {
+  if (!v) return '';
+  if (v instanceof Date) {
+    if (isNaN(v.getTime())) return '';
+    const y = v.getFullYear();
+    const m = ('0' + (v.getMonth() + 1)).slice(-2);
+    const d = ('0' + v.getDate()).slice(-2);
+    return y + '-' + m + '-' + d;
+  }
+  const s = v.toString();
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return s;
+  const yy = d.getFullYear();
+  const mm = ('0' + (d.getMonth() + 1)).slice(-2);
+  const dd = ('0' + d.getDate()).slice(-2);
+  return yy + '-' + mm + '-' + dd;
+}
+
+function toISOStr(v) {
+  if (!v) return '';
+  if (v instanceof Date) {
+    if (isNaN(v.getTime())) return '';
+    return v.toISOString();
+  }
+  return v.toString();
+}
 
 function getSheet(name) {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -77,6 +113,10 @@ function doGet(e) {
       case 'getAllCustomWorkouts':  result = getAllCustomWorkouts();                                      break;
       case 'getHydrationLogs':     result = getHydrationLogs(p.userId);                                 break;
       case 'getAnnouncement':      result = { success:true, announcement:getAnnouncement() };            break;
+      case 'getOnboarding':        result = getOnboarding(p.userId);                                       break;
+      case 'getAllOnboarding':     result = { success:true, onboardings:getAllOnboarding() };              break;
+      case 'getAdminPushLog':      result = getAdminPushLog();                                             break;
+      case 'getSubscribedDevices': result = getSubscribedDevices();                                        break;
       default:                     result = { success:false, error:'Unknown action: ' + p.action };
     }
   } catch(err) { result = { success:false, error:err.message }; }
@@ -109,6 +149,8 @@ function doPost(e) {
       case 'saveCustomWorkout':      result = saveCustomWorkout(body);                    break;
       case 'deleteCustomWorkout':    result = deleteCustomWorkout(body);                  break;
       case 'savePushSubscription':   result = savePushSubscription(body);                 break;
+      case 'saveOnboarding':         result = saveOnboarding(body);                       break;
+      case 'sendAdminPush':          result = sendCustomPush(body);                       break;
       case 'removePushSubscription': result = removePushSubscription(body);               break;
       case 'saveHydrationLog':       result = saveHydrationLog(body);                     break;
       case 'logHydration':           result = saveHydrationLog(body);                     break;
@@ -146,7 +188,7 @@ function fixExistingSheet() {
       sh.getRange(i+1,COL.IS_FIRST_LOGIN+1).setValue(!row[COL.PASSWORD]);
     }
     if (!row[COL.CREATED_DATE]||!row[COL.CREATED_DATE].toString().trim()) {
-      sh.getRange(i+1,COL.CREATED_DATE+1).setValue(new Date().toISOString().split('T')[0]);
+      sh.getRange(i+1,COL.CREATED_DATE+1).setValue(_ymdLocal());
     }
   }
 
@@ -154,10 +196,99 @@ function fixExistingSheet() {
   const hasAdmin = fresh.slice(1).some(r => (r[COL.ROLE]||'').toString().toUpperCase()==='ADMIN');
   if (!hasAdmin) {
     sh.appendRow(['u_admin','Admin User','admin@fitflow.com','admin123','',false,'ADMIN','ACTIVE',
-      new Date().toISOString().split('T')[0],'System','']);
+      _ymdLocal(),'System','']);
   }
   SpreadsheetApp.flush();
   Logger.log('✅ Sheet fixed! Now run setupSheets() and migrateRunningLog(), then redeploy.');
+}
+
+
+// ════════════════════════════════════════════════════════════════
+// CLEANUP — Remove duplicate completion logs
+// Run this ONCE from Apps Script editor: select function → run
+// ════════════════════════════════════════════════════════════════
+function cleanupDuplicateLogs() {
+  const sh = getSheet(SHEETS.LOGS);
+  const data = sh.getDataRange().getValues();
+  if (data.length < 2) {
+    Logger.log('No logs to clean.');
+    return;
+  }
+  const header = data[0];
+  const seen = {};
+  const keepRows = [header];
+  let duplicates = 0;
+  let dateFixed = 0;
+  for (let i = 1; i < data.length; i++) {
+    const r = data[i].slice(); // copy
+    // Re-derive date from timestamp if available (fixes UTC bug)
+    if (r[6]) {
+      const tsDate = new Date(r[6]);
+      if (!isNaN(tsDate.getTime())) {
+        const localDate = tsDate.getFullYear() + '-' +
+          ('0' + (tsDate.getMonth() + 1)).slice(-2) + '-' +
+          ('0' + tsDate.getDate()).slice(-2);
+        const oldDate = toYMD(r[5]);
+        if (oldDate !== localDate) {
+          r[5] = localDate;
+          dateFixed++;
+        }
+      }
+    }
+    // Dedup by userId+module+date (NO day field)
+    const key = (r[1]||'') + '|' + (r[3]||'') + '|' + toYMD(r[5]);
+    if (seen[key]) {
+      duplicates++;
+    } else {
+      seen[key] = true;
+      keepRows.push(r);
+    }
+  }
+  if (duplicates === 0 && dateFixed === 0) {
+    Logger.log('No duplicates or date issues found. Already clean.');
+    return;
+  }
+  sh.clearContents();
+  sh.getRange(1, 1, keepRows.length, header.length).setValues(keepRows);
+  SpreadsheetApp.flush();
+  Logger.log('✅ Removed ' + duplicates + ' duplicate(s) and fixed ' + dateFixed + ' date(s). ' + (keepRows.length - 1) + ' unique entries remain.');
+}
+
+function cleanupDuplicateRunLogs() {
+  const sh = getSheet(SHEETS.RUN_LOGS);
+  const data = sh.getDataRange().getValues();
+  if (data.length < 2) {
+    Logger.log('No run logs to clean.');
+    return;
+  }
+  const header = data[0];
+  const seenIds = {};
+  const seenNear = {};
+  const keepRows = [header];
+  let duplicates = 0;
+  for (let i = 1; i < data.length; i++) {
+    const r = data[i];
+    const id = (r[0]||'').toString();
+    if (id && seenIds[id]) { duplicates++; continue; }
+    // Near-identical: user + date + distance(±0.01) + duration(±5s)
+    const userId = (r[1]||'').toString();
+    const date   = toYMD(r[3]);
+    const dist   = parseFloat(r[4])||0;
+    const dur    = parseInt(r[5])||0;
+    const nearKey = userId + '|' + date + '|' + dist.toFixed(2) + '|' + Math.round(dur/5);
+    if (seenNear[nearKey]) { duplicates++; continue; }
+    if (id) seenIds[id] = true;
+    seenNear[nearKey] = true;
+    keepRows.push(r);
+  }
+  if (duplicates === 0) {
+    Logger.log('No duplicates found in RunningLog. Already clean.');
+    return;
+  }
+  sh.clearContents();
+  sh.getRange(1, 1, keepRows.length, header.length).setValues(keepRows);
+  SpreadsheetApp.flush();
+  Logger.log('✅ Removed ' + duplicates + ' duplicate run log(s). ' + (keepRows.length - 1) + ' unique entries remain.');
 }
 
 function setupSheets() {
@@ -166,7 +297,7 @@ function setupSheets() {
     userSh.appendRow(['UserID','Name','Email','Password','TempPassword','IsFirstLogin','Role','Status','CreatedDate','CreatedBy','LastLogin']);
     styleHeader(userSh,11);
     userSh.appendRow(['u_admin','Admin User','admin@fitflow.com','admin123','',false,'ADMIN','ACTIVE',
-      new Date().toISOString().split('T')[0],'System','']);
+      _ymdLocal(),'System','']);
   }
   _ensureSheet(SHEETS.LOGS,           ['LogID','UserID','UserEmail','Module','Day','Date','Timestamp']);
   _ensureSheet(SHEETS.RUN_LOGS,       ['LogID','UserID','UserEmail','Date','Distance_km','Duration_sec','Pace_min_km','PlanType','Timestamp','ActivityType','CoordsJSON','Title','Description']);
@@ -234,8 +365,14 @@ function handleLogin(email, password) {
       return { success:false, error:'Invalid email or password.' };
     const firstLoginRaw = row[COL.IS_FIRST_LOGIN];
     const isFirstLogin  = firstLoginRaw===true||String(firstLoginRaw).toUpperCase().trim()==='TRUE';
-    sh.getRange(i+1,COL.LAST_LOGIN+1).setValue(new Date().toISOString());
-    SpreadsheetApp.flush();
+    // Update LAST_LOGIN — wrap in try/catch so login never fails over write errors
+    try {
+      sh.getRange(i+1,COL.LAST_LOGIN+1).setValue(new Date());
+      SpreadsheetApp.flush();
+    } catch(e) {
+      // Don't fail login just because we can't update last-login timestamp
+      Logger.log('LAST_LOGIN update skipped: ' + e.message);
+    }
     const userId      = (row[COL.ID]        ||'').toString();
     const createdBy   = (row[COL.CREATED_BY] ||'').toString().toLowerCase();
     const isGoogleUser = userId.startsWith('u_g_') || createdBy === 'google';
@@ -264,8 +401,12 @@ function googleLogin(body) {
     const rowStatus = (row[COL.STATUS]||'ACTIVE').toString().toUpperCase().trim();
     if (rowEmail !== email.toLowerCase().trim()) continue;
     if (rowStatus === 'INACTIVE') return { success:false, error:'Account deactivated. Contact admin.' };
-    sh.getRange(i+1,COL.LAST_LOGIN+1).setValue(new Date().toISOString());
-    SpreadsheetApp.flush();
+    try {
+      sh.getRange(i+1,COL.LAST_LOGIN+1).setValue(new Date());
+      SpreadsheetApp.flush();
+    } catch(e) {
+      Logger.log('LAST_LOGIN update skipped: ' + e.message);
+    }
     const userId    = (row[COL.ID]        ||'').toString();
     const createdBy = (row[COL.CREATED_BY] ||'').toString().toLowerCase();
     return { success:true, user:{
@@ -283,7 +424,7 @@ function googleLogin(body) {
   const newId = 'u_g_' + Date.now();
   const displayName = name || email.split('@')[0];
   sh.appendRow([newId, displayName, email.toLowerCase().trim(), '', '', false,
-    'USER', 'ACTIVE', new Date().toISOString().split('T')[0], 'Google', new Date().toISOString()]);
+    'USER', 'ACTIVE', _ymdLocal(), 'Google', new Date().toISOString()]);
   SpreadsheetApp.flush();
   return { success:true, user:{
     id:newId, name:displayName, email:email.toLowerCase().trim(),
@@ -363,7 +504,7 @@ function createUser(body) {
   }
   const id = 'u_'+Date.now();
   sh.appendRow([id, name.trim(), email.toLowerCase().trim(), '', tempPassword, true,
-    (role||'USER').toUpperCase(), 'ACTIVE', new Date().toISOString().split('T')[0], createdBy||'Admin', '']);
+    (role||'USER').toUpperCase(), 'ACTIVE', _ymdLocal(), createdBy||'Admin', '']);
   SpreadsheetApp.flush();
   return { success:true, userId:id };
 }
@@ -405,13 +546,22 @@ function deleteUser(body) {
 function logCompletion(body) {
   const sh = getSheet(SHEETS.LOGS);
   ensureHeaders(sh,['LogID','UserID','UserEmail','Module','Day','Date','Timestamp']);
+  // Dedupe: don't add if same userId + module + date already exists (NO day - causes false negatives)
+  const data = sh.getDataRange().getValues();
+  const userId = (body.userId||'').toString();
+  const module = (body.module||'').toString();
+  const day    = (body.day   ||'').toString();
+  const date   = toYMD(body.date) || (body.date||'').toString();
+  for (let i = 1; i < data.length; i++) {
+    if ((data[i][1]||'').toString() === userId &&
+        (data[i][3]||'').toString() === module &&
+        toYMD(data[i][5]) === date) {
+      return { success:true, duplicate:true };
+    }
+  }
   sh.appendRow([
     'log_'+Date.now(),
-    body.userId  || '',
-    body.email   || '',
-    body.module  || '',
-    body.day     || '',
-    body.date    || '',
+    userId, body.email || '', module, day, date,
     new Date().toISOString(),
   ]);
   SpreadsheetApp.flush();
@@ -432,9 +582,13 @@ function getAllLogs() {
   const data = sh.getDataRange().getValues();
   if (data.length<2) return [];
   return data.slice(1).map(r => ({
-    id:(r[0]||'').toString(), userId:(r[1]||'').toString(), email:(r[2]||'').toString(),
-    module:(r[3]||'').toString(), day:(r[4]||'').toString(),
-    date:(r[5]||'').toString(), timestamp:(r[6]||'').toString(),
+    id:        (r[0]||'').toString(),
+    userId:    (r[1]||'').toString(),
+    email:     (r[2]||'').toString(),
+    module:    (r[3]||'').toString(),
+    day:       (r[4]||'').toString(),
+    date:      toYMD(r[5]),
+    timestamp: toISOStr(r[6]),
   }));
 }
 
@@ -444,15 +598,28 @@ function getAllLogs() {
 function logRun(body) {
   const sh = getSheet(SHEETS.RUN_LOGS);
   ensureHeaders(sh,['LogID','UserID','UserEmail','Date','Distance_km','Duration_sec','Pace_min_km','PlanType','Timestamp','ActivityType','CoordsJSON','Title','Description']);
+  // Dedupe: don't append if same LogID already exists (frontend retry safety)
+  const data   = sh.getDataRange().getValues();
+  const newId  = (body.id || ('run_'+Date.now())).toString();
+  const userId = (body.userId||'').toString();
+  for (let i = 1; i < data.length; i++) {
+    if ((data[i][0]||'').toString() === newId) {
+      return { success:true, duplicate:true };
+    }
+    // Also dedupe near-identical runs: same user + date + distance within 0.01km (covers double-clicks)
+    if ((data[i][1]||'').toString() === userId &&
+        toYMD(data[i][3]) === toYMD(body.date) &&
+        Math.abs((parseFloat(data[i][4])||0) - (parseFloat(body.distance)||0)) < 0.01 &&
+        Math.abs((parseInt(data[i][5])||0)   - (parseInt(body.duration)||0))   < 5) {
+      return { success:true, duplicate:true };
+    }
+  }
   let coordsJson = '[]';
   if (Array.isArray(body.coords) && body.coords.length) {
     coordsJson = JSON.stringify(body.coords.map(c => ({ lat:c.lat, lon:c.lon })));
   }
   sh.appendRow([
-    body.id || ('run_'+Date.now()),
-    body.userId       || '',
-    body.email        || '',
-    body.date         || '',
+    newId, userId, body.email || '', toYMD(body.date) || (body.date||''),
     body.distance     || 0,
     body.duration     || 0,
     body.pace         || 0,
@@ -485,12 +652,12 @@ function getUserRunLogs(userId) {
         id:           (r[RCOL.LOG_ID]    ||'').toString(),
         userId:       (r[RCOL.USER_ID]   ||'').toString(),
         email:        (r[RCOL.USER_EMAIL]||'').toString(),
-        date:         (r[RCOL.DATE]      ||'').toString(),
+        date:         toYMD(r[RCOL.DATE]),
         distance:     parseFloat(r[RCOL.DISTANCE]) || 0,
         duration:     parseInt(r[RCOL.DURATION])   || 0,
         pace:         parseFloat(r[RCOL.PACE])     || 0,
         planType:     (r[RCOL.PLAN_TYPE] ||'Free Run').toString(),
-        timestamp:    (r[RCOL.TIMESTAMP] ||'').toString(),
+        timestamp:    toISOStr(r[RCOL.TIMESTAMP]),
         activityType: actCol >= 0 ? (r[actCol]||'run').toString() : 'run',
         title:        titleCol >= 0 ? (r[titleCol]||'').toString() : '',
         description:  descCol  >= 0 ? (r[descCol] ||'').toString() : '',
@@ -506,15 +673,24 @@ function getAllRunLogs() {
   const header    = data[0].map(h => (h||'').toString().trim().toLowerCase());
   const actCol    = header.indexOf('activitytype');
   const coordsCol = header.indexOf('coordsjson');
+  const titleCol  = header.indexOf('title');
+  const descCol   = header.indexOf('description');
   return data.slice(1).map(r => {
     let coords = [];
     if (coordsCol >= 0 && r[coordsCol]) { try { coords = JSON.parse(r[coordsCol]); } catch {} }
     return {
-      id:(r[0]||'').toString(), userId:(r[1]||'').toString(), email:(r[2]||'').toString(),
-      date:(r[3]||'').toString(), distance:parseFloat(r[4])||0, duration:parseInt(r[5])||0,
-      pace:parseFloat(r[6])||0, planType:(r[7]||'Free Run').toString(),
-      timestamp:(r[8]||'').toString(),
+      id:           (r[0]||'').toString(),
+      userId:       (r[1]||'').toString(),
+      email:        (r[2]||'').toString(),
+      date:         toYMD(r[3]),
+      distance:     parseFloat(r[4])||0,
+      duration:     parseInt(r[5])||0,
+      pace:         parseFloat(r[6])||0,
+      planType:     (r[7]||'Free Run').toString(),
+      timestamp:    toISOStr(r[8]),
       activityType: actCol >= 0 ? (r[actCol]||'run').toString() : 'run',
+      title:        titleCol >= 0 ? (r[titleCol]||'').toString() : '',
+      description:  descCol  >= 0 ? (r[descCol] ||'').toString() : '',
       coords,
     };
   });
@@ -555,6 +731,8 @@ function getCustomWorkouts(userId) {
     .map(r => {
       let exercises = [];
       try { exercises = JSON.parse(r[4]||'[]'); } catch {}
+      let meta = {};
+      try { meta = JSON.parse(r[8]||'{}'); } catch {}
       return {
         id:          (r[0]||'').toString(),
         userId:      (r[1]||'').toString(),
@@ -563,6 +741,11 @@ function getCustomWorkouts(userId) {
         exercises,
         createdDate: (r[5]||'').toString(),
         updatedDate: (r[6]||'').toString(),
+        category:    meta.category   || 'Strength',
+        goal:        meta.goal       || 'General Fitness',
+        difficulty:  meta.difficulty || 'Intermediate',
+        days:        meta.days       || [],
+        notes:       meta.notes      || '',
       };
     });
   return { success:true, workouts };
@@ -580,6 +763,8 @@ function getAllCustomWorkouts() {
     .map(r => {
       let exercises = [];
       try { exercises = JSON.parse(r[4]||'[]'); } catch {}
+      let meta = {};
+      try { meta = JSON.parse(r[8]||'{}'); } catch {}
       return {
         id:          (r[0]||'').toString(),
         userId:      (r[1]||'').toString(),
@@ -588,6 +773,11 @@ function getAllCustomWorkouts() {
         exercises,
         createdDate: (r[5]||'').toString(),
         updatedDate: (r[6]||'').toString(),
+        category:    meta.category   || 'Strength',
+        goal:        meta.goal       || 'General Fitness',
+        difficulty:  meta.difficulty || 'Intermediate',
+        days:        meta.days       || [],
+        notes:       meta.notes      || '',
       };
     });
   return { success:true, workouts };
@@ -595,17 +785,26 @@ function getAllCustomWorkouts() {
 
 function saveCustomWorkout(body) {
   const sh   = getSheet(SHEETS.CUSTOM_WORKOUTS);
-  ensureHeaders(sh,['WorkoutID','UserID','UserEmail','Name','ExercisesJSON','CreatedDate','UpdatedDate','Active']);
+  ensureHeaders(sh,['WorkoutID','UserID','UserEmail','Name','ExercisesJSON','CreatedDate','UpdatedDate','Active','MetaJSON']);
+  // Pack structured fields into a single MetaJSON column for forward compatibility
+  const meta = JSON.stringify({
+    category:   body.category   || 'Strength',
+    goal:       body.goal       || 'General Fitness',
+    difficulty: body.difficulty || 'Intermediate',
+    days:       body.days       || [],
+    notes:      body.notes      || '',
+  });
   const data = sh.getDataRange().getValues();
   for (let i=1;i<data.length;i++) {
     if ((data[i][0]||'').toString()===body.id.toString() &&
         (data[i][1]||'').toString()===body.userId.toString()) {
-      sh.getRange(i+1,1,1,8).setValues([[
+      sh.getRange(i+1,1,1,9).setValues([[
         body.id, body.userId, body.email||'', body.name,
         JSON.stringify(body.exercises||[]),
         body.createdDate||'',
-        body.updatedDate||new Date().toISOString().split('T')[0],
+        body.updatedDate||_ymdLocal(),
         true,
+        meta,
       ]]);
       SpreadsheetApp.flush();
       return { success:true, updated:true };
@@ -614,9 +813,10 @@ function saveCustomWorkout(body) {
   sh.appendRow([
     body.id, body.userId, body.email||'', body.name,
     JSON.stringify(body.exercises||[]),
-    body.createdDate||new Date().toISOString().split('T')[0],
-    body.updatedDate||new Date().toISOString().split('T')[0],
+    body.createdDate||_ymdLocal(),
+    body.updatedDate||_ymdLocal(),
     true,
+    meta,
   ]);
   SpreadsheetApp.flush();
   return { success:true, created:true };
@@ -688,7 +888,7 @@ function getAnnouncement() {
   const sh   = getSheet('Announcements');
   const data = sh.getDataRange().getValues();
   if (data.length<2) return null;
-  const today = new Date().toISOString().split('T')[0];
+  const today = _ymdLocal();
   for (let i = data.length-1; i >= 1; i--) {
     const r = data[i];
     const startDate = (r[3]||'').toString();
@@ -923,30 +1123,126 @@ function syncUserData(body) {
   return { success:true, synced };
 }
 
+
+
 // ════════════════════════════════════════════════════════════════
-// PUSH NOTIFICATIONS — Pure VAPID (no Firebase)
+// USER ONBOARDING — store goal, modules, age, weight, height, etc.
+// ════════════════════════════════════════════════════════════════
+
+function saveOnboarding(body) {
+  if (!body.userId) return { success:false, error:'userId required' };
+  const sh = getSheet(SHEETS.ONBOARDING);
+  ensureHeaders(sh, [
+    'UserID','Email','Goal','Modules','Age','Weight','Height',
+    'Gender','FitnessLevel','SubmittedAt','UpdatedAt'
+  ]);
+
+  const data = sh.getDataRange().getValues();
+  const userId = body.userId.toString();
+  const modulesStr = Array.isArray(body.modules) ? body.modules.join(',') : (body.modules||'');
+
+  // Find existing row for this user
+  let existingRow = -1;
+  for (let i = 1; i < data.length; i++) {
+    if ((data[i][0]||'').toString() === userId) { existingRow = i + 1; break; }
+  }
+
+  const row = [
+    userId,
+    body.email || '',
+    body.goal || '',
+    modulesStr,
+    body.age || '',
+    body.weight || '',
+    body.height || '',
+    body.gender || '',
+    body.fitnessLevel || '',
+    existingRow > 0 ? data[existingRow-1][9] || new Date().toISOString() : new Date().toISOString(),
+    new Date().toISOString(),
+  ];
+
+  if (existingRow > 0) {
+    sh.getRange(existingRow, 1, 1, row.length).setValues([row]);
+  } else {
+    sh.appendRow(row);
+  }
+  SpreadsheetApp.flush();
+  return { success:true };
+}
+
+function getOnboarding(userId) {
+  const sh = getSheet(SHEETS.ONBOARDING);
+  ensureHeaders(sh, [
+    'UserID','Email','Goal','Modules','Age','Weight','Height',
+    'Gender','FitnessLevel','SubmittedAt','UpdatedAt'
+  ]);
+  const data = sh.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if ((data[i][0]||'').toString() === (userId||'').toString()) {
+      return {
+        success:      true,
+        onboarding:  _onboardingRow(data[i]),
+      };
+    }
+  }
+  return { success:true, onboarding:null };
+}
+
+function getAllOnboarding() {
+  const sh = getSheet(SHEETS.ONBOARDING);
+  ensureHeaders(sh, [
+    'UserID','Email','Goal','Modules','Age','Weight','Height',
+    'Gender','FitnessLevel','SubmittedAt','UpdatedAt'
+  ]);
+  const data = sh.getDataRange().getValues();
+  if (data.length < 2) return [];
+  return data.slice(1).map(_onboardingRow);
+}
+
+function _onboardingRow(r) {
+  return {
+    userId:       (r[0]||'').toString(),
+    email:        (r[1]||'').toString(),
+    goal:         (r[2]||'').toString(),
+    modules:      (r[3]||'').toString().split(',').map(m => m.trim()).filter(Boolean),
+    age:          r[4] || null,
+    weight:       r[5] || null,
+    height:       r[6] || null,
+    gender:       (r[7]||'').toString(),
+    fitnessLevel: (r[8]||'').toString(),
+    submittedAt:  toISOStr(r[9]) || '',
+    updatedAt:    toISOStr(r[10]) || '',
+  };
+}
+
+// ════════════════════════════════════════════════════════════════
+// PUSH NOTIFICATIONS — OneSignal REST API
+//
+// SETUP: In Apps Script Project Settings → Script Properties, add:
+//   ONESIGNAL_APP_ID       = 5dfd18d7-bde4-4f26-a478-0f522b2f299f
+//   ONESIGNAL_REST_API_KEY = <your REST API key from OneSignal Settings>
 // ════════════════════════════════════════════════════════════════
 var DAILY_MESSAGES = [
-  { title:'Rise & Grind! 🌅',         body:"Your muscles called — they're bored. Time to fix that! 💪" },
-  { title:'Good Morning Champion! 🏆', body:"The only workout you'll regret is the one you skipped! 😤" },
-  { title:'Wakey Wakey! ⏰',           body:"Your future self is at the gym waiting. Don't keep them waiting! 🏃" },
-  { title:'Morning Motivation! ☀️',    body:"Coffee is great. But endorphins? Free and hit harder! 😂" },
-  { title:"Let's GO! 🚀",              body:"Your body is a temple. Today we're doing renovations. 🔨💪" },
-  { title:'Daily Check-In! 📋',        body:"Cardio? Yoga? Running? Your app is ready when you are! 🎯" },
-  { title:'6 AM Wake Up Call! 📱',     body:"The alarm rang. Your excuses are still sleeping. YOU don't have to be! 🌟" },
-  { title:'Morning Legend! 🦁',        body:"Lions don't skip leg day. Be the lion. 🦁💪" },
-  { title:'Rise & Shine! ✨',          body:"Yesterday you said tomorrow. TODAY IS THAT TOMORROW. GO! 🏃‍♂️" },
-  { title:'Good Morning! 🌄',          body:"Your competition woke up at 5 AM. But you're here now — keep going! 💪" },
-  { title:'Move Your Body! 🕺',        body:"Muscles are like WiFi. Use them or the connection gets weak! 📶💪" },
-  { title:'Morning Champion! 🥇',      body:"Progress not perfection. One workout at a time. You've got this! 🌟" },
-  { title:'Time to Sweat! 😅',         body:"Sweat is just your fat crying. Make it cry today! 😂🔥" },
-  { title:'New Day, New Gains! 💪',    body:"Yesterday's soreness is today's strength. What are you building? 🏗️" },
-  { title:'Morning Warrior! ⚔️',       body:"Warriors don't wait for motivation. They BECOME it. Let's GO! 🔥" },
-  { title:'Daily Dose of Awesome! 💊', body:"Side effects: confidence, energy, better sleep, happiness. Worth it! 😁" },
-  { title:'Strength Incoming! 💪',     body:"Every rep is a vote for the person you want to become. Vote today! 🗳️" },
-  { title:'No Excuses Today! 🚫',      body:"Too tired? Start with 5 minutes. Too busy? You're reading this! 😉" },
-  { title:'Midweek Push! 💥',          body:"Halfway through the week. Don't slow down now! 🏁" },
-  { title:'Weekend Warrior! 🏕️',       body:"No work today? Perfect — more energy for your workout! 💪" },
+  { title: '🌅 Rise & Grind!',          body: "Your muscles called — they're bored. Time to fix that! 💪" },
+  { title: '🏆 Good Morning Champion!', body: "The only workout you'll regret is the one you skipped! 🔥" },
+  { title: '⏰ Wakey Wakey!',              body: "Your future self is at the gym waiting. Don't keep them waiting! 🏃" },
+  { title: '☀️ Morning Motivation!', body: "Coffee is great. But endorphins? Free and hit harder! ☕💪" },
+  { title: '🚀 Let\'s GO!',             body: "Your body is a temple. Today we're doing renovations. 🔨💪" },
+  { title: '📋 Daily Check-In!',        body: "Cardio? Yoga? Running? Your app is ready when you are! 🎯" },
+  { title: '📱 6 AM Wake Up Call!',     body: "The alarm rang. Your excuses are still sleeping. YOU don't have to be! ⚡" },
+  { title: '🦁 Morning Legend!',        body: "Lions don't skip leg day. Be the lion. 💪" },
+  { title: '✨ Rise & Shine!',             body: "Yesterday you said tomorrow. TODAY IS THAT TOMORROW. GO! 🏃" },
+  { title: '🌄 Good Morning!',          body: "Your competition woke up at 5 AM. But you're here now — keep going! 💪" },
+  { title: '🕺 Move Your Body!',        body: "Muscles are like WiFi. Use them or the connection gets weak! 📶" },
+  { title: '🥇 Morning Champion!',      body: "Progress not perfection. One workout at a time. You've got this! 🌟" },
+  { title: '😅 Time to Sweat!',         body: "Sweat is just your fat crying. Make it cry today! 🔥" },
+  { title: '💪 New Day, New Gains!',    body: "Yesterday's soreness is today's strength. What are you building? 🏗️" },
+  { title: '⚔️ Morning Warrior!',    body: "Warriors don't wait for motivation. They BECOME it. Let's GO! 🔥" },
+  { title: '💊 Daily Dose of Awesome!', body: "Side effects: confidence, energy, better sleep, happiness. Worth it! 😁" },
+  { title: '💪 Strength Incoming!',     body: "Every rep is a vote for the person you want to become. Vote today! 🗳️" },
+  { title: '🚫 No Excuses Today!',      body: "Too tired? Start with 5 minutes. Too busy? You're reading this! 😉" },
+  { title: '💥 Midweek Push!',          body: "Halfway through the week. Don't slow down now! 🏁" },
+  { title: '🏕️ Weekend Warrior!', body: "No work today? Perfect — more energy for your workout! 💪" },
 ];
 
 function getTodaysMessage() {
@@ -954,76 +1250,394 @@ function getTodaysMessage() {
   return DAILY_MESSAGES[day % DAILY_MESSAGES.length];
 }
 
-function sendDailyPushNotifications() {
-  var props   = PropertiesService.getScriptProperties();
-  var privKey = props.getProperty('VAPID_PRIVATE_KEY');
-  var pubKey  = props.getProperty('VAPID_PUBLIC_KEY');
-  var subject = props.getProperty('VAPID_SUBJECT') || 'mailto:admin@fitflow.com';
-  if (!privKey||!pubKey) { Logger.log('VAPID keys not set.'); return; }
-  var subs = getAllActiveSubscriptions();
-  if (!subs.length) { Logger.log('No subscribers.'); return; }
-  var msg = getTodaysMessage();
-  var success = 0, fail = 0, expired = [];
-  subs.forEach(function(sub) {
-    var result = _sendWebPush(sub, msg, privKey, pubKey, subject);
-    if (result.success) { success++; }
-    else { fail++; if (result.expired) expired.push(sub.endpoint); Logger.log('Push failed: '+sub.email+' — '+result.error); }
-  });
-  if (expired.length) _cleanupExpired(expired);
-  Logger.log('Push done — sent: '+success+', failed: '+fail+' of '+subs.length);
-}
 
-function _sendWebPush(sub, msg, vapidPrivKey, vapidPubKey, vapidSubject) {
+
+
+// Get list of subscription IDs that are currently subscribed (most reliable targeting)
+
+
+// DEBUG — dump raw player data so we can see what OneSignal actually returns
+function debugListAllPlayers() {
+  var props  = PropertiesService.getScriptProperties();
+  var appId  = props.getProperty('ONESIGNAL_APP_ID');
+  var apiKey = props.getProperty('ONESIGNAL_REST_API_KEY');
+  var url = 'https://api.onesignal.com/players?app_id=' + appId + '&limit=300';
   try {
-    var endpoint = sub.endpoint;
-    var origin   = _getOrigin(endpoint);
-    var now      = Math.floor(Date.now()/1000);
-    var header   = _b64url(Utilities.newBlob(JSON.stringify({typ:'JWT',alg:'ES256'})).getBytes());
-    var payload  = _b64url(Utilities.newBlob(JSON.stringify({aud:origin,exp:now+43200,sub:vapidSubject})).getBytes());
-    var toSign   = header+'.'+payload;
-    var privBytes= _b64urlDecode(vapidPrivKey);
-    var sigBytes = Utilities.computeHmacSha256Signature(toSign, privBytes);
-    var jwt      = toSign+'.'+_b64url(sigBytes);
-    var payload_json = JSON.stringify({
-      title:msg.title, body:msg.body, tag:'fitflow-daily', renotify:true,
-      vibrate:[200,100,200], data:{url:'/'},
-      actions:[{action:'open',title:"Let's Go! 💪"},{action:'dismiss',title:'Later'}],
-    });
-    var res = UrlFetchApp.fetch(endpoint, {
-      method:'POST',
-      headers:{
-        'Authorization':'vapid t='+jwt+', k='+vapidPubKey,
-        'Content-Type':'application/json',
-        'TTL':'86400', 'Urgency':'normal',
-      },
-      payload:payload_json,
-      muteHttpExceptions:true,
+    var res = UrlFetchApp.fetch(url, {
+      method: 'get',
+      headers: { 'Authorization': 'Basic ' + apiKey },
+      muteHttpExceptions: true,
     });
     var code = res.getResponseCode();
-    if (code>=200&&code<300) return { success:true };
-    if (code===404||code===410) return { success:false, expired:true, error:'Endpoint gone ('+code+')' };
-    return { success:false, error:'HTTP '+code+': '+res.getContentText().substring(0,200) };
+    Logger.log('HTTP ' + code);
+    var body = res.getContentText();
+    Logger.log('Raw body length: ' + body.length);
+    if (code !== 200) {
+      Logger.log('Error response: ' + body.substring(0, 500));
+      return;
+    }
+    var data = JSON.parse(body);
+    var players = data.players || [];
+    Logger.log('Total players: ' + players.length);
+    Logger.log('============================');
+    players.forEach(function(p, i) {
+      Logger.log('Player #' + (i+1) + ':');
+      Logger.log('  id: ' + p.id);
+      Logger.log('  device_os: ' + p.device_os);
+      Logger.log('  device_model: ' + p.device_model);
+      Logger.log('  device_type: ' + p.device_type);
+      Logger.log('  notification_types: ' + p.notification_types);
+      Logger.log('  invalid_identifier: ' + p.invalid_identifier);
+      Logger.log('  identifier (token): ' + (p.identifier ? p.identifier.substring(0, 30) + '...' : 'null'));
+      Logger.log('  ALL FIELDS: ' + JSON.stringify(p).substring(0, 800));
+      Logger.log('  ---');
+    });
+  } catch (e) {
+    Logger.log('Error: ' + e.message);
+  }
+}
+
+
+
+// Returns list of subscribed devices with user info attached (for admin UI)
+function getSubscribedDevices() {
+  var props  = PropertiesService.getScriptProperties();
+  var appId  = props.getProperty('ONESIGNAL_APP_ID');
+  var apiKey = props.getProperty('ONESIGNAL_REST_API_KEY');
+  if (!appId || !apiKey) return { success:false, error:'Missing OneSignal credentials' };
+
+  try {
+    var url = 'https://api.onesignal.com/players?app_id=' + appId + '&limit=300';
+    var res = UrlFetchApp.fetch(url, {
+      method: 'get',
+      headers: { 'Authorization': 'Basic ' + apiKey },
+      muteHttpExceptions: true,
+    });
+    if (res.getResponseCode() !== 200) {
+      return { success:false, error:'HTTP ' + res.getResponseCode() };
+    }
+    var data = JSON.parse(res.getContentText());
+    var players = data.players || [];
+
+    // Build user lookup
+    var users = getAllUsers() || [];
+    var userByExtId = {};
+    users.forEach(function(u) {
+      if (u.id) userByExtId[u.id] = u;
+    });
+
+    // Filter and enrich
+    var devices = players
+      .filter(function(p) { return p.invalid_identifier !== true && p.identifier; })
+      .map(function(p) {
+        var u = userByExtId[p.external_user_id] || {};
+        // Also try matching by tags (sometimes external_user_id is empty)
+        if (!u.email && p.tags && p.tags.email) {
+          var byEmail = users.find(function(uu) { return (uu.email||'').toLowerCase() === (p.tags.email||'').toLowerCase(); });
+          if (byEmail) u = byEmail;
+        }
+        return {
+          subscriptionId: p.id,
+          deviceModel:    p.device_model || 'Unknown',
+          deviceOS:       p.device_os || '',
+          lastActive:     p.last_active ? new Date(p.last_active * 1000).toISOString() : '',
+          name:           u.name || (p.tags && p.tags.name) || '',
+          email:          u.email || (p.tags && p.tags.email) || '',
+          userId:         p.external_user_id || '',
+        };
+      });
+
+    return { success:true, count: devices.length, devices: devices };
+  } catch (e) {
+    return { success:false, error:e.message };
+  }
+}
+
+function _getSubscribedDeviceIds(userIds) {
+  var props  = PropertiesService.getScriptProperties();
+  var appId  = props.getProperty('ONESIGNAL_APP_ID');
+  var apiKey = props.getProperty('ONESIGNAL_REST_API_KEY');
+  if (!appId || !apiKey) return [];
+
+  try {
+    var url = 'https://api.onesignal.com/players?app_id=' + appId + '&limit=300';
+    var res = UrlFetchApp.fetch(url, {
+      method: 'get',
+      headers: { 'Authorization': 'Basic ' + apiKey },
+      muteHttpExceptions: true,
+    });
+    var code = res.getResponseCode();
+    if (code !== 200) {
+      Logger.log('Could not list players: HTTP ' + code);
+      return [];
+    }
+    var data = JSON.parse(res.getContentText());
+    var players = data.players || [];
+
+    // Build user-id filter set if provided
+    var userIdFilter = null;
+    if (userIds && userIds.length) {
+      userIdFilter = {};
+      userIds.forEach(function(uid) { userIdFilter[uid] = true; });
+    }
+
+    var ids = players
+      .filter(function(p) {
+        if (p.invalid_identifier === true || !p.identifier) return false;
+        if (userIdFilter && !userIdFilter[p.external_user_id]) return false;
+        return true;
+      })
+      .map(function(p) { return p.id; });
+    Logger.log('Found ' + ids.length + ' subscribed device(s)' + (userIdFilter ? ' (filtered to ' + userIds.length + ' users)' : ' of ' + players.length + ' total'));
+    return ids;
+  } catch (e) {
+    Logger.log('Could not fetch subscribers: ' + e.message);
+    return [];
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// DIAGNOSTIC — Check OneSignal subscription status
+// Run this manually to see how many subscribers OneSignal has
+// ════════════════════════════════════════════════════════════════
+function checkOneSignalSubscribers() {
+  var props  = PropertiesService.getScriptProperties();
+  var appId  = props.getProperty('ONESIGNAL_APP_ID');
+  var apiKey = props.getProperty('ONESIGNAL_REST_API_KEY');
+  if (!appId || !apiKey) {
+    Logger.log('❌ Missing OneSignal credentials in Script Properties');
+    return;
+  }
+  Logger.log('Using App ID: ' + appId);
+  Logger.log('API Key length: ' + apiKey.length + ' chars (should be 48+)');
+  try {
+    var res = UrlFetchApp.fetch('https://api.onesignal.com/apps/' + appId, {
+      method: 'get',
+      headers: { 'Authorization': 'Basic ' + apiKey },
+      muteHttpExceptions: true,
+    });
+    var code = res.getResponseCode();
+    var body = res.getContentText();
+    Logger.log('App info HTTP ' + code + ': ' + body.substring(0, 1000));
+    if (code === 200) {
+      var info = JSON.parse(body);
+      Logger.log('========== OneSignal App: ' + info.name + ' ==========');
+      Logger.log('  Total subscribers: ' + (info.players || 0));
+      Logger.log('  Messageable subscribers: ' + (info.messageable_players || 0));
+      Logger.log('  Created: ' + info.created_at);
+      if ((info.messageable_players || 0) === 0) {
+        Logger.log('⚠️  No messageable subscribers — that is why no push arrives!');
+        Logger.log('   Steps to fix:');
+        Logger.log('   1. Open https://suneelchalla.github.io/fitflow-pro on your phone');
+        Logger.log('   2. Allow notifications when Chrome prompts');
+        Logger.log('   3. Toggle the bell icon ON in the app');
+        Logger.log('   4. Re-run this function — should show 1+ subscribers');
+      }
+    }
+  } catch (e) {
+    Logger.log('Error: ' + e.message);
+  }
+}
+
+// Sends today's daily reminder to ALL OneSignal subscribers
+function sendDailyPushNotifications() {
+  var props  = PropertiesService.getScriptProperties();
+  var appId  = props.getProperty('ONESIGNAL_APP_ID');
+  var apiKey = props.getProperty('ONESIGNAL_REST_API_KEY');
+  if (!appId || !apiKey) {
+    Logger.log('OneSignal credentials missing. Set ONESIGNAL_APP_ID and ONESIGNAL_REST_API_KEY in Script Properties.');
+    return { success:false, error:'Missing OneSignal credentials' };
+  }
+  var msg = getTodaysMessage();
+
+  // Direct device targeting (more reliable than segments which can lag)
+  var deviceIds = _getSubscribedDeviceIds();
+  if (!deviceIds.length) {
+    Logger.log('No subscribed devices found — cannot send push');
+    return { success:false, error:'No subscribed devices' };
+  }
+
+  var payload = {
+    app_id:                  appId,
+    include_player_ids: deviceIds,
+    headings:                { en: msg.title },
+    contents:                { en: msg.body  },
+    // App URL (works for both browser and installed PWA)
+    web_url:           'https://suneelchalla.github.io/fitflow-pro/index.html',
+    // Web push icons (Chrome/Edge/Firefox on desktop AND mobile)
+    chrome_web_icon:   'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png',
+    chrome_web_image:  'https://suneelchalla.github.io/fitflow-pro/icons/icon-512.png',
+    chrome_web_badge:  'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png',
+    // Action buttons below notification
+    web_buttons: [
+      { id: 'open',  text: "💪 Let's Go!", icon: 'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png', url: 'https://suneelchalla.github.io/fitflow-pro/index.html' },
+      { id: 'later', text: "⏰ Later",        icon: 'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png', url: 'https://suneelchalla.github.io/fitflow-pro/index.html' },
+    ],
+    priority:          10,
+    ttl:               86400,
+  };
+  try {
+    var res = UrlFetchApp.fetch('https://api.onesignal.com/notifications', {
+      method:           'post',
+      contentType:      'application/json',
+      headers:          { 'Authorization': 'Basic ' + apiKey },
+      payload:          JSON.stringify(payload),
+      muteHttpExceptions: true,
+    });
+    var code = res.getResponseCode();
+    var body = res.getContentText();
+    var parsed = {}; try { parsed = JSON.parse(body); } catch(e) {}
+    // Always log the full response body so we can see warnings/errors
+    Logger.log('OneSignal HTTP ' + code + ' response: ' + body);
+    if (code >= 200 && code < 300) {
+      // Check for errors in body even though HTTP was 200
+      if (parsed.errors) {
+        Logger.log('OneSignal returned errors: ' + JSON.stringify(parsed.errors));
+        return { success:false, error:'OneSignal errors', errors:parsed.errors, body:body };
+      }
+      if (!parsed.id) {
+        Logger.log('OneSignal returned no notification ID — likely no recipients');
+        return { success:false, error:'No notification created', body:body };
+      }
+      var recipientCount = (parsed.recipients !== undefined) ? parsed.recipients : '(see Dashboard)';
+      Logger.log('✅ OneSignal push CREATED. Targeted devices: ' + deviceIds.length + ' | API recipients field: ' + recipientCount + ' | id: ' + parsed.id);
+      Logger.log('   Note: API "recipients" can be 0 even when delivery succeeds. Check OneSignal Dashboard → Delivery → Sent Messages for actual delivery count.');
+      return { success:true, recipients:parsed.recipients, id:parsed.id, targeted:deviceIds.length };
+    }
+    Logger.log('OneSignal push failed (HTTP ' + code + '): ' + body.substring(0, 500));
+    return { success:false, error:'HTTP ' + code, body:body.substring(0, 500) };
+  } catch (e) {
+    Logger.log('OneSignal push error: ' + e.message);
+    return { success:false, error:e.message };
+  }
+}
+
+
+// Send a CUSTOM admin-composed push to ALL subscribers (separate from daily)
+function sendCustomPush(body) {
+  var props  = PropertiesService.getScriptProperties();
+  var appId  = props.getProperty('ONESIGNAL_APP_ID');
+  var apiKey = props.getProperty('ONESIGNAL_REST_API_KEY');
+  if (!appId || !apiKey) return { success:false, error:'Missing OneSignal credentials' };
+  if (!body || !body.title || !body.message) return { success:false, error:'title and message required' };
+
+  // Direct device targeting (more reliable than segments which can lag)
+  // Accept optional targetUserIds to filter to specific users
+  var deviceIds = _getSubscribedDeviceIds(body.targetUserIds);
+  if (!deviceIds.length) {
+    var errMsg = body.targetUserIds && body.targetUserIds.length
+      ? 'None of the selected users have subscribed devices'
+      : 'No subscribed devices found. Have any users opted in via the bell toggle?';
+    return { success:false, error: errMsg };
+  }
+
+  var payload = {
+    app_id:                  appId,
+    include_player_ids: deviceIds,
+    headings:                { en: String(body.title).substring(0, 80) },
+    contents:                { en: String(body.message).substring(0, 240) },
+    web_url:           'https://suneelchalla.github.io/fitflow-pro/index.html',
+    chrome_web_icon:   'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png',
+    chrome_web_image:  'https://suneelchalla.github.io/fitflow-pro/icons/icon-512.png',
+    chrome_web_badge:  'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png',
+    priority:          10,
+    ttl:               86400,
+  };
+  try {
+    var res = UrlFetchApp.fetch('https://api.onesignal.com/notifications', {
+      method:           'post',
+      contentType:      'application/json',
+      headers:          { 'Authorization': 'Basic ' + apiKey },
+      payload:          JSON.stringify(payload),
+      muteHttpExceptions: true,
+    });
+    var code = res.getResponseCode();
+    var resBody = res.getContentText();
+    var parsed = {}; try { parsed = JSON.parse(resBody); } catch(e) {}
+    Logger.log('OneSignal HTTP ' + code + ' response: ' + resBody);
+    if (code >= 200 && code < 300) {
+      if (parsed.errors) {
+        Logger.log('OneSignal errors: ' + JSON.stringify(parsed.errors));
+        return { success:false, error:'OneSignal errors: ' + JSON.stringify(parsed.errors), errors:parsed.errors };
+      }
+      if (!parsed.id) {
+        Logger.log('No notification ID — likely no recipients');
+        return { success:false, error:'No notification created — check that there are subscribed users', body:resBody };
+      }
+      var recipientCount = (parsed.recipients !== undefined) ? parsed.recipients : '(see Dashboard)';
+      Logger.log('✅ Custom push CREATED. Targeted devices: ' + deviceIds.length + ' | API recipients field: ' + recipientCount + ' | id: ' + parsed.id);
+      try {
+        var sh = getSheet('AdminPushLog');
+        ensureHeaders(sh, ['SentAt', 'Title', 'Message', 'Recipients', 'NotificationID', 'SentBy']);
+        sh.appendRow([new Date(), body.title, body.message, deviceIds.length, parsed.id, body.sentBy || '']);
+      } catch(e) { Logger.log('Audit log skipped: ' + e.message); }
+      return { success:true, recipients:parsed.recipients, id:parsed.id, targeted:deviceIds.length };
+    }
+    return { success:false, error:'HTTP ' + code, body:resBody.substring(0, 500) };
+  } catch (e) {
+    return { success:false, error:e.message };
+  }
+}
+
+// Get history of admin-sent pushes
+function getAdminPushLog() {
+  try {
+    var sh = getSheet('AdminPushLog');
+    ensureHeaders(sh, ['SentAt', 'Title', 'Message', 'Recipients', 'NotificationID', 'SentBy']);
+    var data = sh.getDataRange().getValues();
+    if (data.length < 2) return { success:true, history:[] };
+    return {
+      success: true,
+      history: data.slice(1).reverse().slice(0, 50).map(function(r) {
+        return {
+          sentAt:        toISOStr(r[0]) || '',
+          title:         (r[1]||'').toString(),
+          message:       (r[2]||'').toString(),
+          recipients:    r[3] || 0,
+          notificationId:(r[4]||'').toString(),
+          sentBy:        (r[5]||'').toString(),
+        };
+      }),
+    };
+  } catch (e) {
+    return { success:false, error:e.message };
+  }
+}
+
+// Send a push to ONE specific user (by OneSignal subscription id)
+function sendPushToUser(subscriptionId, title, body, url) {
+  var props  = PropertiesService.getScriptProperties();
+  var appId  = props.getProperty('ONESIGNAL_APP_ID');
+  var apiKey = props.getProperty('ONESIGNAL_REST_API_KEY');
+  if (!appId || !apiKey) return { success:false, error:'Missing OneSignal credentials' };
+  if (!subscriptionId) return { success:false, error:'subscriptionId required' };
+  var payload = {
+    app_id:                  appId,
+    include_player_ids: [subscriptionId],
+    headings:                { en: title || 'FitFlow Pro' },
+    contents:                { en: body  || 'You have a new update!' },
+    web_url:                 url || 'https://suneelchalla.github.io/fitflow-pro/index.html',
+    chrome_web_icon:         'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png',
+    chrome_web_image:        'https://suneelchalla.github.io/fitflow-pro/icons/icon-512.png',
+    chrome_web_badge:        'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png',
+    priority:                10,
+  };
+  try {
+    var res = UrlFetchApp.fetch('https://api.onesignal.com/notifications', {
+      method:'post', contentType:'application/json',
+      headers:{'Authorization':'Basic '+apiKey},
+      payload:JSON.stringify(payload), muteHttpExceptions:true,
+    });
+    var code = res.getResponseCode();
+    if (code>=200 && code<300) return { success:true };
+    return { success:false, error:'HTTP '+code, body:res.getContentText().substring(0,200) };
   } catch(e) { return { success:false, error:e.message }; }
 }
 
-function _getOrigin(url) {
-  var m = url.match(/^(https?:\/\/[^\/]+)/);
-  return m ? m[1] : url;
-}
-function _b64url(bytes) {
-  return Utilities.base64Encode(bytes).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
-}
-function _b64urlDecode(str) {
-  var pad = str.length%4===0?'':'='.repeat(4-str.length%4);
-  return Utilities.base64Decode(str.replace(/-/g,'+').replace(/_/g,'/')+pad);
-}
-function _cleanupExpired(endpoints) {
-  var sh   = getSheet(SHEETS.PUSH_SUBS);
-  var data = sh.getDataRange().getValues();
-  for (var i=1;i<data.length;i++) {
-    if (endpoints.indexOf(data[i][3])>-1) sh.getRange(i+1,8).setValue(false);
-  }
-  SpreadsheetApp.flush();
+// Test from Apps Script editor: select this function and Run, then check Logs
+function testPushNotification() {
+  var result = sendDailyPushNotifications();
+  Logger.log('Test result: ' + JSON.stringify(result));
 }
 
 function createDailyTrigger() {
@@ -1031,7 +1645,7 @@ function createDailyTrigger() {
     if (t.getHandlerFunction()==='sendDailyPushNotifications') ScriptApp.deleteTrigger(t);
   });
   ScriptApp.newTrigger('sendDailyPushNotifications').timeBased().everyDays(1).atHour(6).create();
-  Logger.log('✅ Daily 6 AM trigger created!');
+  Logger.log('Daily 6 AM trigger created!');
 }
 
 function deleteDailyTrigger() {
@@ -1042,16 +1656,17 @@ function deleteDailyTrigger() {
   Logger.log('Deleted '+n+' trigger(s).');
 }
 
-function testPushNotification() {
-  var props   = PropertiesService.getScriptProperties();
-  var privKey = props.getProperty('VAPID_PRIVATE_KEY');
-  var pubKey  = props.getProperty('VAPID_PUBLIC_KEY');
-  var subject = props.getProperty('VAPID_SUBJECT') || 'mailto:admin@fitflow.com';
-  if (!privKey||!pubKey) { Logger.log('❌ VAPID keys not set!'); return; }
-  var subs = getAllActiveSubscriptions();
-  if (!subs.length) { Logger.log('No subscribers yet.'); return; }
-  var result = _sendWebPush(subs[0],{title:'🧪 Test!',body:'Push is working! 🎉'},privKey,pubKey,subject);
-  Logger.log(result.success ? '✅ Test push sent to '+subs[0].email : '❌ Push failed: '+result.error);
+function _getOrigin(url) {
+  var m = url.match(/^(https?:\/\/[^\/]+)/);
+  return m ? m[1] : url;
+}
+function _cleanupExpired(endpoints) {
+  var sh   = getSheet(SHEETS.PUSH_SUBS);
+  var data = sh.getDataRange().getValues();
+  for (var i=1;i<data.length;i++) {
+    if (endpoints.indexOf(data[i][3])>-1) sh.getRange(i+1,8).setValue(false);
+  }
+  SpreadsheetApp.flush();
 }
 
 function testGoogleLogin() {
