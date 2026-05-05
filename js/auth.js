@@ -217,61 +217,87 @@ async function _syncContent() {
 }
 
 async function _syncUserLogs(userId) {
+  // STRATEGY: Sheet is source of truth. REPLACE local logs entirely with Sheet's copy.
+  // This eliminates duplicate accumulation across refreshes.
   try {
     const res = await Sheets.get('getUserLogs', { userId });
-    if (!res?.success || !Array.isArray(res.logs) || !res.logs.length) return;
+    if (!res?.success || !Array.isArray(res.logs)) return;
 
-    // Merge Sheets logs with local logs — dedup by (userId, module, date)
-    // Don't depend on 'day' field matching exactly (case/locale differences)
-    const local = Store.getLogs();
-    let changed = false;
-    // Build a Set of existing log keys for fast lookup
+    // Helper: derive LOCAL date from timestamp (fixes UTC bug for old logs)
+    const tsToLocal = (ts) => {
+      if (!ts) return null;
+      const d = new Date(ts);
+      if (isNaN(d.getTime())) return null;
+      return d.getFullYear() + '-' +
+        String(d.getMonth()+1).padStart(2,'0') + '-' +
+        String(d.getDate()).padStart(2,'0');
+    };
+
+    // Normalize each Sheet log: prefer date derived from timestamp
+    const fromSheet = res.logs.map(sl => ({
+      ...sl,
+      date: tsToLocal(sl.timestamp) || sl.date,
+      id:   sl.id || ('log_' + Date.now() + Math.random()),
+    }));
+
+    // Get all local logs across all users (we only replace THIS user's logs)
+    const allLocal = Store.get('ff_logs', []) || [];
+    const otherUsers = allLocal.filter(l => l.userId !== userId);
+
+    // Replace this user's logs with Sheet's copy (deduplicated by userId+module+date)
     const seen = new Set();
-    local.forEach(l => {
-      seen.add((l.userId||'') + '|' + (l.module||'') + '|' + (l.date||''));
+    const myLogs = [];
+    fromSheet.forEach(sl => {
+      const key = (sl.userId||'') + '|' + (sl.module||'') + '|' + (sl.date||'');
+      if (seen.has(key)) return;
+      seen.add(key);
+      myLogs.push(sl);
     });
-    res.logs.forEach(sheetLog => {
-      const key = (sheetLog.userId||'') + '|' + (sheetLog.module||'') + '|' + (sheetLog.date||'');
-      if (!seen.has(key)) {
-        local.push({ ...sheetLog, id: sheetLog.id || 'log_' + Date.now() + Math.random() });
-        seen.add(key);
-        changed = true;
-      }
-    });
-    if (changed) Store.set('ff_logs', local);
+
+    Store.set('ff_logs', [...otherUsers, ...myLogs]);
   } catch (e) {
     console.warn('Log sync skipped:', e.message);
   }
 }
 
 async function _syncUserRunLogs(userId) {
+  // REPLACE strategy: Sheet is source of truth.
   try {
     const res = await Sheets.get('getUserRunLogs', { userId });
-    if (!res?.success || !Array.isArray(res.logs) || !res.logs.length) return;
+    if (!res?.success || !Array.isArray(res.logs)) return;
 
-    const local = Store.getRunLogs();
-    let changed = false;
-    res.logs.forEach(sheetLog => {
-      // Primary: match by log ID (most reliable)
-      // Fallback: match by userId + date + distance (within 0.01km) + duration (within 10s)
-      // Deliberately NOT matching planType — it can differ between client and server
-      const exists = local.find(l =>
-        // ID match (best)
-        (sheetLog.id && l.id === sheetLog.id) ||
-        // Fuzzy match — same user, same day, same distance, same duration
-        (
-          l.userId === sheetLog.userId &&
-          l.date   === sheetLog.date   &&
-          Math.abs((l.distance||0) - (sheetLog.distance||0)) < 0.01 &&
-          Math.abs((l.duration||0) - (sheetLog.duration||0)) < 10
-        )
-      );
-      if (!exists) {
-        local.push({ ...sheetLog, id: sheetLog.id || 'run_' + Date.now() + Math.random() });
-        changed = true;
-      }
+    const tsToLocal = (ts) => {
+      if (!ts) return null;
+      const d = new Date(ts);
+      if (isNaN(d.getTime())) return null;
+      return d.getFullYear() + '-' +
+        String(d.getMonth()+1).padStart(2,'0') + '-' +
+        String(d.getDate()).padStart(2,'0');
+    };
+
+    const fromSheet = res.logs.map(r => ({
+      ...r,
+      date: tsToLocal(r.timestamp) || r.date,
+      id:   r.id || ('run_' + Date.now() + Math.random()),
+    }));
+
+    const allLocal = Store.get('ff_runlogs', []) || [];
+    const otherUsers = allLocal.filter(l => l.userId !== userId);
+
+    // Dedup by id, then by (userId|date|distance)
+    const seenIds = new Set();
+    const seenKeys = new Set();
+    const myRuns = [];
+    fromSheet.forEach(r => {
+      if (r.id && seenIds.has(r.id)) return;
+      const key = (r.userId||'') + '|' + (r.date||'') + '|' + Math.round((r.distance||0)*100);
+      if (seenKeys.has(key)) return;
+      if (r.id) seenIds.add(r.id);
+      seenKeys.add(key);
+      myRuns.push(r);
     });
-    if (changed) Store.set('ff_runlogs', local);
+
+    Store.set('ff_runlogs', [...otherUsers, ...myRuns]);
   } catch (e) {
     console.warn('Run log sync skipped:', e.message);
   }
