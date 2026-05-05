@@ -1,12 +1,38 @@
 {
   "name": "FitFlow Pro",
   "short_name": "FitFlow",
+  "id": "/fitflow-pro/",
   "description": "Android-first all-in-one fitness app — workouts, running, yoga, calisthenics, diet & more.",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#0d1f14",
   "theme_color": "#0d1f14",
   "orientation": "portrait-primary",
+  "prefer_related_applications": false,
+  "screenshots": [
+    {
+      "src": "icons/screenshot1.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "FitFlow Pro Dashboard"
+    },
+    {
+      "src": "icons/screenshot2.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "FitFlow Pro Workout Modules"
+    },
+    {
+      "src": "icons/screenshot3.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "FitFlow Pro Running Tracker"
+    }
+  ],
   "icons": [
     {
       "src": "icons/icon-192.png",
@@ -35,5 +61,21 @@
   ],
   "categories": ["fitness", "health", "sports"],
   "lang": "en",
-  "dir": "ltr"
+  "dir": "ltr",
+  "shortcuts": [
+    {
+      "name": "Start Running",
+      "short_name": "Run",
+      "description": "Start a GPS running session",
+      "url": "./index.html#page-running",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Dashboard",
+      "short_name": "Home",
+      "description": "Go to your fitness dashboard",
+      "url": "./index.html#page-dashboard",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+    }
+  ]
 }
