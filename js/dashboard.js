@@ -395,7 +395,7 @@ function renderYogaProgressivePage() {
     ? { ...baseYogaData, schedule: savedYoga.schedule || baseYogaData?.schedule }
     : baseYogaData;
 
-  document.getElementById('module-title').textContent = 'Yoga';
+  document.getElementById('module-title').textContent        = 'Yoga';
   document.getElementById('module-emoji-header').textContent = '🧘';
 
   const schedule  = yogaData?.schedule || {};
@@ -1566,7 +1566,6 @@ function renderGlobalHistory() {
   _historyMonth        = new Date().getMonth();
   _selectedHistoryDate = todayStr();
 
-  // Show loading then sync from Sheets before rendering
   const statsEl = document.getElementById('history-stats');
   if (statsEl) statsEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text3);font-size:13px">Loading…</div>';
 
@@ -1577,20 +1576,16 @@ async function _syncHistoryThenRender() {
   try {
     const user = APP.currentUser;
     if (user) {
-      // Sync completion logs
       const res = await Sheets.get('getUserLogs', { userId: user.id });
       if (res?.success && Array.isArray(res.logs) && res.logs.length) {
-        const local = Store.getLogs();
-        let ch = false;
+        const local = Store.getLogs(); let ch = false;
         res.logs.forEach(sl => {
           if (!local.find(l => l.userId===sl.userId && l.module===sl.module && l.day===sl.day && l.date===sl.date)) {
-            local.push({ ...sl, id: sl.id||('log_'+Date.now()+Math.random()) });
-            ch = true;
+            local.push({ ...sl, id: sl.id||('log_'+Date.now()+Math.random()) }); ch = true;
           }
         });
         if (ch) Store.set('ff_logs', local);
       }
-      // Sync run logs
       const rr = await Sheets.get('getUserRunLogs', { userId: user.id });
       if (rr?.success && Array.isArray(rr.logs) && rr.logs.length) {
         const lr = Store.getRunLogs(); let ch2 = false;
@@ -2198,12 +2193,16 @@ function openCreateWorkout() {
 }
 
 function openWeeklyReport() {
+  // Auto-show last week on Mon/Tue — current week barely started
+  const jsDay = new Date().getDay();
+  window._weekOffset = (jsDay === 1 || jsDay === 2) ? -1 : 0;
   showPage('page-weekly-report');
-  if (typeof renderWeeklyReport === 'function') {
-    renderWeeklyReport();
+  if (typeof _loadAndRender === 'function') {
+    _loadAndRender();
   } else {
     setTimeout(() => {
-      if (typeof renderWeeklyReport === 'function') renderWeeklyReport();
+      if (typeof _loadAndRender === 'function') _loadAndRender();
+      else if (typeof renderWeeklyReport === 'function') renderWeeklyReport();
     }, 300);
   }
 }
