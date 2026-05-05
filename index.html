@@ -1535,7 +1535,7 @@ async function toggleNotificationSetting() {
 }
 
 async function updateReminderBtn() {
-  // Updates the toggle switch visuals (does NOT replace innerHTML — that would destroy the toggle)
+  // Updates the toggle switch visuals (does NOT replace innerHTML)
   const sw   = document.getElementById('notif-toggle-switch');
   const knob = document.getElementById('notif-toggle-knob');
   if (!sw || !knob) return;
@@ -1548,6 +1548,9 @@ async function updateReminderBtn() {
       return;
     }
     sw.style.opacity = '1';
+    // Wait for OneSignal SDK to be ready before reading state
+    if (PUSH._ensureInit) await PUSH._ensureInit();
+    await new Promise(r => setTimeout(r, 300));
     const isSubscribed = await PUSH.isSubscribed();
     sw.setAttribute('data-on', isSubscribed ? 'true' : 'false');
     sw.style.background = isSubscribed ? 'var(--g4)' : 'rgba(255,255,255,0.15)';
@@ -1715,6 +1718,11 @@ document.addEventListener('DOMContentLoaded', () => {
       <div class="form-group">
         <label class="form-label">Notes (optional)</label>
         <textarea id="cw-ex-desc" class="form-input" rows="2" placeholder="Form tips, variations..."></textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">📺 Video Link (optional)</label>
+        <input id="cw-ex-video" type="url" class="form-input" placeholder="https://youtube.com/watch?v=..." inputmode="url">
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">Paste a YouTube, Instagram, or any video URL</div>
       </div>
       <div id="cw-ex-error" style="color:#ef9a9a;font-size:13px;min-height:16px"></div>
       <div style="display:flex;gap:10px">
