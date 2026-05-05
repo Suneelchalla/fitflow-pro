@@ -71,18 +71,37 @@ const PUSH = {
       const OneSignal = await this._ensureInit();
       if (!OneSignal) return null;
 
-      // Show OneSignal's prompt OR request permission directly
-      // Modern OneSignal v16 API:
-      const supported = OneSignal.Notifications.permission;
-      if (supported === false) {
-        // Not yet granted — ask now
+      // Step 1: Browser permission
+      if (OneSignal.Notifications.permission !== true) {
         await OneSignal.Notifications.requestPermission();
       }
+      if (OneSignal.Notifications.permission !== true) {
+        // User denied or dismissed
+        return null;
+      }
 
-      // Wait briefly for subscription to register with OneSignal servers
-      await new Promise(r => setTimeout(r, 800));
+      // Step 2: Explicitly opt the user in to OneSignal pushes
+      // (permission alone is not enough — must also set opted-in)
+      try {
+        await OneSignal.User.PushSubscription.optIn();
+      } catch (e) {
+        console.warn('OneSignal optIn warning:', e?.message);
+      }
 
-      // Save the subscription details to our own sheet
+      // Step 3: Wait for OneSignal to register the subscription
+      // Poll up to 8 seconds for subscription ID to appear
+      let subId = null;
+      for (let i = 0; i < 16; i++) {
+        subId = OneSignal.User.PushSubscription.id;
+        if (subId) break;
+        await new Promise(r => setTimeout(r, 500));
+      }
+      if (!subId) {
+        console.warn('OneSignal subscription ID never appeared');
+        return null;
+      }
+
+      // Step 4: Save the subscription to your sheet
       await this._save();
       return true;
     } catch (e) {
@@ -96,8 +115,8 @@ const PUSH = {
     try {
       const OneSignal = await this._ensureInit();
       if (!OneSignal) return;
-      // Opt the user out of receiving pushes
       await OneSignal.User.PushSubscription.optOut();
+      await new Promise(r => setTimeout(r, 500)); // give it a moment
       await this._remove();
     } catch (e) {
       console.warn('Push unsubscribe error:', e?.message || e);
