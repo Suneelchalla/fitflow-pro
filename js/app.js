@@ -22,6 +22,38 @@ window.APP = {
 };
 
 // ── STORAGE ───────────────────────────────────────────────────────
+// ── Coerce any date value to YYYY-MM-DD string ───────────────────
+// Logs stored before the v52 fix may have Date objects in ff_logs/ff_runlogs.
+// This normalizes them on read so all consumers get plain strings.
+function _normalizeDate(v) {
+  if (!v) return '';
+  if (typeof v === 'string') {
+    if (v.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(v)) return v.substring(0, 10);
+    const d = new Date(v);
+    if (isNaN(d.getTime())) return '';
+    return d.toISOString().split('T')[0];
+  }
+  if (v instanceof Date) {
+    if (isNaN(v.getTime())) return '';
+    const y = v.getFullYear();
+    const m = String(v.getMonth() + 1).padStart(2, '0');
+    const d = String(v.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  // object with date-like values? try parse
+  try {
+    const d = new Date(v);
+    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+  } catch(e) {}
+  return '';
+}
+function _normalizeISO(v) {
+  if (!v) return '';
+  if (typeof v === 'string') return v;
+  if (v instanceof Date && !isNaN(v.getTime())) return v.toISOString();
+  return '';
+}
+
 const Store = {
   get(key, fallback = null) {
     try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; }
@@ -37,7 +69,13 @@ const Store = {
   getSession()      { return this.get('ff_session'); },
   clearSession()    { this.remove('ff_session'); },
 
-  getLogs()         { return this.get('ff_logs', []); },
+  getLogs() {
+    return (this.get('ff_logs', []) || []).map(l => ({
+      ...l,
+      date:      _normalizeDate(l.date),
+      timestamp: _normalizeISO(l.timestamp),
+    }));
+  },
   addLog(log) {
     const logs = this.getLogs();
     if (logs.find(l =>
@@ -51,7 +89,13 @@ const Store = {
   getUserLogs(uid)            { return this.getLogs().filter(l => l.userId === uid); },
   getModuleDayLogs(uid, mod)  { return this.getLogs().filter(l => l.userId === uid && l.module === mod); },
 
-  getRunLogs()                { return this.get('ff_runlogs', []); },
+  getRunLogs() {
+    return (this.get('ff_runlogs', []) || []).map(l => ({
+      ...l,
+      date:      _normalizeDate(l.date),
+      timestamp: _normalizeISO(l.timestamp),
+    }));
+  },
   addRunLog(log) {
     const logs = this.getRunLogs();
     // Prevent local duplicates: same user + date + planType + distance within 0.01km
