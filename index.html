@@ -702,6 +702,400 @@ window.addEventListener('DOMContentLoaded', function() {
   }
 }
 
+
+
+/* ═══════════════════════════════════════════════════════════════
+   ADMIN DASHBOARD — LIVE STATS
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Live indicator bar */
+.dash-live-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, rgba(67,160,90,0.10), rgba(67,160,90,0.04));
+  border: 1px solid rgba(67,160,90,0.2);
+  border-radius: 14px;
+  margin-bottom: 20px;
+}
+.dash-live-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--g5);
+  font-weight: 500;
+}
+.dash-live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #43a05a;
+  animation: dash-pulse 2s infinite;
+}
+@keyframes dash-pulse {
+  0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(67,160,90,0.6); }
+  50%      { opacity: 0.6; box-shadow: 0 0 0 8px rgba(67,160,90,0); }
+}
+.dash-live-meta {
+  font-size: 12px;
+  color: var(--text3);
+}
+
+/* Grid layouts */
+.dash-grid {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+.dash-grid-4 { grid-template-columns: repeat(4, 1fr); }
+.dash-grid-2 { grid-template-columns: 1fr 1fr; }
+
+/* Card base */
+.dash-card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+  position: relative;
+  overflow: hidden;
+}
+.dash-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 14px;
+}
+.dash-card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+.dash-card-sub {
+  font-size: 11px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+/* Loading skeleton */
+.dash-skeleton {
+  height: 110px;
+  background: linear-gradient(90deg, rgba(255,255,255,0.02) 0%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.02) 100%);
+  background-size: 200% 100%;
+  animation: dash-shimmer 1.4s infinite;
+}
+@keyframes dash-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* KPI card */
+.dash-kpi {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 16px;
+}
+.dash-kpi-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+.dash-kpi-green  .dash-kpi-icon { background: rgba(67,160,90,0.15);  border: 1px solid rgba(67,160,90,0.3); }
+.dash-kpi-blue   .dash-kpi-icon { background: rgba(30,136,229,0.15); border: 1px solid rgba(30,136,229,0.3); }
+.dash-kpi-purple .dash-kpi-icon { background: rgba(156,39,176,0.15); border: 1px solid rgba(156,39,176,0.3); }
+.dash-kpi-amber  .dash-kpi-icon { background: rgba(240,192,64,0.15); border: 1px solid rgba(240,192,64,0.3); }
+.dash-kpi-body { flex: 1; min-width: 0; }
+.dash-kpi-val {
+  font-family: var(--font-display);
+  font-size: 30px;
+  color: var(--text);
+  line-height: 1.05;
+  margin-bottom: 4px;
+  font-weight: 700;
+}
+.dash-kpi-label {
+  font-size: 12px;
+  color: var(--text2);
+  font-weight: 500;
+  margin-bottom: 2px;
+}
+.dash-kpi-sub {
+  font-size: 11px;
+  color: var(--text3);
+}
+.dash-kpi-trend {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 50px;
+}
+.dash-kpi-trend.up   { background: rgba(67,160,90,0.15);  color: var(--g5); }
+.dash-kpi-trend.down { background: rgba(229,57,53,0.15);  color: #ef9a9a; }
+
+/* Sparkline */
+.dash-sparkline { padding: 8px 0 12px; }
+.dash-spark {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 64px;
+  padding: 4px 0;
+}
+.dash-spark-bar-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+.dash-spark-bar {
+  background: var(--g4);
+  border-radius: 2px 2px 0 0;
+  opacity: 0.8;
+  transition: opacity .15s;
+}
+.dash-spark-bar:hover { opacity: 1; }
+.dash-spark-today {
+  background: var(--accent);
+  opacity: 1;
+}
+.dash-trend-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0 0;
+  border-top: 1px solid var(--border);
+  margin-top: 8px;
+}
+.dash-trend { text-align: center; flex: 1; }
+.dash-trend-vs { border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
+.dash-trend-val {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1;
+  margin-bottom: 2px;
+  font-family: var(--font-display);
+}
+.dash-trend-arrow {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 2px;
+}
+.dash-trend-arrow.up   { color: var(--g5); }
+.dash-trend-arrow.down { color: #ef9a9a; }
+.dash-trend-lbl {
+  font-size: 10px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+/* Module list */
+.dash-mod-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dash-mod-row {
+  display: grid;
+  grid-template-columns: 130px 1fr 40px;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.dash-mod-label {
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+.dash-mod-bar {
+  height: 8px;
+  background: var(--bg);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.dash-mod-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--g4), var(--g5));
+  border-radius: 4px;
+  transition: width .4s;
+}
+.dash-mod-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text2);
+  text-align: right;
+}
+
+/* Top users / dropout list */
+.dash-user-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.dash-user-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border-radius: 10px;
+}
+.dash-user-rank {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 13px;
+  background: var(--surface);
+  color: var(--text2);
+  flex-shrink: 0;
+}
+.dash-user-rank.gold   { background: rgba(255,215,0,0.2);  color: #ffd700; }
+.dash-user-rank.silver { background: rgba(192,192,192,0.2); color: #c0c0c0; }
+.dash-user-rank.bronze { background: rgba(205,127,50,0.2);  color: #cd7f32; }
+.dash-user-info { flex: 1; min-width: 0; }
+.dash-user-name {
+  font-weight: 600;
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dash-user-email {
+  font-size: 11px;
+  color: var(--text3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dash-user-count {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--g5);
+  flex-shrink: 0;
+}
+.dash-user-meta {
+  font-size: 11px;
+  color: var(--text3);
+  flex-shrink: 0;
+}
+.dash-user-warn {
+  border-left: 3px solid var(--accent);
+}
+.dash-user-warn .dash-user-meta strong { color: var(--accent); }
+
+/* Recent activity feed */
+.dash-feed {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.dash-feed::-webkit-scrollbar { width: 4px; }
+.dash-feed::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+.dash-feed-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg);
+  border-radius: 10px;
+}
+.dash-feed-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.04);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.dash-feed-info { flex: 1; min-width: 0; }
+.dash-feed-text {
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dash-feed-text strong { font-weight: 600; }
+.dash-feed-time {
+  font-size: 11px;
+  color: var(--text3);
+  margin-top: 2px;
+}
+
+/* Bottom totals */
+.dash-totals { margin-top: 8px; }
+.dash-total {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 14px;
+  text-align: center;
+}
+.dash-total-icon { font-size: 22px; margin-bottom: 6px; }
+.dash-total-val {
+  font-family: var(--font-display);
+  font-size: 26px;
+  color: var(--g5);
+  font-weight: 700;
+  line-height: 1;
+  margin-bottom: 4px;
+}
+.dash-total-lbl {
+  font-size: 11px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  font-weight: 500;
+}
+
+/* Responsive */
+@media (max-width: 1100px) {
+  .dash-grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .dash-grid-2 { grid-template-columns: 1fr; }
+  .dash-mod-row { grid-template-columns: 110px 1fr 32px; }
+}
+
+@media (max-width: 540px) {
+  .dash-grid-4 { grid-template-columns: 1fr 1fr; }
+  .dash-kpi { padding: 14px 12px; gap: 10px; }
+  .dash-kpi-icon { width: 38px; height: 38px; font-size: 18px; }
+  .dash-kpi-val { font-size: 22px; }
+  .dash-kpi-trend { font-size: 10px; padding: 2px 6px; }
+  .dash-mod-row { grid-template-columns: 90px 1fr 28px; font-size: 12px; }
+  .dash-live-bar { padding: 10px 12px; }
+  .dash-live-meta { font-size: 11px; }
+  .dash-card { padding: 12px; }
+  .dash-trend-val { font-size: 18px; }
+  .dash-total-val { font-size: 22px; }
+}
+
 </style>
 
     <button id="google-signin-btn" onclick="signInWithGoogle()" type="button">
@@ -1316,7 +1710,10 @@ window.addEventListener('DOMContentLoaded', function() {
 
       <!-- LEFT SIDEBAR NAV -->
       <aside class="admin-sidebar">
-        <button class="admin-nav-btn active" data-tab="users"     onclick="switchAdminTab('users',this)">
+        <button class="admin-nav-btn active" data-tab="dashboard" onclick="switchAdminTab('dashboard',this)">
+          <span class="admin-nav-ico">📡</span><span class="admin-nav-lbl">Dashboard</span>
+        </button>
+        <button class="admin-nav-btn" data-tab="users"     onclick="switchAdminTab('users',this)">
           <span class="admin-nav-ico">👥</span><span class="admin-nav-lbl">Users</span>
         </button>
         <button class="admin-nav-btn"        data-tab="analytics" onclick="switchAdminTab('analytics',this)">
@@ -1342,8 +1739,20 @@ window.addEventListener('DOMContentLoaded', function() {
       <!-- RIGHT CONTENT AREA -->
       <main class="admin-content-area">
 
+        <!-- DASHBOARD tab (live overview) -->
+        <div id="admin-tab-dashboard" class="admin-tab-content">
+          <div class="admin-tab-header">
+            <h2 class="admin-tab-title">📡 Live Dashboard</h2>
+            <div style="display:flex;align-items:center;gap:10px">
+              <span id="dash-last-refresh" style="font-size:11px;color:var(--text3)"></span>
+              <button class="admin-pill-btn" onclick="renderAdminDashboard()" id="dash-refresh-btn">🔄 Refresh</button>
+            </div>
+          </div>
+          <div id="admin-dashboard-content"></div>
+        </div>
+
         <!-- USERS tab -->
-        <div id="admin-tab-users" class="admin-tab-content">
+        <div id="admin-tab-users" class="admin-tab-content" style="display:none">
           <div class="admin-tab-header">
             <h2 class="admin-tab-title">👥 Users</h2>
             <button class="btn btn-primary admin-action-btn" onclick="openAddUser()">+ Add New User</button>
