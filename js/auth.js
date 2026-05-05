@@ -123,6 +123,7 @@ function completeLogin(user) {
       if (APP.currentPage === 'page-history-global' && typeof renderGlobalHistory === 'function') renderGlobalHistory();
     });
     _autoSeedIfVersionChanged(user);
+    if (typeof _autoDedupOnLogin === 'function') _autoDedupOnLogin();
 
     if (user.role === 'ADMIN') {
       initDashboard();
