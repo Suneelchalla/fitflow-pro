@@ -1071,6 +1071,22 @@ function completeOnboarding() {
   const user = APP.currentUser;
   Store.set('ff_onboard_' + user.id, { goal: _onboardData.goal, modules: _onboardData.modules, date: todayStr() });
 
+  // Also save to Sheet so admin can see (don't await — fire and forget)
+  try {
+    Sheets.post('saveOnboarding', {
+      userId:       user.id,
+      email:        user.email,
+      goal:         _onboardData.goal,
+      modules:      _onboardData.modules,
+      age:          _onboardData.age,
+      weight:       _onboardData.weight,
+      height:       _onboardData.height,
+      gender:       _onboardData.gender,
+      fitnessLevel: _onboardData.fitnessLevel,
+    }).catch(()=>{});
+  } catch(e) {}
+
+
   // Save body metrics profile
   if (_onboardData.age || _onboardData.weight || _onboardData.height) {
     const profile = {
