@@ -1,3 +1,9 @@
+// LOCAL date helper (replaces UTC-based toISOString().split('T')[0])
+function _ymdLocal(d) {
+  if (!d || isNaN(d.getTime())) return '';
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
 // ════════════════════════════════════════════════════════════════
 // ADMIN PANEL
 // ════════════════════════════════════════════════════════════════
@@ -1500,20 +1506,20 @@ async function renderAdminAnalytics() {
 
   const today  = todayStr();
   const monday = getMonday();
-  const prevMon = (() => { const d=new Date(monday); d.setDate(d.getDate()-7); return d.toISOString().split('T')[0]; })();
-  const prevSun = (() => { const d=new Date(monday); d.setDate(d.getDate()-1); return d.toISOString().split('T')[0]; })();
+  const prevMon = (() => { const d=new Date(monday); d.setDate(d.getDate()-7); return _ymdLocal(d); })();
+  const prevSun = (() => { const d=new Date(monday); d.setDate(d.getDate()-1); return _ymdLocal(d); })();
 
   const thisWeekLogs = allLogs.filter(l => l.date >= monday);
   const lastWeekLogs = allLogs.filter(l => l.date >= prevMon && l.date <= prevSun);
   const thisWeekRuns = allRuns.filter(r => r.date >= monday);
   const todayLogs    = allLogs.filter(l => l.date === today);
 
-  const last7Str = (() => { const d=new Date(); d.setDate(d.getDate()-7); return d.toISOString().split('T')[0]; })();
+  const last7Str = (() => { const d=new Date(); d.setDate(d.getDate()-7); return _ymdLocal(d); })();
   const activeUserIds = [...new Set(allLogs.filter(l=>l.date>=last7Str).map(l=>l.userId))];
 
   // Per-day activity last 14 days
   const dayActivity = {};
-  for (let i=13;i>=0;i--) { const d=new Date(); d.setDate(d.getDate()-i); dayActivity[d.toISOString().split('T')[0]]=0; }
+  for (let i=13;i>=0;i--) { const d=new Date(); d.setDate(d.getDate()-i); dayActivity[_ymdLocal(d)]=0; }
   allLogs.forEach(l => { if (dayActivity[l.date]!==undefined) dayActivity[l.date]++; });
   const dayKeys = Object.keys(dayActivity);
   const dayVals = Object.values(dayActivity);
@@ -1626,7 +1632,7 @@ async function openUserProgress(userId, userName) {
   stdLogs.forEach(l => { modCounts[l.module]=(modCounts[l.module]||0)+1; });
 
   const last30 = {};
-  for (let i=29;i>=0;i--) { const d=new Date(); d.setDate(d.getDate()-i); last30[d.toISOString().split('T')[0]]=0; }
+  for (let i=29;i>=0;i--) { const d=new Date(); d.setDate(d.getDate()-i); last30[_ymdLocal(d)]=0; }
   logs.forEach(l => { if (last30[l.date]!==undefined) last30[l.date]++; });
 
   const bestRun = [...runLogs].sort((a,b)=>(b.distance||0)-(a.distance||0))[0];
@@ -1730,8 +1736,8 @@ async function openUserProgress(userId, userName) {
           for (let w = 7; w >= 0; w--) {
             const wStart = new Date(); wStart.setDate(wStart.getDate() - wStart.getDay() - w * 7 + 1);
             const wEnd   = new Date(wStart); wEnd.setDate(wStart.getDate() + 6);
-            const wStartStr = wStart.toISOString().split('T')[0];
-            const wEndStr   = wEnd.toISOString().split('T')[0];
+            const wStartStr = _ymdLocal(wStart);
+            const wEndStr   = _ymdLocal(wEnd);
             const count = logs.filter(l => l.date >= wStartStr && l.date <= wEndStr).length
                         + runLogs.filter(r => r.date >= wStartStr && r.date <= wEndStr).length;
             weekTotals.push({ label: 'W' + (8-w), count });
@@ -1773,10 +1779,10 @@ function _calcStreakForUser(userId) {
   if (!dates.length) return 0;
   let streak=0, cur=new Date();
   for (let i=0;i<60;i++) {
-    const d=cur.toISOString().split('T')[0];
+    const d=_ymdLocal(cur);
     if (dates.includes(d)) { streak++; cur.setDate(cur.getDate()-1); }
     else if (i>0) break;
-    else { cur.setDate(cur.getDate()-1); if (!dates.includes(cur.toISOString().split('T')[0])) break; }
+    else { cur.setDate(cur.getDate()-1); if (!dates.includes(_ymdLocal(cur))) break; }
   }
   return streak;
 }
