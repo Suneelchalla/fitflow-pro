@@ -2161,7 +2161,7 @@ function openCreateWorkout() {
 }
 
 function openWeeklyReport() {
-  // weekly-report.js handles sync + week navigation
+  // Auto-show last week on Mon/Tue — current week barely started
   const jsDay = new Date().getDay();
   window._weekOffset = (jsDay === 1 || jsDay === 2) ? -1 : 0;
   showPage('page-weekly-report');
