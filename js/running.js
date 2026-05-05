@@ -1,3 +1,9 @@
+// LOCAL date helper (replaces UTC-based toISOString().split('T')[0])
+function _ymdLocal(d) {
+  if (!d || isNaN(d.getTime())) return '';
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
 // ════════════════════════════════════════════════════════════════
 // FITFLOW PRO — running.js  (fully fixed)
 // Bugs fixed:
@@ -1920,7 +1926,7 @@ function _toYMD(v) {
     if (v.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(v)) return v.substring(0, 10);
     const d = new Date(v);
     if (isNaN(d.getTime())) return '';
-    return d.toISOString().split('T')[0];
+    return _ymdLocal(d);
   }
   if (v instanceof Date) {
     if (isNaN(v.getTime())) return '';
@@ -2702,10 +2708,10 @@ function _buildRunStats(userId) {
   let streak = 0;
   let cur = new Date();
   for (let i = 0; i < 90; i++) {
-    const d = cur.toISOString().split('T')[0];
+    const d = _ymdLocal(cur);
     if (dates.includes(d)) { streak++; cur.setDate(cur.getDate()-1); }
     else if (i > 0) break;
-    else { cur.setDate(cur.getDate()-1); if (!dates.includes(cur.toISOString().split('T')[0])) break; }
+    else { cur.setDate(cur.getDate()-1); if (!dates.includes(_ymdLocal(cur))) break; }
   }
 
   const planDays = (window.APP_DATA_DEFAULT||window.APP_DATA).running?.plans || {};
