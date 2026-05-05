@@ -1670,170 +1670,24 @@ function _aKpi(emoji, label, val, sub) {
 // PER-USER PROGRESS (Admin)
 // ════════════════════════════════════════════════════════════════
 async function openUserProgress(userId, userName) {
-  const container = document.getElementById('user-progress-content');
-  container.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text3)"><div class="loader" style="margin:0 auto 12px"></div>Loading…</div>`;
-  openModal('modal-user-progress');
-
-  // Fetch from Sheets for cross-device accuracy, fall back to local
-  let logs    = Store.getLogs().filter(l => l.userId === userId);
-  let runLogs = Store.getRunLogs().filter(r => r.userId === userId);
-  try {
-    const [logsRes, runsRes] = await Promise.all([
-      Sheets.get('getUserLogs',    { userId }),
-      Sheets.get('getUserRunLogs', { userId }),
-    ]);
-    if (logsRes?.success  && logsRes.logs?.length)  logs    = logsRes.logs;
-    if (runsRes?.success  && runsRes.logs?.length)  runLogs = runsRes.logs;
-  } catch(e) { /* use local */ }
-
-  const cwLogs   = logs.filter(l => l.module?.startsWith('custom_'));
-  const stdLogs  = logs.filter(l => !l.module?.startsWith('custom_'));
-  const totalKm  = runLogs.reduce((a,r)=>a+(r.distance||0),0);
-  const streak   = _calcStreakForUser(userId);
-  const monday   = getMonday();
-  const weekLogs = stdLogs.filter(l=>l.date>=monday);
-
-  const modCounts = {};
-  stdLogs.forEach(l => { modCounts[l.module]=(modCounts[l.module]||0)+1; });
-
-  const last30 = {};
-  for (let i=29;i>=0;i--) { const d=new Date(); d.setDate(d.getDate()-i); last30[_ymdLocal(d)]=0; }
-  logs.forEach(l => { if (last30[l.date]!==undefined) last30[l.date]++; });
-
-  const bestRun = [...runLogs].sort((a,b)=>(b.distance||0)-(a.distance||0))[0];
-
-  container.innerHTML = `
-    <div style="text-align:center;padding:20px 16px 12px">
-      <div style="width:56px;height:56px;border-radius:50%;background:linear-gradient(135deg,var(--g2),var(--g3));display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;margin:0 auto 10px">
-        ${(userName||'?').charAt(0).toUpperCase()}
-      </div>
-      <div style="font-weight:700;font-size:18px">${userName}</div>
-      <div style="font-size:12px;color:var(--text3)">${userId}</div>
-    </div>
-    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:0 16px 14px">
-      <div class="stat-card"><div class="stat-val">${logs.length}</div><div class="stat-label">Workouts</div></div>
-      <div class="stat-card"><div class="stat-val">${streak}🔥</div><div class="stat-label">Day Streak</div></div>
-      <div class="stat-card"><div class="stat-val">${totalKm.toFixed(1)}</div><div class="stat-label">km Run</div></div>
-    </div>
-    <div style="padding:0 16px 14px">
-      <div class="card card-sm" style="background:rgba(67,160,90,0.08);border-color:rgba(67,160,90,0.2)">
-        <div style="font-size:13px;font-weight:700;color:var(--g5);margin-bottom:6px">This Week</div>
-        <div style="font-size:13px;color:var(--text2)">${weekLogs.length} session${weekLogs.length!==1?'s':''} · ${runLogs.filter(r=>r.date>=monday).length} run${runLogs.filter(r=>r.date>=monday).length!==1?'s':''}</div>
-      </div>
-    </div>
-    <div style="padding:0 16px 14px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-        <div class="section-title" style="margin:0">Last 30 Days</div>
-        <div style="font-size:11px;color:var(--text3)">${Object.values(last30).filter(v=>v>0).length} active days</div>
-      </div>
-      <!-- Activity heatmap -->
-      <div style="display:grid;grid-template-columns:repeat(10,1fr);gap:3px;margin-bottom:10px">
-        ${Object.entries(last30).map(([d,cnt])=>`
-          <div title="${d}: ${cnt} session${cnt!==1?'s':''}"
-            style="aspect-ratio:1;border-radius:3px;cursor:default;
-              background:${cnt>3?'var(--g5)':cnt>2?'var(--g4)':cnt>1?'var(--g3)':cnt>0?'rgba(67,160,90,0.4)':'var(--bg3)'}">
-          </div>`).join('')}
-      </div>
-      <!-- Run distance last 30d bar chart -->
-      ${(() => {
-        const runByDay = {};
-        Object.keys(last30).forEach(d => runByDay[d] = 0);
-        runLogs.forEach(r => { if (runByDay[r.date]!==undefined) runByDay[r.date]+=(r.distance||0); });
-        const maxKm = Math.max(...Object.values(runByDay), 0.1);
-        const hasRuns = Object.values(runByDay).some(v=>v>0);
-        if (!hasRuns) return '';
-        return `
-          <div style="margin-top:8px">
-            <div style="font-size:11px;color:var(--text3);margin-bottom:4px">🏃 Daily Distance (km)</div>
-            <div style="display:flex;align-items:flex-end;gap:2px;height:40px">
-              ${Object.entries(runByDay).map(([d,km])=>`
-                <div style="flex:1;display:flex;flex-direction:column;align-items:center" title="${d}: ${km.toFixed(1)}km">
-                  <div style="width:100%;background:rgba(30,136,229,0.7);border-radius:2px 2px 0 0;
-                    height:${km>0?Math.max(3,Math.round(km/maxKm*36)):0}px"></div>
-                </div>`).join('')}
-            </div>
-          </div>`;
-      })()}
-      <!-- Module frequency donut-style bars -->
-      ${Object.keys(modCounts).length ? `
-      <div style="margin-top:12px">
-        <div style="font-size:11px;color:var(--text3);margin-bottom:8px">Module Frequency</div>
-        ${Object.entries(modCounts).sort((a,b)=>b[1]-a[1]).slice(0,4).map(([mod,cnt])=>`
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-            <span style="font-size:14px;width:20px;text-align:center">${getModuleEmoji(mod)}</span>
-            <div style="flex:1">
-              <div style="height:6px;background:var(--bg3);border-radius:3px;overflow:hidden">
-                <div style="height:100%;width:${Math.round(cnt/Math.max(...Object.values(modCounts))*100)}%;
-                  background:var(--g4);border-radius:3px;transition:width .5s ease"></div>
-              </div>
-            </div>
-            <span style="font-size:11px;color:var(--text3);min-width:24px;text-align:right">${cnt}</span>
-          </div>`).join('')}
-      </div>` : ''}
-      <div style="display:flex;gap:12px;margin-top:8px;font-size:10px;color:var(--text3)">
-        <span style="display:flex;align-items:center;gap:3px"><span style="width:10px;height:10px;border-radius:2px;background:var(--g4);display:inline-block"></span>Active</span>
-        <span style="display:flex;align-items:center;gap:3px"><span style="width:10px;height:10px;border-radius:2px;background:var(--bg3);display:inline-block"></span>Rest day</span>
-      </div>
-    </div>
-    ${Object.keys(modCounts).length ? `
-    <div style="padding:0 16px 14px">
-      <div class="section-title" style="margin-bottom:8px">Favourite Modules</div>
-      ${Object.entries(modCounts).sort((a,b)=>b[1]-a[1]).map(([mod,cnt])=>`
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-          <span style="font-size:16px">${getModuleEmoji(mod)}</span>
-          <span style="flex:1;font-size:13px">${getModuleName(mod)}</span>
-          <span class="badge badge-green">${cnt}</span>
-        </div>`).join('')}
-    </div>` : ''}
-    ${bestRun ? `
-    <div style="padding:0 16px 14px">
-      <div class="card card-sm" style="background:rgba(30,136,229,0.08);border-color:rgba(30,136,229,0.2)">
-        <div style="font-size:13px;font-weight:700;color:#64b5f6;margin-bottom:6px">🏅 Best Run</div>
-        <div style="font-size:13px;color:var(--text2)">${(bestRun.distance||0).toFixed(2)} km · ${fmtTime(bestRun.duration||0)} · ${bestRun.date}</div>
-      </div>
-    </div>` : ''}
-    <!-- Weekly session bar chart — last 8 weeks -->
-    <div style="padding:0 16px 14px">
-      <div class="section-title" style="margin-bottom:8px">Weekly Activity (8 weeks)</div>
-      <div class="card card-sm">
-        ${(() => {
-          const weekTotals = [];
-          for (let w = 7; w >= 0; w--) {
-            const wStart = new Date(); wStart.setDate(wStart.getDate() - wStart.getDay() - w * 7 + 1);
-            const wEnd   = new Date(wStart); wEnd.setDate(wStart.getDate() + 6);
-            const wStartStr = _ymdLocal(wStart);
-            const wEndStr   = _ymdLocal(wEnd);
-            const count = logs.filter(l => l.date >= wStartStr && l.date <= wEndStr).length
-                        + runLogs.filter(r => r.date >= wStartStr && r.date <= wEndStr).length;
-            weekTotals.push({ label: 'W' + (8-w), count });
-          }
-          const maxW = Math.max(...weekTotals.map(w=>w.count), 1);
-          return '<div style="display:flex;align-items:flex-end;gap:4px;height:60px">' +
-            weekTotals.map(w => {
-              const h = Math.max(3, Math.round(w.count / maxW * 56));
-              return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:2px" title="${w.label}: ${w.count} sessions">
-                <div style="font-size:9px;color:var(--text3)">${w.count||''}</div>
-                <div style="width:100%;height:${h}px;background:${w.count>0?'var(--g3)':'var(--bg3)'};border-radius:3px 3px 0 0"></div>
-                <div style="font-size:9px;color:var(--text3)">${w.label}</div>
-              </div>`;
-            }).join('') + '</div>';
-        })()}
-      </div>
-    </div>
-    <!-- Run history for this user -->
-    ${runLogs.length ? `
-    <div style="padding:0 16px 14px">
-      <div class="section-title" style="margin-bottom:8px">Recent Runs</div>
-      ${runLogs.sort((a,b)=>(b.date||'').localeCompare(a.date||'')).slice(0,5).map(r=>`
-        <div class="card card-sm" style="margin-bottom:6px;display:flex;justify-content:space-between;align-items:center">
-          <div>
-            <div style="font-size:13px;font-weight:600">${(r.activityType||'run').charAt(0).toUpperCase()+(r.activityType||'run').slice(1)} · ${(r.distance||0).toFixed(2)} km</div>
-            <div style="font-size:11px;color:var(--text3)">${r.date} · ${fmtTime(r.duration||0)}</div>
-          </div>
-          <span class="badge badge-green">${fmtPace(r.distance||0, r.duration||0)} /km</span>
-        </div>`).join('')}
-    </div>` : ''}
-  `;
+  // Use the comprehensive _drillUser analytics view (same as Dashboard)
+  // Ensure dashboard data is loaded first
+  if (!_adminDashboardData) {
+    showToast('Loading user data...', 'info');
+    let users = [], allLogs = Store.getLogs(), allRuns = Store.getRunLogs();
+    try {
+      const [usersRes, logsRes, runsRes] = await Promise.all([
+        Sheets.get('getAllUsers').catch(() => null),
+        Sheets.get('getAllLogs').catch(() => null),
+        Sheets.get('getAllRunLogs').catch(() => null),
+      ]);
+      if (usersRes?.success) users   = usersRes.users || [];
+      if (logsRes?.success)  allLogs = logsRes.logs   || allLogs;
+      if (runsRes?.success)  allRuns = runsRes.logs   || allRuns;
+    } catch(e) {}
+    _adminDashboardData = { users, allLogs, allRuns, fetchedAt: new Date() };
+  }
+  _drillUser(userId);
 }
 
 function _calcStreakForUser(userId) {
@@ -2040,26 +1894,26 @@ async function saveCalisthenicsEditorChanges() {
 
 
 // ════════════════════════════════════════════════════════════════
-// LIVE ADMIN DASHBOARD
-// Comprehensive overview with auto-refresh every 30 seconds
+// LIVE INTERACTIVE ADMIN DASHBOARD
+// • Auto-refreshes every 30s
+// • Time range filters on every chart (7d / 30d / 90d / 1y)
+// • Click any KPI/user/module/day to drill down
+// • Click recent activity item to see user's full history
 // ════════════════════════════════════════════════════════════════
 
 let _adminDashboardInterval = null;
 let _adminDashboardData     = null;
+let _dashTrendRange         = '30d';   // default for activity trend
+let _dashKpiRange           = '7d';    // default for KPI cards
 
 async function renderAdminDashboard() {
   const container = document.getElementById('admin-dashboard-content');
   if (!container) return;
 
-  // Show loading skeleton on first render
   if (!_adminDashboardData) {
-    container.innerHTML = `
-      <div class="dash-grid">
-        ${Array(8).fill('<div class="dash-card dash-skeleton"></div>').join('')}
-      </div>`;
+    container.innerHTML = `<div class="dash-grid">${Array(8).fill('<div class="dash-card dash-skeleton"></div>').join('')}</div>`;
   }
 
-  // Fetch all data in parallel
   let users = [], allLogs = Store.getLogs(), allRuns = Store.getRunLogs();
   try {
     const [usersRes, logsRes, runsRes] = await Promise.all([
@@ -2075,11 +1929,9 @@ async function renderAdminDashboard() {
   _adminDashboardData = { users, allLogs, allRuns, fetchedAt: new Date() };
   _renderDashboardContent();
 
-  // Update last-refresh label
   const lr = document.getElementById('dash-last-refresh');
   if (lr) lr.textContent = 'Updated ' + new Date().toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:true });
 
-  // Auto-refresh every 30 seconds while Dashboard tab is active
   if (_adminDashboardInterval) clearInterval(_adminDashboardInterval);
   _adminDashboardInterval = setInterval(() => {
     const dashTab = document.getElementById('admin-tab-dashboard');
@@ -2092,94 +1944,128 @@ async function renderAdminDashboard() {
   }, 30000);
 }
 
+// ── Date helpers ──
+function _dashDaysAgo(n) {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
+function _dashRangeStart(range) {
+  if (range === '7d')   return _dashDaysAgo(7);
+  if (range === '30d')  return _dashDaysAgo(30);
+  if (range === '90d')  return _dashDaysAgo(90);
+  if (range === '1y')   return _dashDaysAgo(365);
+  return _dashDaysAgo(30);
+}
+
+function _dashRangeLabel(range) {
+  return ({ '7d':'Last 7 days', '30d':'Last 30 days', '90d':'Last 90 days', '1y':'Last 365 days' })[range] || 'Last 30 days';
+}
+
+// Switch range for activity trend, then re-render
+function _setDashTrendRange(range, btn) {
+  _dashTrendRange = range;
+  document.querySelectorAll('[data-range-group="trend"]').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  _renderDashboardContent();
+}
+
+function _setDashKpiRange(range, btn) {
+  _dashKpiRange = range;
+  document.querySelectorAll('[data-range-group="kpi"]').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  _renderDashboardContent();
+}
+
 function _renderDashboardContent() {
   const container = document.getElementById('admin-dashboard-content');
   if (!container || !_adminDashboardData) return;
   const { users, allLogs, allRuns } = _adminDashboardData;
 
-  // ── Date helpers ──
-  const today  = todayStr();
+  const today = todayStr();
+  const yesterday = _dashDaysAgo(1);
   const monday = getMonday();
-  const _ymd = (d) => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
-  const _daysAgo = (n) => { const d=new Date(); d.setDate(d.getDate()-n); return _ymd(d); };
+  const last7  = _dashDaysAgo(7);
+  const last30 = _dashDaysAgo(30);
+  const trendStart = _dashRangeStart(_dashTrendRange);
+  const kpiStart   = _dashRangeStart(_dashKpiRange);
 
-  const last7  = _daysAgo(7);
-  const last30 = _daysAgo(30);
-  const yesterday = _daysAgo(1);
-  const prevMon = (() => { const d=new Date(monday); d.setDate(d.getDate()-7); return _ymd(d); })();
-  const prevSun = (() => { const d=new Date(monday); d.setDate(d.getDate()-1); return _ymd(d); })();
-
-  // ── User stats ──
   const realUsers     = users.filter(u => (u.role||'USER').toUpperCase() !== 'ADMIN');
   const activeUsers   = realUsers.filter(u => (u.status||'ACTIVE').toUpperCase() === 'ACTIVE');
-  const inactiveUsers = realUsers.length - activeUsers.length;
-  const newThisMonth  = realUsers.filter(u => u.createdDate >= last30).length;
-  const newThisWeek   = realUsers.filter(u => u.createdDate >= last7).length;
+  const newInRange    = realUsers.filter(u => u.createdDate >= kpiStart).length;
 
-  // ── Activity stats ──
   const todayLogs    = allLogs.filter(l => l.date === today);
   const yestLogs     = allLogs.filter(l => l.date === yesterday);
-  const thisWeekLogs = allLogs.filter(l => l.date >= monday);
-  const lastWeekLogs = allLogs.filter(l => l.date >= prevMon && l.date <= prevSun);
-  const thisMonthLogs= allLogs.filter(l => l.date >= last30);
+  const rangeKpiLogs = allLogs.filter(l => l.date >= kpiStart);
 
-  const todayRuns    = allRuns.filter(r => r.date === today);
-  const thisWeekRuns = allRuns.filter(r => r.date >= monday);
+  // Compare against equal-length previous period for KPI trend
+  const kpiDays = (_dashKpiRange === '7d') ? 7 : (_dashKpiRange === '30d') ? 30 : (_dashKpiRange === '90d') ? 90 : 365;
+  const prevPeriodStart = _dashDaysAgo(kpiDays * 2);
+  const prevPeriodEnd   = _dashDaysAgo(kpiDays + 1);
+  const prevKpiLogs = allLogs.filter(l => l.date >= prevPeriodStart && l.date <= prevPeriodEnd);
+  const wowSessions = prevKpiLogs.length ? Math.round((rangeKpiLogs.length - prevKpiLogs.length) / prevKpiLogs.length * 100) : null;
 
-  // ── Live: who's active right now (last hour) ──
   const oneHourAgo = new Date(Date.now() - 60*60*1000).toISOString();
   const activeNow = allLogs.filter(l => l.timestamp && l.timestamp > oneHourAgo);
   const activeNowUserIds = [...new Set(activeNow.map(l => l.userId))];
 
-  // ── Active users (7 day) ──
-  const activeUserIds7d = [...new Set(allLogs.filter(l => l.date >= last7).map(l => l.userId))];
-  const activeUserIds30d= [...new Set(allLogs.filter(l => l.date >= last30).map(l => l.userId))];
+  const activeIdsKpi = [...new Set(rangeKpiLogs.map(l => l.userId))];
+  const engagementRate = realUsers.length ? Math.round(activeIdsKpi.length / realUsers.length * 100) : 0;
 
-  // ── Engagement rate ──
-  const engagementRate = realUsers.length ? Math.round(activeUserIds7d.length / realUsers.length * 100) : 0;
+  const totalKm   = allRuns.reduce((sum,r) => sum + (r.distance||0), 0);
+  const totalKcal = allRuns.reduce((sum,r) => sum + ((r.distance||0) * 60), 0);
 
-  // ── Total stats ──
-  const totalKm    = allRuns.reduce((sum,r) => sum + (r.distance||0), 0);
-  const totalKcal  = allRuns.reduce((sum,r) => sum + ((r.distance||0) * 60), 0);
-
-  // ── Trend calculations ──
-  const wowSessions = lastWeekLogs.length ? Math.round((thisWeekLogs.length-lastWeekLogs.length)/lastWeekLogs.length*100) : null;
-  const dodSessions = yestLogs.length ? Math.round((todayLogs.length-yestLogs.length)/yestLogs.length*100) : null;
-
-  // ── Last 30 day trend (sparkline) ──
+  // ── Activity trend (range-based, daily buckets) ──
   const dayActivity = {};
-  for (let i=29; i>=0; i--) dayActivity[_daysAgo(i)] = 0;
-  allLogs.forEach(l => { if (dayActivity[l.date]!==undefined) dayActivity[l.date]++; });
+  const trendDays = (_dashTrendRange === '7d') ? 7 : (_dashTrendRange === '30d') ? 30 : (_dashTrendRange === '90d') ? 90 : 365;
+  for (let i = trendDays - 1; i >= 0; i--) dayActivity[_dashDaysAgo(i)] = 0;
+  allLogs.forEach(l => { if (dayActivity[l.date] !== undefined) dayActivity[l.date]++; });
 
-  // ── Module breakdown ──
+  // For 90d / 1y, group by week to keep bars readable
+  let trendKeys = Object.keys(dayActivity);
+  let trendVals = Object.values(dayActivity);
+  if (_dashTrendRange === '1y') {
+    // Group by month
+    const monthly = {};
+    trendKeys.forEach((k, i) => {
+      const ym = k.substring(0, 7);
+      monthly[ym] = (monthly[ym] || 0) + trendVals[i];
+    });
+    trendKeys = Object.keys(monthly);
+    trendVals = Object.values(monthly);
+  }
+
+  // Sub-period sums for trend label
+  const trendTotal = trendVals.reduce((a,b) => a+b, 0);
+  const trendThis  = allLogs.filter(l => l.date >= trendStart).length;
+  const trendDaysHalf = Math.floor(trendDays / 2);
+  const trendPrevStart = _dashDaysAgo(trendDays * 2);
+  const trendPrevEnd   = _dashDaysAgo(trendDays + 1);
+  const trendPrev      = allLogs.filter(l => l.date >= trendPrevStart && l.date <= trendPrevEnd).length;
+  const trendDelta     = trendPrev ? Math.round((trendThis - trendPrev) / trendPrev * 100) : null;
+
+  // ── Module breakdown (range-aware) ──
   const modCounts = {};
-  allLogs.forEach(l => {
+  rangeKpiLogs.forEach(l => {
     const m = (l.module||'').startsWith('custom_') ? 'custom' : (l.module||'unknown');
-    modCounts[m] = (modCounts[m]||0)+1;
+    modCounts[m] = (modCounts[m]||0) + 1;
   });
   const topMods = Object.entries(modCounts).sort((a,b)=>b[1]-a[1]).slice(0, 6);
 
-  // ── Top performing users (by sessions in last 30 days) ──
+  // ── Top users (range-aware) ──
   const userSessionCount = {};
-  allLogs.filter(l => l.date >= last30).forEach(l => {
-    userSessionCount[l.userId] = (userSessionCount[l.userId]||0) + 1;
-  });
+  rangeKpiLogs.forEach(l => { userSessionCount[l.userId] = (userSessionCount[l.userId]||0) + 1; });
   const topUsers = Object.entries(userSessionCount)
     .map(([uid, count]) => {
       const u = realUsers.find(u => u.id === uid);
-      return u ? { name: u.name||'?', email: u.email, count } : null;
+      return u ? { id: uid, name: u.name||'?', email: u.email, count } : null;
     })
     .filter(Boolean)
     .sort((a,b) => b.count - a.count)
     .slice(0, 5);
 
-  // ── Recent activity feed ──
-  const recentActivity = [...allLogs, ...allRuns.map(r => ({...r, module:'run', distance:r.distance}))]
-    .filter(l => l.timestamp)
-    .sort((a,b) => (b.timestamp||'').localeCompare(a.timestamp||''))
-    .slice(0, 12);
-
-  // ── Dropout risk users ──
+  // ── At-risk users ──
   const userLastActivity = {};
   allLogs.forEach(l => { if (!userLastActivity[l.userId] || l.date > userLastActivity[l.userId]) userLastActivity[l.userId] = l.date; });
   const dropoutUsers = realUsers
@@ -2188,118 +2074,170 @@ function _renderDashboardContent() {
       return !last || last < last7;
     })
     .map(u => ({ ...u, lastActivity: userLastActivity[u.id] || 'Never' }))
-    .slice(0, 5);
+    .slice(0, 8);
 
-  // ── Render the dashboard ──
+  // ── Recent activity feed ──
+  const recentActivity = [...allLogs, ...allRuns.map(r => ({...r, module:'run', distance:r.distance}))]
+    .filter(l => l.timestamp)
+    .sort((a,b) => (b.timestamp||'').localeCompare(a.timestamp||''))
+    .slice(0, 15);
+
   container.innerHTML = `
-    <!-- LIVE INDICATOR + key metrics -->
+    <!-- LIVE BAR -->
     <div class="dash-live-bar">
       <div class="dash-live-pill">
         <span class="dash-live-dot"></span>
         <strong>${activeNowUserIds.length}</strong> active in last hour
       </div>
       <div class="dash-live-meta">
-        ${realUsers.length} total users · ${allLogs.length} workouts · ${allRuns.length} runs · ${totalKm.toFixed(1)} km logged
+        ${realUsers.length} total users · ${allLogs.length} workouts · ${allRuns.length} runs · ${totalKm.toFixed(1)} km
       </div>
     </div>
 
-    <!-- TOP ROW: 4 KPI cards -->
-    <div class="dash-grid dash-grid-4">
-      ${_kpiCard("Today's Sessions", todayLogs.length, dodSessions, 'sessions', '📅', 'green')}
-      ${_kpiCard('This Week', thisWeekLogs.length, wowSessions, 'workouts', '📈', 'blue')}
-      ${_kpiCard('Active Users (7d)', activeUserIds7d.length, null, `${engagementRate}% engagement`, '👥', 'purple')}
-      ${_kpiCard('New This Week', newThisWeek, null, `${newThisMonth} this month`, '✨', 'amber')}
+    <!-- KPI RANGE TOGGLE -->
+    <div class="dash-range-bar">
+      <div class="dash-range-label">📊 KPI period:</div>
+      <div class="dash-range-tabs">
+        ${['7d','30d','90d','1y'].map(r => `
+          <button class="dash-range-tab ${_dashKpiRange===r?'active':''}" data-range-group="kpi" onclick="_setDashKpiRange('${r}', this)">${r==='1y'?'1Y':r.toUpperCase()}</button>
+        `).join('')}
+      </div>
     </div>
 
-    <!-- 2-COLUMN ROW: Activity trend + Module breakdown -->
-    <div class="dash-grid dash-grid-2">
+    <!-- TOP ROW: 4 KPI cards (clickable for drill-down) -->
+    <div class="dash-grid dash-grid-4">
+      <div class="dash-card dash-kpi dash-kpi-green dash-clickable" onclick="_drillKpi('today')">
+        <div class="dash-kpi-icon">📅</div>
+        <div class="dash-kpi-body">
+          <div class="dash-kpi-val">${todayLogs.length}</div>
+          <div class="dash-kpi-label">Today's Sessions</div>
+          <div class="dash-kpi-sub">${[...new Set(todayLogs.map(l=>l.userId))].length} users active</div>
+        </div>
+        ${yestLogs.length ? `<div class="dash-kpi-trend ${todayLogs.length >= yestLogs.length?'up':'down'}">${todayLogs.length >= yestLogs.length?'↑':'↓'} vs yesterday</div>` : ''}
+      </div>
 
-      <!-- Activity Trend (30-day sparkline + week comparison) -->
+      <div class="dash-card dash-kpi dash-kpi-blue dash-clickable" onclick="_drillKpi('range')">
+        <div class="dash-kpi-icon">📈</div>
+        <div class="dash-kpi-body">
+          <div class="dash-kpi-val">${rangeKpiLogs.length}</div>
+          <div class="dash-kpi-label">Sessions ${_dashRangeLabel(_dashKpiRange).toLowerCase()}</div>
+          <div class="dash-kpi-sub">${prevKpiLogs.length} previous period</div>
+        </div>
+        ${wowSessions !== null ? `<div class="dash-kpi-trend ${wowSessions >= 0?'up':'down'}">${wowSessions >= 0?'↑':'↓'} ${Math.abs(wowSessions)}%</div>` : ''}
+      </div>
+
+      <div class="dash-card dash-kpi dash-kpi-purple dash-clickable" onclick="_drillKpi('users')">
+        <div class="dash-kpi-icon">👥</div>
+        <div class="dash-kpi-body">
+          <div class="dash-kpi-val">${activeIdsKpi.length}</div>
+          <div class="dash-kpi-label">Active Users (${_dashKpiRange})</div>
+          <div class="dash-kpi-sub">${engagementRate}% engagement</div>
+        </div>
+      </div>
+
+      <div class="dash-card dash-kpi dash-kpi-amber dash-clickable" onclick="_drillKpi('newusers')">
+        <div class="dash-kpi-icon">✨</div>
+        <div class="dash-kpi-body">
+          <div class="dash-kpi-val">${newInRange}</div>
+          <div class="dash-kpi-label">New Users (${_dashKpiRange})</div>
+          <div class="dash-kpi-sub">${realUsers.length} total</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2-COL: Activity trend + Module breakdown -->
+    <div class="dash-grid dash-grid-2">
       <div class="dash-card">
         <div class="dash-card-head">
           <h3 class="dash-card-title">📊 Activity Trend</h3>
-          <span class="dash-card-sub">Last 30 days</span>
+          <div class="dash-range-tabs">
+            ${['7d','30d','90d','1y'].map(r => `
+              <button class="dash-range-tab ${_dashTrendRange===r?'active':''}" data-range-group="trend" onclick="_setDashTrendRange('${r}', this)">${r==='1y'?'1Y':r.toUpperCase()}</button>
+            `).join('')}
+          </div>
         </div>
-        <div class="dash-sparkline">
-          ${_renderSparkline(dayActivity)}
+        <div class="dash-spark-info">
+          <span><strong>${trendTotal}</strong> total · <strong>${trendThis}</strong> last ${trendDays}d ${trendDelta!==null?(trendDelta>=0?'<span style="color:var(--g5)">↑ '+trendDelta+'%</span>':'<span style="color:#ef9a9a">↓ '+Math.abs(trendDelta)+'%</span>'):''}</span>
         </div>
-        <div class="dash-trend-row">
-          <div class="dash-trend">
-            <div class="dash-trend-val">${thisWeekLogs.length}</div>
-            <div class="dash-trend-lbl">This week</div>
-          </div>
-          <div class="dash-trend dash-trend-vs">
-            <div class="dash-trend-arrow ${(wowSessions||0) >= 0 ? 'up' : 'down'}">${(wowSessions||0) >= 0 ? '↑' : '↓'} ${Math.abs(wowSessions||0)}%</div>
-            <div class="dash-trend-lbl">vs last week</div>
-          </div>
-          <div class="dash-trend">
-            <div class="dash-trend-val">${lastWeekLogs.length}</div>
-            <div class="dash-trend-lbl">Last week</div>
-          </div>
+        <div class="dash-spark">
+          ${trendKeys.map((k, i) => {
+            const max = Math.max(...trendVals, 1);
+            const h = Math.max(2, Math.round(trendVals[i] / max * 80));
+            const isToday = k === today;
+            const safeKey = k.replace(/'/g, "\\'");
+            return `<div class="dash-spark-bar-wrap" title="${k}: ${trendVals[i]} sessions"
+              onclick="_drillDay('${safeKey}', '${_dashTrendRange}')">
+              <div class="dash-spark-bar ${isToday ? 'dash-spark-today' : ''}" style="height:${h}px"></div>
+            </div>`;
+          }).join('')}
+        </div>
+        <div class="dash-spark-axis">
+          <span>${trendKeys[0] ? _shortDate(trendKeys[0]) : ''}</span>
+          <span>${trendKeys[Math.floor(trendKeys.length/2)] ? _shortDate(trendKeys[Math.floor(trendKeys.length/2)]) : ''}</span>
+          <span>${trendKeys[trendKeys.length-1] ? _shortDate(trendKeys[trendKeys.length-1]) : ''}</span>
         </div>
       </div>
 
-      <!-- Module Popularity -->
       <div class="dash-card">
         <div class="dash-card-head">
           <h3 class="dash-card-title">🏋️ Top Modules</h3>
-          <span class="dash-card-sub">All time</span>
+          <span class="dash-card-sub">${_dashRangeLabel(_dashKpiRange)}</span>
         </div>
         <div class="dash-mod-list">
-          ${topMods.map(([mod, n]) => {
-            const pct = Math.round(n / Math.max(...topMods.map(m=>m[1])) * 100);
+          ${topMods.length ? topMods.map(([mod, n]) => {
+            const pct = Math.round(n / topMods[0][1] * 100);
+            const safeMod = mod.replace(/'/g, "\\'");
             return `
-              <div class="dash-mod-row">
+              <div class="dash-mod-row dash-clickable" onclick="_drillModule('${safeMod}')">
                 <div class="dash-mod-label">${_modIcon(mod)} ${_modName(mod)}</div>
                 <div class="dash-mod-bar"><div class="dash-mod-fill" style="width:${pct}%"></div></div>
                 <div class="dash-mod-count">${n}</div>
               </div>`;
-          }).join('') || '<div style="color:var(--text3);font-size:13px;padding:20px;text-align:center">No activity yet</div>'}
+          }).join('') : '<div style="color:var(--text3);font-size:13px;padding:20px;text-align:center">No activity yet</div>'}
         </div>
       </div>
     </div>
 
-    <!-- 2-COLUMN ROW: Top users + Dropout risk -->
+    <!-- 2-COL: Top users + At-risk users -->
     <div class="dash-grid dash-grid-2">
-
-      <!-- Top Users (last 30 days) -->
       <div class="dash-card">
         <div class="dash-card-head">
           <h3 class="dash-card-title">🏆 Top Users</h3>
-          <span class="dash-card-sub">Last 30 days</span>
+          <span class="dash-card-sub">${_dashRangeLabel(_dashKpiRange)}</span>
         </div>
         <div class="dash-user-list">
-          ${topUsers.length ? topUsers.map((u,i) => `
-            <div class="dash-user-row">
+          ${topUsers.length ? topUsers.map((u,i) => {
+            const safeId = (u.id||'').replace(/'/g, "\\'");
+            return `
+            <div class="dash-user-row dash-clickable" onclick="_drillUser('${safeId}')">
               <div class="dash-user-rank ${i===0?'gold':i===1?'silver':i===2?'bronze':''}">${i+1}</div>
               <div class="dash-user-info">
                 <div class="dash-user-name">${u.name}</div>
                 <div class="dash-user-email">${u.email||''}</div>
               </div>
               <div class="dash-user-count">${u.count} <span style="font-size:10px;color:var(--text3)">sessions</span></div>
-            </div>
-          `).join('') : '<div style="color:var(--text3);font-size:13px;padding:20px;text-align:center">No active users yet</div>'}
+            </div>`;
+          }).join('') : '<div style="color:var(--text3);font-size:13px;padding:20px;text-align:center">No active users in this period</div>'}
         </div>
       </div>
 
-      <!-- Dropout Risk -->
       <div class="dash-card">
         <div class="dash-card-head">
           <h3 class="dash-card-title">⚠️ At-Risk Users</h3>
-          <span class="dash-card-sub">No activity in 7+ days</span>
+          <span class="dash-card-sub">No activity 7+ days</span>
         </div>
         <div class="dash-user-list">
-          ${dropoutUsers.length ? dropoutUsers.map(u => `
-            <div class="dash-user-row dash-user-warn">
+          ${dropoutUsers.length ? dropoutUsers.map(u => {
+            const safeId = (u.id||'').replace(/'/g, "\\'");
+            return `
+            <div class="dash-user-row dash-user-warn dash-clickable" onclick="_drillUser('${safeId}')">
               <div class="dash-user-info">
                 <div class="dash-user-name">${u.name||'—'}</div>
                 <div class="dash-user-email">${u.email||''}</div>
               </div>
-              <div class="dash-user-meta">
-                Last: <strong>${u.lastActivity}</strong>
-              </div>
-            </div>
-          `).join('') : '<div style="color:var(--text3);font-size:13px;padding:20px;text-align:center">🎉 All users active!</div>'}
+              <div class="dash-user-meta">Last: <strong>${u.lastActivity}</strong></div>
+            </div>`;
+          }).join('') : '<div style="color:var(--text3);font-size:13px;padding:20px;text-align:center">🎉 All users active!</div>'}
         </div>
       </div>
     </div>
@@ -2308,15 +2246,16 @@ function _renderDashboardContent() {
     <div class="dash-card">
       <div class="dash-card-head">
         <h3 class="dash-card-title">⚡ Recent Activity</h3>
-        <span class="dash-card-sub">Live feed</span>
+        <span class="dash-card-sub">Click an item to see user history</span>
       </div>
       <div class="dash-feed">
         ${recentActivity.length ? recentActivity.map(a => {
           const u = realUsers.find(u => u.id === a.userId);
           const time = a.timestamp ? new Date(a.timestamp).toLocaleString('en-IN', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit', hour12:true }) : '';
           const isRun = a.module === 'run' || (a.distance !== undefined);
+          const safeId = (a.userId||'').replace(/'/g, "\\'");
           return `
-            <div class="dash-feed-item">
+            <div class="dash-feed-item dash-clickable" onclick="_drillUser('${safeId}')">
               <div class="dash-feed-icon">${isRun?'🏃':_modIcon(a.module)}</div>
               <div class="dash-feed-info">
                 <div class="dash-feed-text"><strong>${u?.name||a.userId||'Unknown'}</strong> completed <strong>${isRun?(a.distance||0).toFixed(2)+' km '+(a.activityType||'run'):_modName(a.module)}</strong></div>
@@ -2327,33 +2266,586 @@ function _renderDashboardContent() {
       </div>
     </div>
 
-    <!-- BOTTOM ROW: Aggregated totals -->
+    <!-- Lifetime totals -->
     <div class="dash-grid dash-grid-4 dash-totals">
-      <div class="dash-total">
-        <div class="dash-total-icon">🎯</div>
-        <div class="dash-total-val">${allLogs.length.toLocaleString()}</div>
-        <div class="dash-total-lbl">Total Workouts</div>
-      </div>
-      <div class="dash-total">
-        <div class="dash-total-icon">🏃</div>
-        <div class="dash-total-val">${allRuns.length.toLocaleString()}</div>
-        <div class="dash-total-lbl">Total Runs</div>
-      </div>
-      <div class="dash-total">
-        <div class="dash-total-icon">📍</div>
-        <div class="dash-total-val">${totalKm.toFixed(1)}</div>
-        <div class="dash-total-lbl">Total km</div>
-      </div>
-      <div class="dash-total">
-        <div class="dash-total-icon">🔥</div>
-        <div class="dash-total-val">${Math.round(totalKcal).toLocaleString()}</div>
-        <div class="dash-total-lbl">Total kcal burned</div>
-      </div>
+      <div class="dash-total"><div class="dash-total-icon">🎯</div><div class="dash-total-val">${allLogs.length.toLocaleString()}</div><div class="dash-total-lbl">Total Workouts</div></div>
+      <div class="dash-total"><div class="dash-total-icon">🏃</div><div class="dash-total-val">${allRuns.length.toLocaleString()}</div><div class="dash-total-lbl">Total Runs</div></div>
+      <div class="dash-total"><div class="dash-total-icon">📍</div><div class="dash-total-val">${totalKm.toFixed(1)}</div><div class="dash-total-lbl">Total km</div></div>
+      <div class="dash-total"><div class="dash-total-icon">🔥</div><div class="dash-total-val">${Math.round(totalKcal).toLocaleString()}</div><div class="dash-total-lbl">Total kcal</div></div>
     </div>
   `;
 }
 
-// ── Helper: KPI card ──
+function _shortDate(ymd) {
+  if (!ymd) return '';
+  // For 1y view, ymd is YYYY-MM
+  if (ymd.length === 7) {
+    const [y, m] = ymd.split('-');
+    return ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(m)-1] + ' ' + y.slice(2);
+  }
+  const d = new Date(ymd);
+  return d.toLocaleDateString('en-IN', { day:'numeric', month:'short' });
+}
+
+// ─────────────────────────────────────────────────────────────────
+// DRILL-DOWN MODAL
+// ─────────────────────────────────────────────────────────────────
+function _openDrillModal(title, html) {
+  let modal = document.getElementById('modal-dash-drill');
+  if (!modal) {
+    modal = document.createElement('div');
+    modal.id = 'modal-dash-drill';
+    modal.className = 'modal-overlay';
+    modal.innerHTML = `
+      <div class="modal-sheet" style="max-width:720px;max-height:88vh;overflow-y:auto">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;position:sticky;top:0;background:var(--bg2);padding:8px 0 12px;z-index:5">
+          <h3 id="dash-drill-title" style="font-size:18px;margin:0;font-weight:700"></h3>
+          <button onclick="closeModal('modal-dash-drill')" style="background:transparent;border:none;color:var(--text2);font-size:22px;cursor:pointer;padding:4px 10px">×</button>
+        </div>
+        <div id="dash-drill-body"></div>
+      </div>`;
+    document.body.appendChild(modal);
+  }
+  document.getElementById('dash-drill-title').innerHTML = title;
+  document.getElementById('dash-drill-body').innerHTML = html;
+  openModal('modal-dash-drill');
+}
+
+// ── Drill: KPI card clicked ──
+function _drillKpi(which) {
+  const { users, allLogs } = _adminDashboardData;
+  const realUsers = users.filter(u => (u.role||'USER').toUpperCase() !== 'ADMIN');
+  const today = todayStr();
+  const kpiStart = _dashRangeStart(_dashKpiRange);
+
+  if (which === 'today') {
+    const list = allLogs.filter(l => l.date === today)
+      .sort((a,b) => (b.timestamp||'').localeCompare(a.timestamp||''));
+    const html = `
+      <div style="font-size:13px;color:var(--text2);margin-bottom:14px">
+        ${list.length} session${list.length===1?'':'s'} from ${[...new Set(list.map(l=>l.userId))].length} user${[...new Set(list.map(l=>l.userId))].length===1?'':'s'} today.
+      </div>
+      ${list.length ? list.map(l => {
+        const u = realUsers.find(u => u.id === l.userId);
+        const time = l.timestamp ? new Date(l.timestamp).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true }) : '';
+        return `<div class="dash-feed-item">
+          <div class="dash-feed-icon">${_modIcon(l.module)}</div>
+          <div class="dash-feed-info">
+            <div class="dash-feed-text"><strong>${u?.name||l.userId}</strong> · ${_modName(l.module)}</div>
+            <div class="dash-feed-time">${time}</div>
+          </div>
+        </div>`;
+      }).join('') : '<div style="text-align:center;color:var(--text3);padding:32px">No sessions logged today yet.</div>'}
+    `;
+    _openDrillModal('📅 Today\'s Sessions', html);
+  }
+
+  else if (which === 'range') {
+    // Show breakdown by module + by user
+    const list = allLogs.filter(l => l.date >= kpiStart);
+    const modCounts = {};
+    list.forEach(l => {
+      const m = (l.module||'').startsWith('custom_') ? 'custom' : (l.module||'unknown');
+      modCounts[m] = (modCounts[m]||0)+1;
+    });
+    const userCounts = {};
+    list.forEach(l => { userCounts[l.userId] = (userCounts[l.userId]||0)+1; });
+    const sortedUsers = Object.entries(userCounts).sort((a,b)=>b[1]-a[1]);
+
+    const html = `
+      <div style="font-size:13px;color:var(--text2);margin-bottom:14px">
+        ${list.length} sessions ${_dashRangeLabel(_dashKpiRange).toLowerCase()}.
+      </div>
+
+      <div class="section-title" style="margin-bottom:8px">By Module</div>
+      <div class="dash-mod-list" style="margin-bottom:18px">
+        ${Object.entries(modCounts).sort((a,b)=>b[1]-a[1]).map(([mod, n]) => {
+          const pct = Math.round(n / list.length * 100);
+          return `<div class="dash-mod-row">
+            <div class="dash-mod-label">${_modIcon(mod)} ${_modName(mod)}</div>
+            <div class="dash-mod-bar"><div class="dash-mod-fill" style="width:${pct}%"></div></div>
+            <div class="dash-mod-count">${n}</div>
+          </div>`;
+        }).join('')}
+      </div>
+
+      <div class="section-title" style="margin-bottom:8px">By User</div>
+      <div class="dash-user-list">
+        ${sortedUsers.map(([uid, n]) => {
+          const u = realUsers.find(u => u.id === uid);
+          return `<div class="dash-user-row">
+            <div class="dash-user-info">
+              <div class="dash-user-name">${u?.name||uid}</div>
+              <div class="dash-user-email">${u?.email||''}</div>
+            </div>
+            <div class="dash-user-count">${n}</div>
+          </div>`;
+        }).join('') || '<div style="text-align:center;color:var(--text3);padding:24px">No data</div>'}
+      </div>
+    `;
+    _openDrillModal('📈 Sessions ' + _dashRangeLabel(_dashKpiRange), html);
+  }
+
+  else if (which === 'users') {
+    const list = allLogs.filter(l => l.date >= kpiStart);
+    const userCounts = {};
+    list.forEach(l => { userCounts[l.userId] = (userCounts[l.userId]||0)+1; });
+    const activeUserList = Object.entries(userCounts)
+      .map(([uid, n]) => ({ ...realUsers.find(u => u.id === uid), id: uid, sessionCount: n }))
+      .filter(u => u.email)
+      .sort((a,b) => b.sessionCount - a.sessionCount);
+    const html = `
+      <div style="font-size:13px;color:var(--text2);margin-bottom:14px">
+        ${activeUserList.length} of ${realUsers.length} users were active ${_dashRangeLabel(_dashKpiRange).toLowerCase()}.
+      </div>
+      <div class="dash-user-list">
+        ${activeUserList.map(u => {
+          const safeId = (u.id||'').replace(/'/g, "\\'");
+          return `<div class="dash-user-row dash-clickable" onclick="closeModal('modal-dash-drill'); setTimeout(()=>_drillUser('${safeId}'),200)">
+            <div class="dash-user-info">
+              <div class="dash-user-name">${u.name||'?'}</div>
+              <div class="dash-user-email">${u.email||''}</div>
+            </div>
+            <div class="dash-user-count">${u.sessionCount}</div>
+          </div>`;
+        }).join('') || '<div style="text-align:center;color:var(--text3);padding:24px">No active users</div>'}
+      </div>
+    `;
+    _openDrillModal('👥 Active Users · ' + _dashRangeLabel(_dashKpiRange), html);
+  }
+
+  else if (which === 'newusers') {
+    const newList = realUsers.filter(u => u.createdDate >= kpiStart)
+      .sort((a,b) => (b.createdDate||'').localeCompare(a.createdDate||''));
+    const html = `
+      <div style="font-size:13px;color:var(--text2);margin-bottom:14px">
+        ${newList.length} new user${newList.length===1?'':'s'} signed up ${_dashRangeLabel(_dashKpiRange).toLowerCase()}.
+      </div>
+      <div class="dash-user-list">
+        ${newList.length ? newList.map(u => `
+          <div class="dash-user-row">
+            <div class="dash-user-info">
+              <div class="dash-user-name">${u.name||'?'}</div>
+              <div class="dash-user-email">${u.email||''}</div>
+            </div>
+            <div class="dash-user-meta">Joined: <strong>${u.createdDate}</strong></div>
+          </div>`).join('') : '<div style="text-align:center;color:var(--text3);padding:24px">No new users in this period</div>'}
+      </div>
+    `;
+    _openDrillModal('✨ New Users · ' + _dashRangeLabel(_dashKpiRange), html);
+  }
+}
+
+// ── Drill: clicked a day in the sparkline ──
+function _drillDay(dateStr, range) {
+  const { users, allLogs, allRuns } = _adminDashboardData;
+  const realUsers = users.filter(u => (u.role||'USER').toUpperCase() !== 'ADMIN');
+
+  let dayLogs = [], dayRuns = [];
+  if (range === '1y') {
+    // dateStr is YYYY-MM, filter all in that month
+    dayLogs = allLogs.filter(l => (l.date||'').startsWith(dateStr));
+    dayRuns = allRuns.filter(r => (r.date||'').startsWith(dateStr));
+  } else {
+    dayLogs = allLogs.filter(l => l.date === dateStr);
+    dayRuns = allRuns.filter(r => r.date === dateStr);
+  }
+
+  const all = [...dayLogs, ...dayRuns.map(r => ({...r, module:'run', distance:r.distance}))]
+    .sort((a,b) => (b.timestamp||'').localeCompare(a.timestamp||''));
+
+  const html = `
+    <div style="font-size:13px;color:var(--text2);margin-bottom:14px">
+      ${all.length} activit${all.length===1?'y':'ies'} from ${[...new Set(all.map(l=>l.userId))].length} user${[...new Set(all.map(l=>l.userId))].length===1?'':'s'}.
+    </div>
+    <div class="dash-feed">
+      ${all.length ? all.map(l => {
+        const u = realUsers.find(u => u.id === l.userId);
+        const time = l.timestamp ? new Date(l.timestamp).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true }) : '';
+        const isRun = l.module === 'run';
+        return `<div class="dash-feed-item">
+          <div class="dash-feed-icon">${isRun?'🏃':_modIcon(l.module)}</div>
+          <div class="dash-feed-info">
+            <div class="dash-feed-text"><strong>${u?.name||l.userId}</strong> · ${isRun?(l.distance||0).toFixed(2)+' km':_modName(l.module)}</div>
+            <div class="dash-feed-time">${time}</div>
+          </div>
+        </div>`;
+      }).join('') : '<div style="text-align:center;color:var(--text3);padding:24px">No activity</div>'}
+    </div>
+  `;
+  const titleDate = range === '1y'
+    ? _shortDate(dateStr)
+    : new Date(dateStr).toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+  _openDrillModal('📅 ' + titleDate, html);
+}
+
+// ── Drill: clicked a module ──
+function _drillModule(mod) {
+  const { users, allLogs } = _adminDashboardData;
+  const realUsers = users.filter(u => (u.role||'USER').toUpperCase() !== 'ADMIN');
+  const kpiStart = _dashRangeStart(_dashKpiRange);
+
+  const matching = allLogs.filter(l => {
+    const m = (l.module||'').startsWith('custom_') ? 'custom' : (l.module||'unknown');
+    return m === mod && l.date >= kpiStart;
+  });
+
+  // Group by user
+  const userCounts = {};
+  matching.forEach(l => { userCounts[l.userId] = (userCounts[l.userId]||0)+1; });
+  const sortedUsers = Object.entries(userCounts).sort((a,b)=>b[1]-a[1]);
+
+  const html = `
+    <div style="font-size:13px;color:var(--text2);margin-bottom:14px">
+      ${matching.length} sessions across ${sortedUsers.length} user${sortedUsers.length===1?'':'s'} (${_dashRangeLabel(_dashKpiRange).toLowerCase()}).
+    </div>
+    <div class="dash-user-list">
+      ${sortedUsers.map(([uid, n]) => {
+        const u = realUsers.find(u => u.id === uid);
+        const safeId = uid.replace(/'/g, "\\'");
+        return `<div class="dash-user-row dash-clickable" onclick="closeModal('modal-dash-drill');setTimeout(()=>_drillUser('${safeId}'),200)">
+          <div class="dash-user-info">
+            <div class="dash-user-name">${u?.name||uid}</div>
+            <div class="dash-user-email">${u?.email||''}</div>
+          </div>
+          <div class="dash-user-count">${n}</div>
+        </div>`;
+      }).join('') || '<div style="text-align:center;color:var(--text3);padding:24px">No usage</div>'}
+    </div>
+  `;
+  _openDrillModal(_modIcon(mod) + ' ' + _modName(mod) + ' · ' + _dashRangeLabel(_dashKpiRange), html);
+}
+
+// ── Drill: clicked a user — full user-wise KPI analytics ──
+let _userDrillRange = '30d';   // separate range for user view
+let _userDrillId    = null;    // currently-viewed user
+
+function _drillUser(userId, openInPage) {
+  _userDrillId = userId;
+  if (!_userDrillRange) _userDrillRange = '30d';
+
+  const { users } = _adminDashboardData || {};
+  if (!users) { showToast('Loading data...', 'info'); return; }
+
+  const u = users.find(u => u.id === userId);
+  if (!u) { showToast('User not found', 'error'); return; }
+
+  // Render the full user analytics view inside the drill modal
+  _renderUserAnalytics();
+  _openDrillModal('', '');  // open empty modal (we set its content via _renderUserAnalytics)
+}
+
+function _setUserDrillRange(range, btn) {
+  _userDrillRange = range;
+  document.querySelectorAll('[data-range-group="user"]').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  _renderUserAnalytics();
+}
+
+function _renderUserAnalytics() {
+  if (!_adminDashboardData || !_userDrillId) return;
+  const { users, allLogs, allRuns } = _adminDashboardData;
+  const u = users.find(u => u.id === _userDrillId);
+  if (!u) return;
+
+  const userLogs = allLogs.filter(l => l.userId === u.id);
+  const userRuns = allRuns.filter(r => r.userId === u.id);
+
+  const today = todayStr();
+  const rangeStart = _dashRangeStart(_userDrillRange);
+  const rangeDays = _userDrillRange === '7d' ? 7 : _userDrillRange === '30d' ? 30 : _userDrillRange === '90d' ? 90 : 365;
+
+  // ── Stats in current range ──
+  const rangeLogs = userLogs.filter(l => l.date >= rangeStart);
+  const rangeRuns = userRuns.filter(r => r.date >= rangeStart);
+
+  // Previous period (equal length)
+  const prevStart = _dashDaysAgo(rangeDays * 2);
+  const prevEnd   = _dashDaysAgo(rangeDays + 1);
+  const prevLogs  = userLogs.filter(l => l.date >= prevStart && l.date <= prevEnd);
+  const prevRuns  = userRuns.filter(r => r.date >= prevStart && r.date <= prevEnd);
+  const sessionTrend = prevLogs.length ? Math.round((rangeLogs.length - prevLogs.length) / prevLogs.length * 100) : null;
+
+  // ── Engagement metrics ──
+  const allDates = new Set(userLogs.map(l => l.date).concat(userRuns.map(r => r.date)).filter(Boolean));
+  const daysSinceSignup = u.createdDate ? Math.max(1, Math.floor((Date.now() - new Date(u.createdDate).getTime()) / 86400000)) : 1;
+  const lifetimeActiveDays = allDates.size;
+  const engagementPct = Math.min(100, Math.round(lifetimeActiveDays / daysSinceSignup * 100));
+
+  const rangeActiveDays = new Set(rangeLogs.map(l => l.date).concat(rangeRuns.map(r => r.date)).filter(Boolean)).size;
+  const rangeEngagementPct = Math.round(rangeActiveDays / rangeDays * 100);
+
+  // ── Streak (consecutive days with activity, ending today or yesterday) ──
+  let streak = 0;
+  let cursor = new Date();
+  // If today not active, start from yesterday
+  if (!allDates.has(today)) cursor.setDate(cursor.getDate() - 1);
+  while (true) {
+    const dStr = cursor.getFullYear() + '-' + String(cursor.getMonth()+1).padStart(2,'0') + '-' + String(cursor.getDate()).padStart(2,'0');
+    if (allDates.has(dStr)) {
+      streak++;
+      cursor.setDate(cursor.getDate() - 1);
+    } else break;
+  }
+
+  // ── Total kcal & km in range ──
+  const rangeKm   = rangeRuns.reduce((s,r) => s + (r.distance||0), 0);
+  const rangeKcal = rangeRuns.reduce((s,r) => s + ((r.distance||0) * 60), 0);
+  const lifeKm    = userRuns.reduce((s,r) => s + (r.distance||0), 0);
+
+  // ── Module breakdown (range) ──
+  const modCounts = {};
+  rangeLogs.forEach(l => {
+    const m = (l.module||'').startsWith('custom_') ? 'custom' : (l.module||'unknown');
+    modCounts[m] = (modCounts[m]||0) + 1;
+  });
+  const sortedMods = Object.entries(modCounts).sort((a,b) => b[1] - a[1]);
+  const topMod = sortedMods[0] ? `${_modIcon(sortedMods[0][0])} ${_modName(sortedMods[0][0])}` : '—';
+
+  // ── Activity sparkline (range-based) ──
+  const dayMap = {};
+  for (let i = rangeDays - 1; i >= 0; i--) dayMap[_dashDaysAgo(i)] = 0;
+  userLogs.forEach(l => { if (dayMap[l.date]!==undefined) dayMap[l.date]++; });
+  userRuns.forEach(r => { if (dayMap[r.date]!==undefined) dayMap[r.date]++; });
+  let trendKeys = Object.keys(dayMap);
+  let trendVals = Object.values(dayMap);
+
+  if (_userDrillRange === '1y') {
+    const monthly = {};
+    trendKeys.forEach((k, i) => {
+      const ym = k.substring(0, 7);
+      monthly[ym] = (monthly[ym] || 0) + trendVals[i];
+    });
+    trendKeys = Object.keys(monthly);
+    trendVals = Object.values(monthly);
+  }
+
+  // ── Day-of-week pattern (which weekday they prefer) ──
+  const dayOfWeek = [0,0,0,0,0,0,0]; // Sun..Sat
+  const dowNames  = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  rangeLogs.forEach(l => {
+    if (!l.date) return;
+    const d = new Date(l.date);
+    if (!isNaN(d.getTime())) dayOfWeek[d.getDay()]++;
+  });
+  rangeRuns.forEach(r => {
+    if (!r.date) return;
+    const d = new Date(r.date);
+    if (!isNaN(d.getTime())) dayOfWeek[d.getDay()]++;
+  });
+  const maxDow = Math.max(...dayOfWeek, 1);
+
+  // ── Hour-of-day pattern ──
+  const hourBuckets = Array(24).fill(0);
+  [...userLogs, ...userRuns].forEach(a => {
+    if (a.timestamp && a.date >= rangeStart) {
+      const d = new Date(a.timestamp);
+      if (!isNaN(d.getTime())) hourBuckets[d.getHours()]++;
+    }
+  });
+  const maxHour = Math.max(...hourBuckets, 1);
+
+  // ── Activity feed (chronological) ──
+  const feed = [...userLogs, ...userRuns.map(r => ({...r, module:'run'}))]
+    .sort((a,b) => (b.timestamp||'').localeCompare(a.timestamp||''))
+    .slice(0, 30);
+
+  // ── Status flags ──
+  const isAdmin    = (u.role||'USER').toUpperCase() === 'ADMIN';
+  const isActive   = (u.status||'ACTIVE').toUpperCase() === 'ACTIVE';
+  const isFirst    = u.isFirstLogin === true || String(u.isFirstLogin).toUpperCase() === 'TRUE';
+  const safeId     = (u.id||'').replace(/'/g, "\\'");
+  const safeName   = (u.name||'').replace(/'/g, "\\'");
+
+  // ── Render ──
+  const html = `
+    <!-- Profile header -->
+    <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border)">
+      <div class="user-avatar" style="width:54px;height:54px;font-size:22px;flex-shrink:0">${(u.name||'?').charAt(0).toUpperCase()}</div>
+      <div style="flex:1;min-width:0">
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+          <div style="font-size:18px;font-weight:700">${u.name||'—'}</div>
+          ${isAdmin ? '<span class="badge" style="background:rgba(255,215,0,0.2);color:#ffd700;border:1px solid rgba(255,215,0,0.3)">👑 ADMIN</span>' : ''}
+          <span class="badge ${isActive ? 'badge-green' : 'badge-red'}">${(u.status||'ACTIVE').toUpperCase()}</span>
+          ${isFirst ? '<span class="badge" style="background:rgba(240,192,64,0.15);color:var(--accent)">Awaiting first login</span>' : ''}
+        </div>
+        <div style="font-size:12px;color:var(--text3);margin-top:2px">${u.email||'—'}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">
+          Joined ${u.createdDate||'—'} · ${daysSinceSignup} days ago · Last login: ${u.lastLogin || 'never'}
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick action buttons -->
+    ${!isAdmin ? `
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:18px">
+      <button class="btn btn-ghost btn-sm" style="color:var(--accent)" onclick="closeModal('modal-dash-drill');setTimeout(()=>openAdminResetPassword('${safeId}','${safeName}',false),200)">🔑 Reset Password</button>
+      <button class="btn btn-ghost btn-sm" style="color:#64b5f6" onclick="toggleStatus('${safeId}','${isActive ? 'INACTIVE' : 'ACTIVE'}','${safeId}');setTimeout(()=>_renderUserAnalytics(),500)">${isActive ? '⏸ Deactivate' : '▶ Reactivate'}</button>
+    </div>` : ''}
+
+    <!-- Period selector -->
+    <div class="dash-range-bar" style="margin-bottom:14px">
+      <div class="dash-range-label">Stats period:</div>
+      <div class="dash-range-tabs">
+        ${['7d','30d','90d','1y'].map(r => `
+          <button class="dash-range-tab ${_userDrillRange===r?'active':''}" data-range-group="user" onclick="_setUserDrillRange('${r}', this)">${r==='1y'?'1Y':r.toUpperCase()}</button>
+        `).join('')}
+      </div>
+    </div>
+
+    <!-- KPI grid (range-aware) -->
+    <div class="dash-grid dash-grid-4" style="gap:8px;margin-bottom:14px">
+      <div class="dash-card dash-kpi dash-kpi-green" style="padding:12px">
+        <div class="dash-kpi-icon" style="width:36px;height:36px;font-size:18px">📅</div>
+        <div class="dash-kpi-body">
+          <div class="dash-kpi-val" style="font-size:22px">${rangeLogs.length + rangeRuns.length}</div>
+          <div class="dash-kpi-label">Sessions</div>
+          <div class="dash-kpi-sub">${prevLogs.length + prevRuns.length} previous</div>
+        </div>
+        ${sessionTrend !== null ? `<div class="dash-kpi-trend ${sessionTrend >= 0 ? 'up' : 'down'}" style="top:10px;right:10px">${sessionTrend >= 0 ? '↑' : '↓'} ${Math.abs(sessionTrend)}%</div>` : ''}
+      </div>
+
+      <div class="dash-card dash-kpi dash-kpi-blue" style="padding:12px">
+        <div class="dash-kpi-icon" style="width:36px;height:36px;font-size:18px">🎯</div>
+        <div class="dash-kpi-body">
+          <div class="dash-kpi-val" style="font-size:22px">${rangeActiveDays}/${rangeDays}</div>
+          <div class="dash-kpi-label">Active Days</div>
+          <div class="dash-kpi-sub">${rangeEngagementPct}% of period</div>
+        </div>
+      </div>
+
+      <div class="dash-card dash-kpi dash-kpi-purple" style="padding:12px">
+        <div class="dash-kpi-icon" style="width:36px;height:36px;font-size:18px">🔥</div>
+        <div class="dash-kpi-body">
+          <div class="dash-kpi-val" style="font-size:22px">${streak}</div>
+          <div class="dash-kpi-label">Day Streak</div>
+          <div class="dash-kpi-sub">consecutive days</div>
+        </div>
+      </div>
+
+      <div class="dash-card dash-kpi dash-kpi-amber" style="padding:12px">
+        <div class="dash-kpi-icon" style="width:36px;height:36px;font-size:18px">⭐</div>
+        <div class="dash-kpi-body">
+          <div class="dash-kpi-val" style="font-size:14px;font-weight:600">${topMod}</div>
+          <div class="dash-kpi-label">Top Module</div>
+          <div class="dash-kpi-sub">${sortedMods[0] ? sortedMods[0][1] + ' sessions' : '—'}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Running totals -->
+    <div class="dash-grid dash-grid-4" style="gap:8px;margin-bottom:14px">
+      <div class="dash-total" style="padding:12px"><div class="dash-total-icon">🏃</div><div class="dash-total-val" style="font-size:20px">${rangeRuns.length}</div><div class="dash-total-lbl">Runs (${_userDrillRange})</div></div>
+      <div class="dash-total" style="padding:12px"><div class="dash-total-icon">📍</div><div class="dash-total-val" style="font-size:20px">${rangeKm.toFixed(1)}</div><div class="dash-total-lbl">km (${_userDrillRange})</div></div>
+      <div class="dash-total" style="padding:12px"><div class="dash-total-icon">🔥</div><div class="dash-total-val" style="font-size:20px">${Math.round(rangeKcal).toLocaleString()}</div><div class="dash-total-lbl">kcal (${_userDrillRange})</div></div>
+      <div class="dash-total" style="padding:12px"><div class="dash-total-icon">📊</div><div class="dash-total-val" style="font-size:20px">${engagementPct}%</div><div class="dash-total-lbl">Lifetime engagement</div></div>
+    </div>
+
+    <!-- Activity sparkline -->
+    <div class="dash-card" style="margin-bottom:14px">
+      <div class="dash-card-head" style="margin-bottom:8px">
+        <h3 class="dash-card-title">📈 Activity Trend</h3>
+        <span class="dash-card-sub">${_dashRangeLabel(_userDrillRange)}</span>
+      </div>
+      <div class="dash-spark">
+        ${trendKeys.map((k, i) => {
+          const max = Math.max(...trendVals, 1);
+          const h = Math.max(2, Math.round(trendVals[i] / max * 60));
+          const isToday = k === today;
+          return `<div class="dash-spark-bar-wrap" title="${k}: ${trendVals[i]} ${trendVals[i]===1?'session':'sessions'}">
+            <div class="dash-spark-bar ${isToday ? 'dash-spark-today' : ''}" style="height:${h}px"></div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="dash-spark-axis">
+        <span>${trendKeys[0] ? _shortDate(trendKeys[0]) : ''}</span>
+        <span>${trendKeys[trendKeys.length-1] ? _shortDate(trendKeys[trendKeys.length-1]) : ''}</span>
+      </div>
+    </div>
+
+    <!-- 2-column: Module breakdown + Day-of-week -->
+    <div class="dash-grid dash-grid-2" style="margin-bottom:14px">
+      <div class="dash-card">
+        <div class="dash-card-head" style="margin-bottom:10px">
+          <h3 class="dash-card-title">🏋️ Modules</h3>
+          <span class="dash-card-sub">${_userDrillRange}</span>
+        </div>
+        <div class="dash-mod-list">
+          ${sortedMods.length ? sortedMods.map(([mod, n]) => {
+            const pct = Math.round(n / sortedMods[0][1] * 100);
+            return `<div class="dash-mod-row" style="cursor:default">
+              <div class="dash-mod-label">${_modIcon(mod)} ${_modName(mod)}</div>
+              <div class="dash-mod-bar"><div class="dash-mod-fill" style="width:${pct}%"></div></div>
+              <div class="dash-mod-count">${n}</div>
+            </div>`;
+          }).join('') : '<div style="text-align:center;color:var(--text3);padding:14px;font-size:12px">No activity in period</div>'}
+        </div>
+      </div>
+
+      <div class="dash-card">
+        <div class="dash-card-head" style="margin-bottom:10px">
+          <h3 class="dash-card-title">📅 Day Pattern</h3>
+          <span class="dash-card-sub">when active</span>
+        </div>
+        <div style="display:flex;align-items:flex-end;gap:4px;height:80px">
+          ${dayOfWeek.map((v, i) => {
+            const h = Math.max(2, Math.round(v / maxDow * 64));
+            return `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px" title="${dowNames[i]}: ${v} sessions">
+              <div style="width:100%;background:var(--g4);height:${h}px;border-radius:3px 3px 0 0;opacity:${v>0?0.85:0.3}"></div>
+              <div style="font-size:10px;color:var(--text3);font-weight:500">${dowNames[i]}</div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+
+    <!-- Hour-of-day pattern -->
+    <div class="dash-card" style="margin-bottom:14px">
+      <div class="dash-card-head" style="margin-bottom:10px">
+        <h3 class="dash-card-title">🕐 Hour of Day</h3>
+        <span class="dash-card-sub">when ${u.name?u.name.split(' ')[0]:'this user'} works out</span>
+      </div>
+      <div style="display:flex;align-items:flex-end;gap:1px;height:60px">
+        ${hourBuckets.map((v, i) => {
+          const h = Math.max(1, Math.round(v / maxHour * 50));
+          return `<div style="flex:1;display:flex;flex-direction:column;align-items:center" title="${i}:00 - ${i+1}:00: ${v} sessions">
+            <div style="width:100%;background:${v>0?'var(--g4)':'rgba(255,255,255,0.06)'};height:${h}px;border-radius:2px 2px 0 0;opacity:${v>0?0.85:0.4}"></div>
+          </div>`;
+        }).join('')}
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text3);margin-top:4px;padding-top:4px;border-top:1px solid var(--border)">
+        <span>12 AM</span><span>6 AM</span><span>12 PM</span><span>6 PM</span><span>12 AM</span>
+      </div>
+    </div>
+
+    <!-- Recent activity feed -->
+    <div class="dash-card">
+      <div class="dash-card-head" style="margin-bottom:10px">
+        <h3 class="dash-card-title">⚡ All Activity</h3>
+        <span class="dash-card-sub">${feed.length === 30 ? 'Last 30' : feed.length} entries</span>
+      </div>
+      <div class="dash-feed">
+        ${feed.length ? feed.map(a => {
+          const time = a.timestamp ? new Date(a.timestamp).toLocaleString('en-IN', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit', hour12:true }) : a.date;
+          const isRun = a.module === 'run';
+          return `<div class="dash-feed-item" style="cursor:default">
+            <div class="dash-feed-icon">${isRun?'🏃':_modIcon(a.module)}</div>
+            <div class="dash-feed-info">
+              <div class="dash-feed-text"><strong>${isRun?(a.distance||0).toFixed(2)+' km '+(a.activityType||'run'):_modName(a.module)}</strong>${a.duration?` · ${typeof fmtTime==='function'?fmtTime(a.duration):a.duration+'s'}`:''}</div>
+              <div class="dash-feed-time">${time}</div>
+            </div>
+          </div>`;
+        }).join('') : '<div style="text-align:center;color:var(--text3);padding:24px">No activity yet</div>'}
+      </div>
+    </div>
+  `;
+
+  _openDrillModal('👤 ' + (u.name||'User') + ' · ' + (u.email||''), html);
+}
+
+
+
+// ── Helpers ──
 function _kpiCard(label, value, trend, sub, icon, color) {
   const trendHTML = trend !== null && trend !== undefined ? `
     <div class="dash-kpi-trend ${trend >= 0 ? 'up' : 'down'}">
@@ -2371,7 +2863,6 @@ function _kpiCard(label, value, trend, sub, icon, color) {
     </div>`;
 }
 
-// ── Helper: Sparkline ──
 function _renderSparkline(dayActivity) {
   const entries = Object.entries(dayActivity);
   const values  = entries.map(([,v]) => v);
@@ -2389,7 +2880,6 @@ function _renderSparkline(dayActivity) {
     </div>`;
 }
 
-// ── Helper: Module name ──
 function _modName(mod) {
   const map = { calisthenics:'Calisthenics', cardio:'Cardio', yoga:'Yoga', stretch:'Stretching', stretching:'Stretching', custom:'Custom Workouts', running:'Running', run:'Run' };
   return map[mod] || (mod ? mod.charAt(0).toUpperCase() + mod.slice(1) : 'Other');
