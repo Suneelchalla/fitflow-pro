@@ -1712,37 +1712,57 @@ async function _syncHistoryThenRender() {
   try {
     const user = APP.currentUser;
     if (user) {
+      // Helper: LOCAL date from timestamp
+      const tsToLocal = (ts) => {
+        if (!ts) return null;
+        const dt = new Date(ts);
+        if (isNaN(dt.getTime())) return null;
+        return dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0');
+      };
+
+      // Workout logs — REPLACE strategy
       const res = await Sheets.get('getUserLogs', { userId: user.id });
-      if (res?.success && Array.isArray(res.logs) && res.logs.length) {
-        const local = Store.getLogs(); let ch = false;
-        // Build Set of existing keys: userId|module|date (NO day - causes duplicates)
-        const seen = new Set(local.map(l => (l.userId||'') + '|' + (l.module||'') + '|' + (l.date||'')));
-        res.logs.forEach(sl => {
+      if (res?.success && Array.isArray(res.logs)) {
+        const fromSheet = res.logs.map(sl => ({
+          ...sl,
+          date: tsToLocal(sl.timestamp) || sl.date,
+          id:   sl.id || ('log_' + Date.now() + Math.random()),
+        }));
+        const allLocal = Store.get('ff_logs', []) || [];
+        const otherUsers = allLocal.filter(l => l.userId !== user.id);
+        const seen = new Set();
+        const myLogs = [];
+        fromSheet.forEach(sl => {
           const key = (sl.userId||'') + '|' + (sl.module||'') + '|' + (sl.date||'');
-          if (!seen.has(key)) {
-            local.push({ ...sl, id: sl.id||('log_'+Date.now()+Math.random()) });
-            seen.add(key);
-            ch = true;
-          }
+          if (seen.has(key)) return;
+          seen.add(key);
+          myLogs.push(sl);
         });
-        if (ch) Store.set('ff_logs', local);
+        Store.set('ff_logs', [...otherUsers, ...myLogs]);
       }
+
+      // Run logs — REPLACE strategy
       const rr = await Sheets.get('getUserRunLogs', { userId: user.id });
-      if (rr?.success && Array.isArray(rr.logs) && rr.logs.length) {
-        const lr = Store.getRunLogs(); let ch2 = false;
-        // Build Set of existing IDs and (userId|date|distance) keys
-        const seenIds = new Set(lr.filter(l => l.id).map(l => l.id));
-        const seenKeys = new Set(lr.map(l => (l.userId||'') + '|' + (l.date||'') + '|' + (l.distance||0).toFixed(2)));
-        rr.logs.forEach(r => {
+      if (rr?.success && Array.isArray(rr.logs)) {
+        const fromSheet = rr.logs.map(r => ({
+          ...r,
+          date: tsToLocal(r.timestamp) || r.date,
+          id:   r.id || ('run_' + Date.now() + Math.random()),
+        }));
+        const allLocal = Store.get('ff_runlogs', []) || [];
+        const otherUsers = allLocal.filter(l => l.userId !== user.id);
+        const seenIds = new Set();
+        const seenKeys = new Set();
+        const myRuns = [];
+        fromSheet.forEach(r => {
           if (r.id && seenIds.has(r.id)) return;
-          const key = (r.userId||'') + '|' + (r.date||'') + '|' + (r.distance||0).toFixed(2);
+          const key = (r.userId||'') + '|' + (r.date||'') + '|' + Math.round((r.distance||0)*100);
           if (seenKeys.has(key)) return;
-          lr.push(r);
           if (r.id) seenIds.add(r.id);
           seenKeys.add(key);
-          ch2 = true;
+          myRuns.push(r);
         });
-        if (ch2) Store.set('ff_runlogs', lr);
+        Store.set('ff_runlogs', [...otherUsers, ...myRuns]);
       }
     }
   } catch(e) { console.warn('History sync skipped:', e.message); }
