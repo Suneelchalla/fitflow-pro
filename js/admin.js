@@ -1676,14 +1676,16 @@ async function openUserProgress(userId, userName) {
     showToast('Loading user data...', 'info');
     let users = [], allLogs = Store.getLogs(), allRuns = Store.getRunLogs();
     try {
-      const [usersRes, logsRes, runsRes] = await Promise.all([
+      const [usersRes, logsRes, runsRes, onbRes] = await Promise.all([
         Sheets.get('getAllUsers').catch(() => null),
         Sheets.get('getAllLogs').catch(() => null),
         Sheets.get('getAllRunLogs').catch(() => null),
+        Sheets.get('getAllOnboarding').catch(() => null),
       ]);
-      if (usersRes?.success) users   = usersRes.users || [];
-      if (logsRes?.success)  allLogs = logsRes.logs   || allLogs;
-      if (runsRes?.success)  allRuns = runsRes.logs   || allRuns;
+      if (usersRes?.success) users         = usersRes.users || [];
+      if (logsRes?.success)  allLogs       = logsRes.logs   || allLogs;
+      if (runsRes?.success)  allRuns       = runsRes.logs   || allRuns;
+      if (onbRes?.success)   _adminOnboardings = onbRes.onboardings || [];
     } catch(e) {}
     _adminDashboardData = { users, allLogs, allRuns, fetchedAt: new Date() };
   }
@@ -1901,6 +1903,7 @@ async function saveCalisthenicsEditorChanges() {
 // • Click recent activity item to see user's full history
 // ════════════════════════════════════════════════════════════════
 
+let _adminOnboardings       = [];
 let _adminDashboardInterval = null;
 let _adminDashboardData     = null;
 let _dashTrendRange         = '30d';   // default for activity trend
@@ -1916,14 +1919,16 @@ async function renderAdminDashboard() {
 
   let users = [], allLogs = Store.getLogs(), allRuns = Store.getRunLogs();
   try {
-    const [usersRes, logsRes, runsRes] = await Promise.all([
+    const [usersRes, logsRes, runsRes, onbRes] = await Promise.all([
       Sheets.get('getAllUsers').catch(() => null),
       Sheets.get('getAllLogs').catch(() => null),
       Sheets.get('getAllRunLogs').catch(() => null),
+      Sheets.get('getAllOnboarding').catch(() => null),
     ]);
-    if (usersRes?.success) users   = usersRes.users || [];
-    if (logsRes?.success)  allLogs = logsRes.logs   || allLogs;
-    if (runsRes?.success)  allRuns = runsRes.logs   || allRuns;
+    if (usersRes?.success) users         = usersRes.users || [];
+    if (logsRes?.success)  allLogs       = logsRes.logs   || allLogs;
+    if (runsRes?.success)  allRuns       = runsRes.logs   || allRuns;
+    if (onbRes?.success)   _adminOnboardings = onbRes.onboardings || [];
   } catch(e) { console.warn('Dashboard fetch:', e.message); }
 
   _adminDashboardData = { users, allLogs, allRuns, fetchedAt: new Date() };
@@ -2242,6 +2247,9 @@ function _renderDashboardContent() {
       </div>
     </div>
 
+    <!-- Onboarding preferences widget -->
+    ${_renderOnboardingTrendsCard()}
+
     <!-- Recent activity feed -->
     <div class="dash-card">
       <div class="dash-card-head">
@@ -2516,6 +2524,113 @@ function _drillModule(mod) {
   _openDrillModal(_modIcon(mod) + ' ' + _modName(mod) + ' · ' + _dashRangeLabel(_dashKpiRange), html);
 }
 
+
+// Returns HTML card showing user's onboarding selections (modules, goal, body stats)
+
+function _renderOnboardingTrendsCard() {
+  if (!_adminOnboardings || !_adminOnboardings.length) return '';
+  const goalCounts = {};
+  const modSelections = {};
+  const fitCounts = {};
+  _adminOnboardings.forEach(o => {
+    if (o.goal) goalCounts[o.goal] = (goalCounts[o.goal]||0)+1;
+    if (o.fitnessLevel) fitCounts[o.fitnessLevel] = (fitCounts[o.fitnessLevel]||0)+1;
+    (o.modules||[]).forEach(m => { modSelections[m] = (modSelections[m]||0)+1; });
+  });
+  const total = _adminOnboardings.length;
+  const goalLabels = { lose:'Lose Weight', gain:'Gain Muscle', tone:'Tone Body', maintain:'Maintain', endurance:'Endurance' };
+  const sortedGoals = Object.entries(goalCounts).sort((a,b)=>b[1]-a[1]);
+  const sortedMods  = Object.entries(modSelections).sort((a,b)=>b[1]-a[1]);
+  const maxMod = sortedMods[0]?.[1] || 1;
+  return `
+    <div class="dash-card" style="margin-bottom:14px">
+      <div class="dash-card-head">
+        <h3 class="dash-card-title">📋 Onboarding Insights</h3>
+        <span class="dash-card-sub">${total} user${total===1?'':'s'} onboarded</span>
+      </div>
+      <div class="dash-grid dash-grid-2" style="gap:14px;margin-bottom:0">
+        <div>
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;font-weight:600">Selected Modules</div>
+          <div class="dash-mod-list">
+            ${sortedMods.length ? sortedMods.map(([mod, n]) => {
+              const pct = Math.round(n / maxMod * 100);
+              const userPct = Math.round(n / total * 100);
+              return `<div class="dash-mod-row">
+                <div class="dash-mod-label">${_modIcon(mod)} ${_modName(mod)}</div>
+                <div class="dash-mod-bar"><div class="dash-mod-fill" style="width:${pct}%"></div></div>
+                <div class="dash-mod-count">${n} <span style="font-size:10px;color:var(--text3)">${userPct}%</span></div>
+              </div>`;
+            }).join('') : '<div style="color:var(--text3);font-size:12px;padding:12px;text-align:center">No data</div>'}
+          </div>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-bottom:8px;font-weight:600">Goals</div>
+          <div class="dash-mod-list">
+            ${sortedGoals.length ? sortedGoals.map(([g, n]) => {
+              const pct = Math.round(n / total * 100);
+              return `<div class="dash-mod-row">
+                <div class="dash-mod-label">${goalLabels[g] || g}</div>
+                <div class="dash-mod-bar"><div class="dash-mod-fill" style="width:${pct}%"></div></div>
+                <div class="dash-mod-count">${n}</div>
+              </div>`;
+            }).join('') : '<div style="color:var(--text3);font-size:12px;padding:12px;text-align:center">No data</div>'}
+          </div>
+          ${Object.keys(fitCounts).length ? `
+            <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-top:14px;margin-bottom:8px;font-weight:600">Fitness Level</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap">
+              ${Object.entries(fitCounts).sort((a,b)=>b[1]-a[1]).map(([level, n]) => `
+                <div style="background:rgba(67,160,90,0.10);border:1px solid rgba(67,160,90,0.25);padding:5px 12px;border-radius:50px;font-size:12px">
+                  <span style="font-weight:600">${level}</span>
+                  <span style="color:var(--text3);margin-left:6px">${n}</span>
+                </div>
+              `).join('')}
+            </div>` : ''}
+        </div>
+      </div>
+    </div>`;
+}
+
+function _renderOnboardingCard(userId) {
+  const onb = _adminOnboardings.find(o => o.userId === userId);
+  if (!onb) {
+    return `<div class="dash-card" style="margin-bottom:14px;background:rgba(240,192,64,0.06);border-color:rgba(240,192,64,0.2)">
+      <div style="font-size:12px;color:var(--accent)">📋 Onboarding data not yet recorded for this user.</div>
+    </div>`;
+  }
+  const moduleNames = (onb.modules || []).map(m => _modIcon(m) + ' ' + _modName(m));
+  const goalLabel = ({ lose:'Lose Weight', gain:'Gain Muscle', tone:'Tone Body', maintain:'Maintain Fitness', endurance:'Build Endurance' })[onb.goal] || onb.goal || '—';
+  return `
+    <div class="dash-card" style="margin-bottom:14px;background:rgba(67,160,90,0.04);border-color:rgba(67,160,90,0.2)">
+      <div class="dash-card-head" style="margin-bottom:10px">
+        <h3 class="dash-card-title">📋 Onboarding Profile</h3>
+        <span class="dash-card-sub">${onb.submittedAt ? new Date(onb.submittedAt).toLocaleDateString('en-IN') : ''}</span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:12px">
+        <div>
+          <div style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">Goal</div>
+          <div style="color:var(--text);font-weight:600">${goalLabel}</div>
+        </div>
+        <div>
+          <div style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px">Fitness Level</div>
+          <div style="color:var(--text);font-weight:600">${onb.fitnessLevel || '—'}</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+        <div style="color:var(--text3);font-size:10px;text-transform:uppercase;letter-spacing:.04em;margin-bottom:6px">Selected Modules · ${moduleNames.length}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${moduleNames.length ? moduleNames.map(m => `<span style="background:rgba(67,160,90,0.12);color:var(--g5);border:1px solid rgba(67,160,90,0.3);padding:4px 10px;border-radius:50px;font-size:12px;font-weight:500">${m}</span>`).join('') : '<span style="color:var(--text3);font-size:12px">None selected</span>'}
+        </div>
+      </div>
+      ${onb.age || onb.weight || onb.height ? `
+        <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:grid;grid-template-columns:repeat(4,1fr);gap:8px;text-align:center">
+          ${onb.age ? `<div><div style="font-size:18px;font-weight:700;color:var(--text)">${onb.age}</div><div style="font-size:10px;color:var(--text3)">Age</div></div>` : ''}
+          ${onb.weight ? `<div><div style="font-size:18px;font-weight:700;color:var(--text)">${onb.weight}</div><div style="font-size:10px;color:var(--text3)">Weight kg</div></div>` : ''}
+          ${onb.height ? `<div><div style="font-size:18px;font-weight:700;color:var(--text)">${onb.height}</div><div style="font-size:10px;color:var(--text3)">Height cm</div></div>` : ''}
+          ${onb.gender ? `<div><div style="font-size:14px;font-weight:600;color:var(--text);text-transform:capitalize">${onb.gender}</div><div style="font-size:10px;color:var(--text3)">Gender</div></div>` : ''}
+        </div>` : ''}
+    </div>`;
+}
+
 // ── Drill: clicked a user — full user-wise KPI analytics ──
 let _userDrillRange = '30d';   // separate range for user view
 let _userDrillId    = null;    // currently-viewed user
@@ -2675,6 +2790,9 @@ function _renderUserAnalytics() {
         </div>
       </div>
     </div>
+
+    <!-- Onboarding info -->
+    ${_renderOnboardingCard(u.id)}
 
     <!-- Quick action buttons -->
     ${!isAdmin ? `
