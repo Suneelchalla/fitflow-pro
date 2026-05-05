@@ -47,15 +47,28 @@ async function attemptLogin(email, password) {
 
   if (cfg.webAppUrl) {
     try {
-      // Convert password to char codes joined by dashes - survives URL encoding perfectly
-      // e.g. "Hema@123" → "72-101-109-97-64-49-50-51"
-      const pwCodes = Array.from(password).map(c => c.charCodeAt(0)).join('-');
-      const qs = new URLSearchParams({ action: 'login', email, pwcodes: pwCodes }).toString();
-      const r = await fetch(`${cfg.webAppUrl}?${qs}`);
-      const res = await r.json();
+      // POST login — avoids all URL encoding issues with special chars in email/password
+      const r = await fetch(cfg.webAppUrl, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ action: 'login', email: email.trim().toLowerCase(), password }),
+      });
+
+      // Guard against Apps Script returning HTML error page instead of JSON
+      const text = await r.text();
+      let res;
+      try {
+        res = JSON.parse(text);
+      } catch {
+        // Apps Script crashed and returned an HTML error page
+        console.warn('[Login] Apps Script returned non-JSON:', text.substring(0, 200));
+        return { success: false, error: 'Server error. Please try again in a moment.' };
+      }
+
       if (res && res.success !== undefined) return res;
     } catch (e) {
-      console.warn('Login error:', e);
+      console.warn('[Login] Network error:', e.message);
+      return { success: false, error: 'Connection failed. Check your internet and try again.' };
     }
   }
 
