@@ -117,55 +117,83 @@ window.APP_DATA = {
       name: "Gym Workouts",
       emoji: "🏋️",
       color: "grad-gym",
+      // Day labels shown in UI header
+      dayLabels: {
+        Monday:    "Monday — Chest 🫁",
+        Tuesday:   "Tuesday — Shoulders 🏋️",
+        Wednesday: "Wednesday — Lats / Back 🦾",
+        Thursday:  "Thursday — Biceps 💪",
+        Friday:    "Friday — Triceps 🔱",
+        Saturday:  "Saturday — Legs / Squats 🦵",
+      },
       days: {
+
+        // ── MONDAY — CHEST ───────────────────────────────────────────
         Monday: [
-          { name:"Barbell Squat", sets:3, reps:"12 reps", desc:"Bar on traps, feet shoulder-width. Squat until thighs parallel to floor.", image:"", demo:"https://www.youtube.com/results?search_query=barbell+squat+form" },
-          { name:"Bench Press", sets:3, reps:"10 reps", desc:"Grip bar slightly wider than shoulders. Lower to mid-chest, press up.", image:"", demo:"https://www.youtube.com/results?search_query=bench+press+form" },
-          { name:"Bent-Over Row", sets:3, reps:"12 reps", desc:"Hinge at hips, pull bar to lower chest. Squeeze shoulder blades.", image:"", demo:"https://www.youtube.com/results?search_query=bent+over+row+form" },
-          { name:"Overhead Press", sets:3, reps:"10 reps", desc:"Press barbell from shoulders to overhead. Lock out elbows.", image:"", demo:"https://www.youtube.com/results?search_query=overhead+press+form" },
-          { name:"Romanian Deadlift", sets:3, reps:"12 reps", desc:"Slight knee bend, hinge at hips, lower bar along legs.", image:"", demo:"https://www.youtube.com/results?search_query=romanian+deadlift+form" },
-          { name:"Cable Plank", sets:3, reps:"45 sec", desc:"Plank with cable weight. Advanced core anti-extension drill.", image:"", demo:"https://www.youtube.com/results?search_query=plank+exercise+gym" },
+          { name:"Flat Barbell Bench Press", sets:4, reps:"10 reps", desc:"Lie flat on bench. Grip bar slightly wider than shoulder-width. Lower bar to mid-chest with control, press up to full extension. Keep feet flat on floor, back slightly arched. Primary chest builder.", image:"", demo:"https://www.youtube.com/results?search_query=flat+barbell+bench+press+form", _section:"main" },
+          { name:"Incline Dumbbell Press", sets:4, reps:"12 reps", desc:"Set bench to 30-45°. Press dumbbells from chest level upward. Incline angle targets upper chest. Control the descent — don't let dumbbells drop.", image:"", demo:"https://www.youtube.com/results?search_query=incline+dumbbell+press+form", _section:"main" },
+          { name:"Decline Bench Press", sets:3, reps:"12 reps", desc:"Feet locked at top of decline bench. Lower bar to lower chest. Targets lower pecs. Keep elbows at 75° angle — don't flare them out.", image:"", demo:"https://www.youtube.com/results?search_query=decline+bench+press+form", _section:"main" },
+          { name:"Dumbbell Chest Fly", sets:3, reps:"12 reps", desc:"Lie flat. Hold dumbbells above chest, slight bend in elbows. Open arms wide in arc motion until chest fully stretched. Bring back together squeezing the chest. Isolation movement.", image:"", demo:"https://www.youtube.com/results?search_query=dumbbell+chest+fly+form", _section:"main" },
+          { name:"Cable Crossover", sets:3, reps:"15 reps", desc:"Set cables at shoulder height. Step forward, bring handles together in front of chest in a hugging arc. Squeeze chest at the bottom. Excellent finishing isolation exercise.", image:"", demo:"https://www.youtube.com/results?search_query=cable+crossover+chest+form", _section:"main" },
+          { name:"Push-Ups (Burnout)", sets:3, reps:"Max reps", desc:"Standard push-up position, hands slightly wider than shoulders. Go to failure on each set. Burnout finisher after heavy pressing. Squeeze chest at the top of each rep.", image:"", demo:"https://www.youtube.com/results?search_query=push+ups+proper+form", _section:"main" },
+          { name:"Chest Dips", sets:3, reps:"12 reps", desc:"On parallel bars, lean torso forward at 30°. Lower until elbows reach 90°. Forward lean shifts stress from triceps to lower chest. Add weight with belt if bodyweight is too easy.", image:"", demo:"https://www.youtube.com/results?search_query=chest+dips+form+technique", _section:"main" },
         ],
+
+        // ── TUESDAY — SHOULDERS ──────────────────────────────────────
         Tuesday: [
-          { name:"Deadlift", sets:3, reps:"8 reps", desc:"Feet hip-width, bar over laces. Push floor away, keep bar close.", image:"", demo:"https://www.youtube.com/results?search_query=deadlift+form+tutorial" },
-          { name:"Incline Dumbbell Press", sets:3, reps:"12 reps", desc:"30-45° bench angle. Press dumbbells from chest level upward.", image:"", demo:"https://www.youtube.com/results?search_query=incline+dumbbell+press" },
-          { name:"Lat Pulldown", sets:3, reps:"12 reps", desc:"Grip wide. Pull bar to upper chest, lean slightly back.", image:"", demo:"https://www.youtube.com/results?search_query=lat+pulldown+form" },
-          { name:"Leg Press", sets:3, reps:"15 reps", desc:"Feet shoulder-width on platform. Lower sled until 90° knee angle.", image:"", demo:"https://www.youtube.com/results?search_query=leg+press+form" },
-          { name:"Dumbbell Curl", sets:3, reps:"12 each", desc:"Supinate wrist as you curl. Full range of motion.", image:"", demo:"https://www.youtube.com/results?search_query=dumbbell+bicep+curl+form" },
-          { name:"Tricep Pushdown", sets:3, reps:"15 reps", desc:"Cable attachment at shoulder height. Push down to lockout.", image:"", demo:"https://www.youtube.com/results?search_query=tricep+pushdown+cable" },
+          { name:"Barbell Overhead Press", sets:4, reps:"10 reps", desc:"Standing or seated. Press barbell from front of shoulders to full overhead lockout. Keep core braced. Don't hyperextend lower back. Most compound shoulder movement.", image:"", demo:"https://www.youtube.com/results?search_query=barbell+overhead+press+form", _section:"main" },
+          { name:"Dumbbell Shoulder Press", sets:4, reps:"12 reps", desc:"Seated or standing. Start with dumbbells at ear height. Press overhead until arms almost lock out. Neutral spine throughout. Greater range of motion than barbell variant.", image:"", demo:"https://www.youtube.com/results?search_query=dumbbell+shoulder+press+form", _section:"main" },
+          { name:"Dumbbell Lateral Raise", sets:4, reps:"15 reps", desc:"Stand with dumbbells at sides, slight bend in elbows. Raise arms to shoulder height — no higher. Pause 1 second at top. Lower slowly in 3 seconds. Targets medial deltoid for width.", image:"", demo:"https://www.youtube.com/results?search_query=lateral+raise+proper+form", _section:"main" },
+          { name:"Front Raise", sets:3, reps:"12 reps", desc:"Hold dumbbells in front of thighs. Raise one or both arms straight to shoulder height. Keep slight bend at elbow. Targets anterior deltoid. Don't swing body.", image:"", demo:"https://www.youtube.com/results?search_query=dumbbell+front+raise+form", _section:"main" },
+          { name:"Rear Delt Fly", sets:3, reps:"15 reps", desc:"Bend forward at hips 45°. Hold dumbbells hanging down. Raise arms out to sides like wings — elbows slightly bent. Squeeze rear delts. Targets posterior deltoid.", image:"", demo:"https://www.youtube.com/results?search_query=rear+delt+fly+form", _section:"main" },
+          { name:"Face Pulls", sets:3, reps:"15 reps", desc:"Cable at face height with rope attachment. Pull rope toward face, elbows high and flared out. Targets rear delts and external rotators. Essential for shoulder health and posture.", image:"", demo:"https://www.youtube.com/results?search_query=face+pulls+proper+form", _section:"main" },
+          { name:"Arnold Press", sets:3, reps:"12 reps", desc:"Start with dumbbells at chin, palms facing you. As you press up, rotate palms outward. At top, palms face forward. Works all three heads of the deltoid in one movement.", image:"", demo:"https://www.youtube.com/results?search_query=arnold+press+form", _section:"main" },
         ],
+
+        // ── WEDNESDAY — LATS / BACK ──────────────────────────────────
         Wednesday: [
-          { name:"Hack Squat", sets:3, reps:"12 reps", desc:"Machine squat variant. Feet forward on platform.", image:"", demo:"https://www.youtube.com/results?search_query=hack+squat+machine" },
-          { name:"Dumbbell Shoulder Press", sets:3, reps:"12 reps", desc:"Seated or standing. Press dumbbells from ear height to overhead.", image:"", demo:"https://www.youtube.com/results?search_query=dumbbell+shoulder+press" },
-          { name:"Seated Cable Row", sets:3, reps:"12 reps", desc:"Pull cable handle to lower abs. Keep chest tall.", image:"", demo:"https://www.youtube.com/results?search_query=seated+cable+row+form" },
-          { name:"Leg Curl", sets:3, reps:"12 reps", desc:"Lying or seated. Curl heel toward glute.", image:"", demo:"https://www.youtube.com/results?search_query=leg+curl+machine" },
-          { name:"Dumbbell Lateral Raise", sets:3, reps:"15 reps", desc:"Raise arms to shoulder height with slight bend.", image:"", demo:"https://www.youtube.com/results?search_query=lateral+raise+form" },
-          { name:"Ab Crunch Machine", sets:3, reps:"20 reps", desc:"Pull handles toward knees while contracting abs.", image:"", demo:"https://www.youtube.com/results?search_query=ab+crunch+machine" },
+          { name:"Deadlift", sets:4, reps:"8 reps", desc:"Feet hip-width, bar over mid-foot. Grip just outside legs. Push floor away, keep bar close to body. Lock out hips and knees at top. King of all back exercises. Full posterior chain activation.", image:"", demo:"https://www.youtube.com/results?search_query=deadlift+form+tutorial", _section:"main" },
+          { name:"Pull-Ups / Lat Pulldown", sets:4, reps:"10 reps", desc:"Wide grip, overhand. Pull until chin over bar or bar to upper chest. Full stretch at bottom. Lat pulldown is the machine alternative. Targets lats, teres major, and biceps.", image:"", demo:"https://www.youtube.com/results?search_query=pull+ups+lat+pulldown+form", _section:"main" },
+          { name:"Barbell Bent-Over Row", sets:4, reps:"10 reps", desc:"Hinge at hips until torso is nearly parallel to floor. Pull bar to lower chest or upper abs. Squeeze shoulder blades together at top. Keep back flat throughout. Massive upper back builder.", image:"", demo:"https://www.youtube.com/results?search_query=barbell+bent+over+row+form", _section:"main" },
+          { name:"Seated Cable Row", sets:3, reps:"12 reps", desc:"Sit upright, feet on platform. Pull handle to navel, elbows close to body. Fully stretch forward between reps. Keep chest tall. Targets mid-back, rhomboids, and lats.", image:"", demo:"https://www.youtube.com/results?search_query=seated+cable+row+form", _section:"main" },
+          { name:"Single-Arm Dumbbell Row", sets:3, reps:"12 each side", desc:"One knee and hand on bench. Pull dumbbell to hip level. Elbow should go past your torso. Keep back flat. Full stretch at bottom. Unilateral — corrects imbalances.", image:"", demo:"https://www.youtube.com/results?search_query=single+arm+dumbbell+row+form", _section:"main" },
+          { name:"T-Bar Row", sets:3, reps:"10 reps", desc:"Straddle bar with V-grip attachment. Hinge forward and row bar toward chest. Elbows close to body. Excellent thickness builder for mid-back. Keep lower back neutral.", image:"", demo:"https://www.youtube.com/results?search_query=t+bar+row+form", _section:"main" },
+          { name:"Straight-Arm Pulldown", sets:3, reps:"15 reps", desc:"Stand at cable with straight bar attachment. Arms straight, pull bar from overhead down to thighs. Pure lat isolation — no bicep involvement. Great finisher for lat mind-muscle connection.", image:"", demo:"https://www.youtube.com/results?search_query=straight+arm+pulldown+form", _section:"main" },
         ],
+
+        // ── THURSDAY — BICEPS ────────────────────────────────────────
         Thursday: [
-          { name:"Bulgarian Split Squat", sets:3, reps:"10 each", desc:"Rear foot elevated. Lower front leg until 90°.", image:"", demo:"https://www.youtube.com/results?search_query=bulgarian+split+squat" },
-          { name:"Cable Fly", sets:3, reps:"15 reps", desc:"Mid-height cables. Bring handles together in arc motion.", image:"", demo:"https://www.youtube.com/results?search_query=cable+fly+chest+form" },
-          { name:"Face Pulls", sets:3, reps:"15 reps", desc:"Cable at head height. Pull to face, elbows high.", image:"", demo:"https://www.youtube.com/results?search_query=face+pulls+form" },
-          { name:"Hammer Curl", sets:3, reps:"12 each", desc:"Neutral grip (thumbs up). Curl without supinating.", image:"", demo:"https://www.youtube.com/results?search_query=hammer+curl+form" },
-          { name:"Calf Raise", sets:3, reps:"20 reps", desc:"On platform or flat floor. Rise onto toes, hold 1 second.", image:"", demo:"https://www.youtube.com/results?search_query=calf+raise+form" },
-          { name:"Hanging Leg Raise", sets:3, reps:"12 reps", desc:"Hang from bar. Raise legs to 90°.", image:"", demo:"https://www.youtube.com/results?search_query=hanging+leg+raise+form" },
+          { name:"Barbell Bicep Curl", sets:4, reps:"10 reps", desc:"Stand with barbell, hands shoulder-width, underhand grip. Curl bar to shoulder height. Squeeze bicep at top. Lower slowly in 3 seconds. Keep elbows pinned to sides. Classic mass builder.", image:"", demo:"https://www.youtube.com/results?search_query=barbell+bicep+curl+form", _section:"main" },
+          { name:"Dumbbell Alternating Curl", sets:4, reps:"12 each arm", desc:"Stand or sit. Curl one dumbbell at a time, supinating wrist as you lift (palm faces up at top). Full range of motion. Alternate arms. Allows better contraction than barbell.", image:"", demo:"https://www.youtube.com/results?search_query=dumbbell+alternating+bicep+curl+form", _section:"main" },
+          { name:"Hammer Curl", sets:3, reps:"12 each arm", desc:"Neutral grip (thumbs pointing up throughout). Curl dumbbell without rotating wrist. Targets brachialis and brachioradialis for thick arm appearance. Also works biceps.", image:"", demo:"https://www.youtube.com/results?search_query=hammer+curl+proper+form", _section:"main" },
+          { name:"Incline Dumbbell Curl", sets:3, reps:"12 each arm", desc:"Sit on incline bench (45-60°), arms hang straight down. Curl without swinging. The incline position gives greater stretch at the bottom — intense stretch on long head of bicep.", image:"", demo:"https://www.youtube.com/results?search_query=incline+dumbbell+curl+form", _section:"main" },
+          { name:"Preacher Curl", sets:3, reps:"10 reps", desc:"Use preacher bench or Scott curl pad. Rest upper arm flat on pad. Curl barbell or dumbbells. Eliminates cheating. Full isolation of bicep — peak contraction exercise.", image:"", demo:"https://www.youtube.com/results?search_query=preacher+curl+form", _section:"main" },
+          { name:"Concentration Curl", sets:3, reps:"12 each arm", desc:"Sit, elbow resting on inner thigh. Curl dumbbell with full supination. Squeeze hard at top for 2 seconds. Best exercise for bicep peak. Full isolation with zero swing.", image:"", demo:"https://www.youtube.com/results?search_query=concentration+curl+form", _section:"main" },
+          { name:"Cable Curl", sets:3, reps:"15 reps", desc:"Stand at low cable pulley. Curl bar or rope to shoulder. Constant tension throughout entire range of motion — unlike dumbbells which lose tension at top. Great for pump finisher.", image:"", demo:"https://www.youtube.com/results?search_query=cable+bicep+curl+form", _section:"main" },
         ],
+
+        // ── FRIDAY — TRICEPS ─────────────────────────────────────────
         Friday: [
-          { name:"Power Clean", sets:3, reps:"6 reps", desc:"Olympic lift. Pull bar from floor explosively, catch at shoulders.", image:"", demo:"https://www.youtube.com/results?search_query=power+clean+form+tutorial" },
-          { name:"Dips", sets:3, reps:"12 reps", desc:"On parallel bars, lower until elbows 90°.", image:"", demo:"https://www.youtube.com/results?search_query=dips+exercise+form" },
-          { name:"Pull-Ups", sets:3, reps:"8 reps", desc:"Full hang, pull until chin over bar.", image:"", demo:"https://www.youtube.com/results?search_query=pull+ups+form" },
-          { name:"Leg Extension", sets:3, reps:"15 reps", desc:"Machine. Extend legs to full lockout.", image:"", demo:"https://www.youtube.com/results?search_query=leg+extension+machine+form" },
-          { name:"EZ Bar Skull Crusher", sets:3, reps:"12 reps", desc:"Lying on bench, lower bar to forehead, extend.", image:"", demo:"https://www.youtube.com/results?search_query=skull+crushers+form" },
-          { name:"Farmer's Carry", sets:3, reps:"40m", desc:"Hold heavy dumbbells, walk with tall posture.", image:"", demo:"https://www.youtube.com/results?search_query=farmers+carry+exercise" },
+          { name:"Close-Grip Bench Press", sets:4, reps:"10 reps", desc:"Lie on flat bench. Hands 10-12 inches apart on bar. Lower to lower chest, elbows tucked close to body. Press up. Keeps emphasis on triceps, not chest. Heavy compound tricep exercise.", image:"", demo:"https://www.youtube.com/results?search_query=close+grip+bench+press+form", _section:"main" },
+          { name:"Tricep Pushdown", sets:4, reps:"15 reps", desc:"Cable at shoulder height, straight bar or rope attachment. Push down to full lockout, elbows pinned to sides. Squeeze triceps hard at bottom. Rope version allows wrists to rotate out for better contraction.", image:"", demo:"https://www.youtube.com/results?search_query=tricep+pushdown+cable+form", _section:"main" },
+          { name:"Overhead Tricep Extension", sets:3, reps:"12 reps", desc:"Stand or sit with single dumbbell or EZ bar held overhead. Lower behind head until elbows are at 90°. Extend up fully. Stretches long head of tricep. Keep elbows close together overhead.", image:"", demo:"https://www.youtube.com/results?search_query=overhead+tricep+extension+form", _section:"main" },
+          { name:"EZ Bar Skull Crusher", sets:3, reps:"12 reps", desc:"Lie on bench with EZ bar. Lower bar to forehead by bending elbows. Extend back up. Keep upper arms perpendicular to floor throughout. Targets all three heads. Don't let elbows flare.", image:"", demo:"https://www.youtube.com/results?search_query=skull+crushers+ez+bar+form", _section:"main" },
+          { name:"Tricep Dips", sets:3, reps:"12 reps", desc:"Parallel bars, torso upright (NOT leaning forward like chest dips). Lower until elbows reach 90°. Press back up. Upright torso shifts load from chest to triceps. Add weight belt if needed.", image:"", demo:"https://www.youtube.com/results?search_query=tricep+dips+proper+form", _section:"main" },
+          { name:"Kickbacks", sets:3, reps:"15 each arm", desc:"Hinge forward at hips. Elbow pinned at hip height. Extend forearm straight back until arm is fully straight. Squeeze tricep hard at lockout. Keep upper arm still throughout movement.", image:"", demo:"https://www.youtube.com/results?search_query=tricep+kickback+form", _section:"main" },
+          { name:"Diamond Push-Ups (Burnout)", sets:3, reps:"Max reps", desc:"Hands form diamond shape directly under chest. Elbows track backward along ribs as you lower. Full extension at top. Best bodyweight tricep finisher. Go to failure on each set.", image:"", demo:"https://www.youtube.com/results?search_query=diamond+push+ups+form", _section:"main" },
         ],
+
+        // ── SATURDAY — LEGS / SQUATS ─────────────────────────────────
         Saturday: [
-          { name:"Full Body Circuit", sets:3, reps:"5 rounds", desc:"Squat 8 + Push 8 + Row 8 + Press 8. Light-moderate weight.", image:"", demo:"https://www.youtube.com/results?search_query=full+body+circuit+gym" },
-          { name:"Cable Woodchop", sets:3, reps:"12 each", desc:"Rotate cable from high to low across body.", image:"", demo:"https://www.youtube.com/results?search_query=cable+woodchop+exercise" },
-          { name:"Seated Row Close Grip", sets:3, reps:"12 reps", desc:"Close-grip attachment. Pull to navel.", image:"", demo:"https://www.youtube.com/results?search_query=close+grip+seated+row" },
-          { name:"Hip Thrust", sets:3, reps:"15 reps", desc:"Shoulders on bench, bar on hips. Drive hips to ceiling.", image:"", demo:"https://www.youtube.com/results?search_query=barbell+hip+thrust+form" },
-          { name:"Shrugs", sets:3, reps:"15 reps", desc:"Heavy dumbbells or barbell. Shrug shoulders straight up.", image:"", demo:"https://www.youtube.com/results?search_query=shrugs+exercise+form" },
-          { name:"Ab Wheel Rollout", sets:3, reps:"10 reps", desc:"From knees, roll wheel out to full extension, return.", image:"", demo:"https://www.youtube.com/results?search_query=ab+wheel+rollout+form" },
+          { name:"Barbell Back Squat", sets:4, reps:"10 reps", desc:"Bar on upper traps, feet shoulder-width, toes slightly out. Squat until thighs parallel to floor or below. Drive knees out, chest up. King of all leg exercises. Full quad, glute, and hamstring activation.", image:"", demo:"https://www.youtube.com/results?search_query=barbell+back+squat+form", _section:"main" },
+          { name:"Front Squat", sets:3, reps:"10 reps", desc:"Bar resting on front delts, elbows high. Squat with more upright torso than back squat. Greater quad activation and core demand. More difficult technically — start lighter.", image:"", demo:"https://www.youtube.com/results?search_query=front+squat+form+tutorial", _section:"main" },
+          { name:"Leg Press", sets:4, reps:"15 reps", desc:"Feet shoulder-width on platform. Lower sled until knees reach 90°. Press back up without locking knees. Foot position changes emphasis — high feet = more glutes, low feet = more quads.", image:"", demo:"https://www.youtube.com/results?search_query=leg+press+form", _section:"main" },
+          { name:"Romanian Deadlift", sets:3, reps:"12 reps", desc:"Slight knee bend throughout. Hinge at hips pushing them back, lower bar along legs until you feel hamstring stretch. Drive hips forward to stand. Pure hamstring and glute isolation.", image:"", demo:"https://www.youtube.com/results?search_query=romanian+deadlift+form", _section:"main" },
+          { name:"Bulgarian Split Squat", sets:3, reps:"10 each leg", desc:"Rear foot elevated on bench. Lower front leg until knee nearly touches floor. Front knee tracks over toes. Brutal unilateral leg exercise — corrects imbalances. Use dumbbells or barbell.", image:"", demo:"https://www.youtube.com/results?search_query=bulgarian+split+squat+form", _section:"main" },
+          { name:"Leg Curl", sets:3, reps:"12 reps", desc:"Lying or seated leg curl machine. Curl heels toward glutes through full range. Hamstring isolation. Pause at peak contraction for 1 second. Lower slowly in 3 seconds.", image:"", demo:"https://www.youtube.com/results?search_query=leg+curl+machine+form", _section:"main" },
+          { name:"Calf Raise", sets:4, reps:"20 reps", desc:"Standing or seated calf raise machine. Rise onto toes as high as possible. Hold 2 seconds at top. Lower until full stretch at bottom. Calves need high volume and full range to grow.", image:"", demo:"https://www.youtube.com/results?search_query=calf+raise+proper+form", _section:"main" },
         ],
+
       }
     },
 
