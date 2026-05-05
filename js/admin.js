@@ -96,10 +96,11 @@ let _cachedAdminUsers = [];
 function renderUsersList(users) {
   _cachedAdminUsers = users || [];
   const container = document.getElementById('admin-users-list');
-  if (!_cachedAdminUsers.length) {
-    container.innerHTML = `<div class="empty-state"><div class="empty-icon">👥</div><p>No users yet.</p></div>`;
+  if (!container) {
+    console.warn('[FitFlow] admin-users-list container not found');
     return;
   }
+  console.log('[FitFlow] Rendering ' + _cachedAdminUsers.length + ' users with search bar');
   // Render search bar + filter chips + list
   container.innerHTML = `
     <div class="admin-user-controls">
