@@ -594,7 +594,7 @@ const _kalman = new GpsKalmanFilter();
 
 // FIX #2: GPS warm-up state — skip first N fixes while device acquires lock
 const GPS_WARMUP_FIXES    = 5;    // discard first 5 positions (device triangulating)
-const GPS_MIN_ACCURACY_M  = 40;   // reject if worse than 40 m
+const GPS_MIN_ACCURACY_M  = 80;   // reject if worse than 80 m (was 40 — too strict for urban/indoor)
 const GPS_MIN_DISTANCE_KM = 0.005; // ignore movement < 5 m (standing still jitter)
 
 let _gpsWarmupCount  = 0;          // counts received fixes during warmup phase
@@ -854,10 +854,11 @@ function startGPS() {
       const lat = smoothed.lat;
       const lon = smoothed.lon;
 
-      // FIX #2b: Warmup — skip first N accurate fixes while GPS stabilises
+      // FIX #2b: Warmup — skip first N fixes for distance calc, but still record coords for the route map
       if (_gpsWarmupCount < GPS_WARMUP_FIXES) {
         _gpsWarmupCount++;
         _gpsLastGoodFix = { lat, lon, ts: nowTs };
+        APP.gpsCoords.push({ lat, lon, ts: nowTs }); // record for route map
         _updateLiveMap(lat, lon);
         return;
       }
