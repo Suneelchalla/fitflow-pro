@@ -1,3 +1,9 @@
+// LOCAL date helper (replaces UTC-based toISOString().split('T')[0])
+function _ymdLocal(d) {
+  if (!d || isNaN(d.getTime())) return '';
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
 // ════════════════════════════════════════════════════════════════
 // FITFLOW PRO — Weekly Report Card v3
 // ════════════════════════════════════════════════════════════════
@@ -25,11 +31,19 @@ async function _loadAndRender() {
       const res = await Sheets.get('getUserLogs', { userId: user.id });
       if (res?.success && Array.isArray(res.logs) && res.logs.length) {
         const local = Store.getLogs(); let ch = false;
+        const tsToLocal = (ts) => {
+          if (!ts) return null;
+          const dt = new Date(ts);
+          if (isNaN(dt.getTime())) return null;
+          return dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0');
+        };
         const seen = new Set(local.map(l => (l.userId||'') + '|' + (l.module||'') + '|' + (l.date||'')));
         res.logs.forEach(sl => {
-          const key = (sl.userId||'') + '|' + (sl.module||'') + '|' + (sl.date||'');
+          const correctDate = tsToLocal(sl.timestamp) || sl.date;
+          const fixed = { ...sl, date: correctDate };
+          const key = (fixed.userId||'') + '|' + (fixed.module||'') + '|' + (fixed.date||'');
           if (!seen.has(key)) {
-            local.push({ ...sl, id: sl.id||('log_'+Date.now()+Math.random()) });
+            local.push({ ...fixed, id: fixed.id||('log_'+Date.now()+Math.random()) });
             seen.add(key);
             ch = true;
           }
@@ -283,12 +297,12 @@ function _monday(offset) {
   const off = (typeof offset === 'number' && isFinite(offset)) ? offset : 0;
   const d = new Date(), day = d.getDay();
   d.setDate(d.getDate() - (day === 0 ? 6 : day - 1) + off * 7);
-  return d.toISOString().split('T')[0];
+  return _ymdLocal(d);
 }
 function _addDays(dateStr, n) {
   const d = new Date(dateStr + 'T12:00:00');
   d.setDate(d.getDate() + n);
-  return d.toISOString().split('T')[0];
+  return _ymdLocal(d);
 }
 function _fmt(dateStr) {
   if (!dateStr || typeof dateStr !== 'string') return '';
