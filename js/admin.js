@@ -432,10 +432,19 @@ async function _collectAndSave() {
   if (section === 'exercises') {
     const days   = getWeekDays();
     const result = { days: {} };
+    // Preserve dayLabels for gym module
+    const gymDayLabels = {
+      Monday:    'Monday — Chest 🫁',
+      Tuesday:   'Tuesday — Shoulders 🏋️',
+      Wednesday: 'Wednesday — Lats / Back 🦾',
+      Thursday:  'Thursday — Biceps 💪',
+      Friday:    'Friday — Triceps 🔱',
+      Saturday:  'Saturday — Legs / Squats 🦵',
+    };
+    if (moduleId === 'gym') result.dayLabels = gymDayLabels;
     days.forEach(day => {
       const dayEl = document.querySelector(`[data-day="${day}"]`);
       if (!dayEl) {
-        // Day not in DOM — always use APP_DATA_DEFAULT as the ground truth
         const _D = window.APP_DATA_DEFAULT || window.APP_DATA;
         result.days[day] = _D.modules?.[moduleId]?.days?.[day] || [];
         return;
@@ -455,12 +464,13 @@ async function _collectAndSave() {
           };
         }
         return {
-          name:  _text(row, 'name'),
-          sets:  parseInt(_text(row, 'sets')) || 3,
-          reps:  _text(row, 'reps'),
-          desc:  _text(row, 'desc'),
-          demo:  _text(row, 'demo'),
-          image: _text(row, 'image'),
+          name:     _text(row, 'name'),
+          sets:     parseInt(_text(row, 'sets')) || 3,
+          reps:     _text(row, 'reps'),
+          desc:     _text(row, 'desc'),
+          demo:     _text(row, 'demo'),
+          image:    _text(row, 'image'),
+          _section: 'main', // always preserve section tag
         };
       });
     });
@@ -541,24 +551,34 @@ function activateEditing(container) {
 // ════════════════════════════════════════════════════════════════
 function renderExerciseEditor(moduleId, body) {
   const days = getWeekDays();
+  const gymDayLabels = {
+    Monday:    'Monday — Chest 🫁',
+    Tuesday:   'Tuesday — Shoulders 🏋️',
+    Wednesday: 'Wednesday — Lats / Back 🦾',
+    Thursday:  'Thursday — Biceps 💪',
+    Friday:    'Friday — Triceps 🔱',
+    Saturday:  'Saturday — Legs / Squats 🦵',
+  };
   body.innerHTML = `
     <div style="font-size:13px;color:var(--text2);padding:0 16px 12px;line-height:1.5">
       ✏️ <strong>Tap any field</strong> to edit. Applies to all users after saving.
     </div>
     ${days.map(day => {
-      // Use APP_DATA_DEFAULT (immutable backup from data.js) as ground truth
-      // so Sheets sync can never wipe the default exercises
       const defaults   = window.APP_DATA_DEFAULT || window.APP_DATA;
       const appDefault = defaults.modules?.[moduleId]?.days?.[day] || [];
       const saved      = Store.getContent('exercises_' + moduleId);
       const savedDay   = saved?.days?.[day] || [];
-      // Only use Sheets saved version if admin explicitly added MORE exercises
       const exercises  = savedDay.length > appDefault.length ? savedDay : appDefault;
+      // For gym: show muscle group label per day
+      const dayTitle   = moduleId === 'gym' ? (gymDayLabels[day] || day) : `📅 ${day}`;
+      const dayBg      = moduleId === 'gym'
+        ? 'linear-gradient(135deg,rgba(46,125,70,0.3),rgba(30,100,50,0.2))'
+        : 'rgba(46,125,70,0.15)';
       return `
         <div style="margin-bottom:8px">
-          <div style="padding:10px 16px;background:rgba(46,125,70,0.15);font-weight:700;font-size:14px;
-            display:flex;justify-content:space-between;align-items:center">
-            <span>📅 ${day}</span>
+          <div style="padding:10px 16px;background:${dayBg};font-weight:700;font-size:14px;
+            display:flex;justify-content:space-between;align-items:center;border-radius:10px 10px 0 0">
+            <span>${dayTitle}</span>
             <span style="font-size:12px;color:var(--text3)">${exercises.length} exercises</span>
           </div>
           <div data-day="${day}" style="padding:0 16px">
@@ -639,9 +659,10 @@ function addExercise(day) {
   const addBtn = container.querySelector('.add-exercise-btn');
   const div    = document.createElement('div');
   const isHoldBased = AdminEdit.module === 'yoga' || AdminEdit.module === 'stretching';
+  const isGym       = AdminEdit.module === 'gym';
   const newEx  = isHoldBased
     ? { name: 'New Pose', hold: '30 sec', rounds: 1, desc: 'Enter description.', demo: '', image: AdminEdit.module === 'yoga' ? '🧘' : '🤸' }
-    : { name: 'New Exercise', sets: 3, reps: '10 reps', desc: 'Enter description.', demo: '', image: '' };
+    : { name: 'New Exercise', sets: 3, reps: '10 reps', desc: 'Enter description.', demo: '', image: '', _section: 'main' };
   div.innerHTML = _exerciseCard(newEx, 999, day);
   const card = div.firstElementChild;
   activateEditing(card);
