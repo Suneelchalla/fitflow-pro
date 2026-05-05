@@ -2640,15 +2640,21 @@ function _drillUser(userId, openInPage) {
   _userDrillId = userId;
   if (!_userDrillRange) _userDrillRange = '30d';
 
-  const { users } = _adminDashboardData || {};
-  if (!users) { showToast('Loading data...', 'info'); return; }
+  const data = _adminDashboardData || {};
+  if (!data.users || !data.users.length) {
+    showToast('Loading user data, please wait…', 'info');
+    return;
+  }
 
-  const u = users.find(u => u.id === userId);
-  if (!u) { showToast('User not found', 'error'); return; }
+  const u = data.users.find(u => u.id === userId);
+  if (!u) {
+    console.warn('[FitFlow] User not found in dashboard data:', userId, '— available:', data.users.map(u => u.id));
+    showToast('User not found', 'error');
+    return;
+  }
 
-  // Render the full user analytics view inside the drill modal
+  // _renderUserAnalytics() builds the HTML AND opens the modal — don't call _openDrillModal again
   _renderUserAnalytics();
-  _openDrillModal('', '');  // open empty modal (we set its content via _renderUserAnalytics)
 }
 
 function _setUserDrillRange(range, btn) {
