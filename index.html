@@ -396,7 +396,317 @@ window.addEventListener('DOMContentLoaded', function() {
       #google-signin-btn.loading .g-icon { display:none; }
       #google-signin-btn.loading .g-spinner { display:block; }
       #google-signin-btn.loading .g-label { opacity:.6; }
-    </style>
+    
+
+/* ═══════════════════════════════════════════════════════════════
+   ADMIN — DESKTOP-STYLE LAYOUT
+   ═══════════════════════════════════════════════════════════════ */
+
+.admin-page-wrapper {
+  padding-bottom: 32px;
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+/* Admin header */
+.admin-header {
+  background: linear-gradient(135deg, var(--g1), var(--bg2));
+  padding: 24px 24px 22px;
+  border-bottom: 1px solid var(--border);
+}
+.admin-header-inner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 18px;
+  max-width: 1400px;
+  margin-left: auto;
+  margin-right: auto;
+}
+.admin-brand-title {
+  font-size: 28px;
+  color: var(--g5);
+  letter-spacing: .04em;
+}
+.admin-brand-sub {
+  font-size: 13px;
+  color: var(--text3);
+  margin-top: 2px;
+}
+.admin-header-actions {
+  display: flex;
+  gap: 8px;
+}
+.admin-pill-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 50px;
+  padding: 8px 16px;
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.admin-pill-btn:hover {
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+  border-color: var(--border-strong, rgba(255,255,255,0.15));
+}
+
+/* Stats row — horizontal flex on wide screens */
+.admin-stats-row {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+.admin-stat {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.04);
+  border-radius: 14px;
+  padding: 16px 12px;
+  text-align: center;
+  transition: transform .15s;
+}
+.admin-stat:hover {
+  transform: translateY(-2px);
+  background: rgba(255,255,255,0.08);
+}
+.admin-stat-val {
+  font-family: var(--font-display);
+  font-size: 32px;
+  color: var(--g5);
+  line-height: 1.1;
+  margin-bottom: 2px;
+}
+.admin-stat-lbl {
+  font-size: 11px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  font-weight: 600;
+}
+
+/* Body: 2-column flex layout */
+.admin-body {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px;
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+
+/* Sidebar nav */
+.admin-sidebar {
+  position: sticky;
+  top: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.admin-nav-btn {
+  background: transparent;
+  border: none;
+  color: var(--text2);
+  font-size: 14px;
+  font-weight: 500;
+  padding: 12px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: background .15s, color .15s;
+  font-family: inherit;
+}
+.admin-nav-btn:hover {
+  background: rgba(255,255,255,0.04);
+  color: var(--text);
+}
+.admin-nav-btn.active {
+  background: rgba(67,160,90,0.12);
+  color: var(--g5);
+  font-weight: 600;
+}
+.admin-nav-ico {
+  font-size: 17px;
+  flex-shrink: 0;
+  width: 22px;
+  text-align: center;
+}
+.admin-nav-lbl {
+  flex: 1;
+}
+
+/* Content area */
+.admin-content-area {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 24px;
+  min-height: 400px;
+}
+.admin-tab-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.admin-tab-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text);
+  margin: 0;
+}
+.admin-action-btn {
+  width: auto;
+  padding: 10px 18px;
+  font-size: 14px;
+}
+
+/* Mobile / tablet breakpoint — fall back to mobile-like layout */
+@media (max-width: 900px) {
+  .admin-body {
+    grid-template-columns: 1fr;
+    padding: 16px;
+    gap: 16px;
+  }
+  .admin-sidebar {
+    position: static;
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 6px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .admin-sidebar::-webkit-scrollbar {
+    display: none;
+  }
+  .admin-nav-btn {
+    flex-shrink: 0;
+    padding: 10px 14px;
+  }
+  .admin-nav-lbl {
+    white-space: nowrap;
+  }
+  .admin-content-area {
+    padding: 16px;
+  }
+  .admin-stats-row {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .admin-stat:nth-child(4),
+  .admin-stat:nth-child(5) {
+    grid-column: span 1;
+  }
+  .admin-header {
+    padding: 18px 16px;
+  }
+  .admin-brand-title {
+    font-size: 22px;
+  }
+  .admin-stat-val {
+    font-size: 24px;
+  }
+  .admin-tab-title {
+    font-size: 18px;
+  }
+}
+
+@media (max-width: 540px) {
+  .admin-stats-row {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .admin-stats-row .admin-stat:last-child {
+    grid-column: span 2;
+  }
+}
+
+
+/* User search + filter */
+.admin-user-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  border-bottom: 1px solid var(--border);
+}
+.admin-search-input {
+  width: 100%;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 11px 14px;
+  color: var(--text);
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color .15s;
+}
+.admin-search-input::placeholder { color: var(--text3); }
+.admin-search-input:focus {
+  outline: none;
+  border-color: var(--g4);
+}
+.admin-filter-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.admin-chip {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  color: var(--text2);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 12px;
+  border-radius: 50px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .15s;
+}
+.admin-chip:hover {
+  background: rgba(255,255,255,0.08);
+  color: var(--text);
+}
+.admin-chip.active {
+  background: var(--g4);
+  border-color: var(--g4);
+  color: white;
+}
+.admin-user-count {
+  font-size: 12px;
+  color: var(--text3);
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+
+@media (min-width: 901px) {
+  .admin-user-controls {
+    flex-direction: row;
+    align-items: center;
+  }
+  .admin-search-input {
+    flex: 1;
+    max-width: 380px;
+  }
+}
+
+</style>
 
     <button id="google-signin-btn" onclick="signInWithGoogle()" type="button">
       <span class="g-icon" style="display:flex;align-items:center;flex-shrink:0">
@@ -962,106 +1272,142 @@ window.addEventListener('DOMContentLoaded', function() {
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- PAGE: ADMIN                                                      -->
+<!-- PAGE: ADMIN — Desktop-Style Web Layout                          -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <div id="page-admin" class="page">
-  <div class="scroll-content" style="padding-bottom:24px">
+  <div class="scroll-content admin-page-wrapper">
 
-    <!-- Admin Header -->
-    <div style="background:linear-gradient(135deg,var(--g1),var(--bg2));padding:24px 16px 20px">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-        <div>
-          <div class="display" style="font-size:32px;color:var(--g5)">ADMIN PANEL</div>
-          <div style="font-size:13px;color:var(--text3);margin-top:2px" id="admin-user-name"></div>
+    <!-- Admin Header (full-width across top) -->
+    <div class="admin-header">
+      <div class="admin-header-inner">
+        <div class="admin-brand">
+          <div class="display admin-brand-title">⚡ ADMIN PANEL</div>
+          <div class="admin-brand-sub" id="admin-user-name"></div>
         </div>
-        <div style="display:flex;gap:8px;align-items:center">
-          <button onclick="openChangePasswordModal()" style="background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 14px;color:var(--text2);font-size:13px;cursor:pointer">🔑 Password</button>
-          <button onclick="logout()" style="background:var(--surface);border:1px solid var(--border);border-radius:50px;padding:8px 14px;color:var(--text2);font-size:13px;cursor:pointer">Sign Out</button>
+        <div class="admin-header-actions">
+          <button onclick="openChangePasswordModal()" class="admin-pill-btn">🔑 Password</button>
+          <button onclick="logout()" class="admin-pill-btn">Sign Out</button>
         </div>
       </div>
 
-      <!-- Stats row -->
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:8px">
-        <div style="background:rgba(255,255,255,0.06);border-radius:12px;padding:12px 8px;text-align:center">
-          <div style="font-family:var(--font-display);font-size:28px;color:var(--g5)" id="admin-stat-users">—</div>
-          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Users</div>
+      <!-- Stats row — single horizontal line on desktop -->
+      <div class="admin-stats-row">
+        <div class="admin-stat">
+          <div class="admin-stat-val" id="admin-stat-users">—</div>
+          <div class="admin-stat-lbl">Users</div>
         </div>
-        <div style="background:rgba(255,255,255,0.06);border-radius:12px;padding:12px 8px;text-align:center">
-          <div style="font-family:var(--font-display);font-size:28px;color:var(--g5)" id="admin-stat-today">0</div>
-          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Today Active</div>
+        <div class="admin-stat">
+          <div class="admin-stat-val" id="admin-stat-today">0</div>
+          <div class="admin-stat-lbl">Today Active</div>
         </div>
-        <div style="background:rgba(255,255,255,0.06);border-radius:12px;padding:12px 8px;text-align:center">
-          <div style="font-family:var(--font-display);font-size:28px;color:var(--g5)" id="admin-stat-workouts">0</div>
-          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Workouts</div>
+        <div class="admin-stat">
+          <div class="admin-stat-val" id="admin-stat-workouts">0</div>
+          <div class="admin-stat-lbl">Workouts</div>
         </div>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
-        <div style="background:rgba(255,255,255,0.06);border-radius:12px;padding:12px 8px;text-align:center">
-          <div style="font-family:var(--font-display);font-size:28px;color:var(--g5)" id="admin-stat-runs">0</div>
-          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Runs</div>
+        <div class="admin-stat">
+          <div class="admin-stat-val" id="admin-stat-runs">0</div>
+          <div class="admin-stat-lbl">Runs</div>
         </div>
-        <div style="background:rgba(255,255,255,0.06);border-radius:12px;padding:12px 8px;text-align:center">
-          <div style="font-family:var(--font-display);font-size:28px;color:var(--g5)" id="admin-stat-custom">0</div>
-          <div style="font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em">Custom WOs</div>
+        <div class="admin-stat">
+          <div class="admin-stat-val" id="admin-stat-custom">0</div>
+          <div class="admin-stat-lbl">Custom WOs</div>
         </div>
       </div>
     </div>
 
-    <div class="container" style="padding-top:16px">
+    <!-- Body: Sidebar (nav) + Content area -->
+    <div class="admin-body">
 
-      <!-- Admin tabs -->
-      <div class="tab-strip" style="margin-bottom:16px;overflow-x:auto">
-        <button class="tab-btn admin-tab-btn active" onclick="switchAdminTab('users',this)">👥 Users</button>
-        <button class="tab-btn admin-tab-btn" onclick="switchAdminTab('analytics',this)">📊 Analytics</button>
-        <button class="tab-btn admin-tab-btn" onclick="switchAdminTab('history',this)">📋 History</button>
-        <button class="tab-btn admin-tab-btn" onclick="switchAdminTab('custom',this)">✏️ Custom WOs</button>
-        <button class="tab-btn admin-tab-btn" onclick="switchAdminTab('feedback',this)">💬 Feedback</button>
-        <button class="tab-btn admin-tab-btn" onclick="switchAdminTab('announce',this)">📣 Announce</button>
-        <button class="tab-btn admin-tab-btn" onclick="switchAdminTab('content',this)">🗂 Content</button>
-      </div>
+      <!-- LEFT SIDEBAR NAV -->
+      <aside class="admin-sidebar">
+        <button class="admin-nav-btn active" data-tab="users"     onclick="switchAdminTab('users',this)">
+          <span class="admin-nav-ico">👥</span><span class="admin-nav-lbl">Users</span>
+        </button>
+        <button class="admin-nav-btn"        data-tab="analytics" onclick="switchAdminTab('analytics',this)">
+          <span class="admin-nav-ico">📊</span><span class="admin-nav-lbl">Analytics</span>
+        </button>
+        <button class="admin-nav-btn"        data-tab="history"   onclick="switchAdminTab('history',this)">
+          <span class="admin-nav-ico">📋</span><span class="admin-nav-lbl">Activity History</span>
+        </button>
+        <button class="admin-nav-btn"        data-tab="custom"    onclick="switchAdminTab('custom',this)">
+          <span class="admin-nav-ico">✏️</span><span class="admin-nav-lbl">Custom Workouts</span>
+        </button>
+        <button class="admin-nav-btn"        data-tab="feedback"  onclick="switchAdminTab('feedback',this)">
+          <span class="admin-nav-ico">💬</span><span class="admin-nav-lbl">Feedback</span>
+        </button>
+        <button class="admin-nav-btn"        data-tab="announce"  onclick="switchAdminTab('announce',this)">
+          <span class="admin-nav-ico">📣</span><span class="admin-nav-lbl">Announcements</span>
+        </button>
+        <button class="admin-nav-btn"        data-tab="content"   onclick="switchAdminTab('content',this)">
+          <span class="admin-nav-ico">🗂</span><span class="admin-nav-lbl">Content</span>
+        </button>
+      </aside>
 
-      <!-- USERS tab -->
-      <div id="admin-tab-users" class="admin-tab-content">
-        <button class="btn btn-primary btn-full" onclick="openAddUser()" style="margin-bottom:16px">+ Add New User</button>
-        <div id="admin-users-list"></div>
-      </div>
+      <!-- RIGHT CONTENT AREA -->
+      <main class="admin-content-area">
 
-      <!-- ANALYTICS tab -->
-      <div id="admin-tab-analytics" class="admin-tab-content" style="display:none">
-        <div id="admin-analytics-content"></div>
-      </div>
-
-      <!-- HISTORY tab -->
-      <div id="admin-tab-history" class="admin-tab-content" style="display:none">
-        <div style="font-size:13px;color:var(--text2);margin-bottom:12px">All activity across all users — workouts, runs and custom sessions.</div>
-        <div id="all-history-list"></div>
-      </div>
-
-      <!-- CUSTOM WORKOUTS tab -->
-      <div id="admin-tab-custom" class="admin-tab-content" style="display:none">
-        <div style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.5">
-          All custom workout routines created by users. Shows exercise list and completion count per routine.
+        <!-- USERS tab -->
+        <div id="admin-tab-users" class="admin-tab-content">
+          <div class="admin-tab-header">
+            <h2 class="admin-tab-title">👥 Users</h2>
+            <button class="btn btn-primary admin-action-btn" onclick="openAddUser()">+ Add New User</button>
+          </div>
+          <div id="admin-users-list"></div>
         </div>
-        <div id="admin-custom-workouts-list"></div>
-      </div>
 
+        <!-- ANALYTICS tab -->
+        <div id="admin-tab-analytics" class="admin-tab-content" style="display:none">
+          <div class="admin-tab-header">
+            <h2 class="admin-tab-title">📊 Analytics</h2>
+          </div>
+          <div id="admin-analytics-content"></div>
+        </div>
 
+        <!-- HISTORY tab -->
+        <div id="admin-tab-history" class="admin-tab-content" style="display:none">
+          <div class="admin-tab-header">
+            <h2 class="admin-tab-title">📋 Activity History</h2>
+          </div>
+          <div style="font-size:13px;color:var(--text2);margin-bottom:16px">All activity across all users — workouts, runs and custom sessions.</div>
+          <div id="all-history-list"></div>
+        </div>
 
-      <!-- FEEDBACK tab -->
-      <div id="admin-tab-feedback" class="admin-tab-content" style="display:none">
-        <div id="feedback-list"></div>
-      </div>
+        <!-- CUSTOM WORKOUTS tab -->
+        <div id="admin-tab-custom" class="admin-tab-content" style="display:none">
+          <div class="admin-tab-header">
+            <h2 class="admin-tab-title">✏️ Custom Workouts</h2>
+          </div>
+          <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.5">
+            All custom workout routines created by users. Shows exercise list and completion count per routine.
+          </div>
+          <div id="admin-custom-workouts-list"></div>
+        </div>
 
-      <!-- ANNOUNCE tab -->
-      <div id="admin-tab-announce" class="admin-tab-content" style="display:none">
-        <div id="admin-announce-content"></div>
-      </div>
+        <!-- FEEDBACK tab -->
+        <div id="admin-tab-feedback" class="admin-tab-content" style="display:none">
+          <div class="admin-tab-header">
+            <h2 class="admin-tab-title">💬 User Feedback</h2>
+          </div>
+          <div id="feedback-list"></div>
+        </div>
 
-      <!-- CONTENT tab -->
-      <div id="admin-tab-content" class="admin-tab-content" style="display:none">
-        <div id="content-links-list"></div>
-      </div>
+        <!-- ANNOUNCE tab -->
+        <div id="admin-tab-announce" class="admin-tab-content" style="display:none">
+          <div class="admin-tab-header">
+            <h2 class="admin-tab-title">📣 Announcements</h2>
+          </div>
+          <div id="admin-announce-content"></div>
+        </div>
 
+        <!-- CONTENT tab -->
+        <div id="admin-tab-content" class="admin-tab-content" style="display:none">
+          <div class="admin-tab-header">
+            <h2 class="admin-tab-title">🗂 Content</h2>
+          </div>
+          <div id="content-links-list"></div>
+        </div>
+
+      </main>
     </div>
   </div>
 </div>
