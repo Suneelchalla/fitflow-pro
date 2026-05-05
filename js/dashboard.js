@@ -2194,23 +2194,35 @@ function openFeedbackModal() {
   openModal('modal-feedback');
 }
 
-function toggleNotificationSetting() {
-  // Don't close menu — let user see toggle flip
-  if (typeof PUSH !== 'undefined' && PUSH.isSupported()) {
-    PUSH.isSubscribed().then(subscribed => {
-      if (subscribed) {
-        PUSH.unsubscribe().then(() => {
-          _updateNotifToggleVisual();
-          showToast('Daily reminders disabled', 'info');
-        });
-      } else {
-        acceptPushNotifications();
-        // Visual will refresh next time menu opens, or via callback
-        setTimeout(_updateNotifToggleVisual, 1500);
-      }
-    });
-  } else {
+async function toggleNotificationSetting() {
+  if (typeof PUSH === 'undefined' || !PUSH.isSupported()) {
     showToast('Push notifications not supported on this device', 'error');
+    return;
+  }
+  try {
+    const subscribed = await PUSH.isSubscribed();
+    if (subscribed) {
+      await PUSH.unsubscribe();
+      await _updateNotifToggleVisual();
+      showToast('Daily reminders disabled', 'info');
+    } else {
+      // Show pending state on the toggle
+      const sw = document.getElementById('notif-toggle-switch');
+      if (sw) sw.style.opacity = '0.6';
+
+      const ok = await PUSH.subscribe();
+
+      // After subscribe completes, update visual
+      await _updateNotifToggleVisual();
+      showToast(
+        ok ? '🔔 Daily reminders enabled!' : 'Could not enable. Check browser notification settings.',
+        ok ? 'success' : 'error'
+      );
+    }
+  } catch (e) {
+    console.error('toggleNotificationSetting error:', e);
+    await _updateNotifToggleVisual();
+    showToast('Error: ' + (e?.message || e), 'error');
   }
 }
 
