@@ -3219,12 +3219,44 @@ async function renderAdminNotify() {
 
   // Render compose form
   container.innerHTML = `
+    <div class="notify-audience-bar" id="notify-audience-bar">
+      <span style="display:inline-flex;align-items:center;gap:8px">
+        <span style="width:8px;height:8px;background:var(--g4);border-radius:50%;display:inline-block"></span>
+        <span id="notify-audience-text">Loading subscriber count…</span>
+      </span>
+      <button class="admin-pill-btn" onclick="_refreshAudienceCount()" style="font-size:11px;padding:4px 10px">↻ Refresh</button>
+    </div>
+
+    <!-- Audience selector -->
+    <div class="notify-audience-selector">
+      <div class="notify-audience-label">Send to:</div>
+      <div class="notify-audience-options">
+        <button class="notify-audience-btn active" data-audience="all"      onclick="_setNotifyAudience('all', this)">👥 All Subscribers</button>
+        <button class="notify-audience-btn"        data-audience="active"   onclick="_setNotifyAudience('active', this)">✅ Active Users (7d)</button>
+        <button class="notify-audience-btn"        data-audience="atrisk"   onclick="_setNotifyAudience('atrisk', this)">⚠️ At-Risk Users (7+ days inactive)</button>
+        <button class="notify-audience-btn"        data-audience="specific" onclick="_setNotifyAudience('specific', this)">🎯 Specific Users…</button>
+      </div>
+    </div>
+
+    <!-- User picker (only shown when "specific" is selected) -->
+    <div id="notify-user-picker" class="notify-user-picker" style="display:none">
+      <div class="notify-picker-controls">
+        <input id="notify-picker-search" class="admin-search-input" type="text"
+          placeholder="🔍 Search users by name or email…" oninput="_filterNotifyUserList()">
+        <div class="notify-picker-actions">
+          <button class="admin-pill-btn" onclick="_selectAllNotifyUsers(true)" style="font-size:11px;padding:4px 10px">Select All</button>
+          <button class="admin-pill-btn" onclick="_selectAllNotifyUsers(false)" style="font-size:11px;padding:4px 10px">Clear</button>
+        </div>
+      </div>
+      <div id="notify-user-list" class="notify-user-list"></div>
+    </div>
+
     <div class="notify-grid">
       <!-- LEFT: Compose form -->
       <div class="notify-compose">
         <div class="notify-section-head">
           <h3>✏️ Compose Notification</h3>
-          <span class="notify-help">Sends to all subscribed users instantly</span>
+          <span class="notify-help">Sends to selected audience instantly</span>
         </div>
 
         <label class="notify-label">Title <span class="notify-counter" id="notify-title-counter">0/80</span></label>
@@ -3245,7 +3277,7 @@ async function renderAdminNotify() {
 
         <div class="notify-actions">
           <button class="btn btn-primary" onclick="_sendAdminNotification()" id="notify-send-btn">
-            🚀 Send to All Users
+            🚀 Send to All Subscribers
           </button>
           <button class="btn btn-ghost" onclick="_clearNotifyForm()">Clear</button>
         </div>
@@ -3290,8 +3322,178 @@ async function renderAdminNotify() {
     </div>
   `;
 
-  // Load send history
+  // Load send history + subscriber count
   _loadNotifyHistory();
+  _refreshAudienceCount();
+}
+
+
+
+
+
+// Notify audience state
+let _notifyAudience = 'all';      // 'all' | 'active' | 'atrisk' | 'specific'
+let _notifySelectedUsers = new Set();   // Set of userIds when audience is 'specific'
+
+function _setNotifyAudience(audience, btn) {
+  _notifyAudience = audience;
+  document.querySelectorAll('.notify-audience-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+
+  const picker = document.getElementById('notify-user-picker');
+  if (audience === 'specific') {
+    picker.style.display = 'block';
+    _renderNotifyUserList();
+  } else {
+    picker.style.display = 'none';
+  }
+  _updateSendButtonLabel();
+}
+
+async function _renderNotifyUserList() {
+  const listEl = document.getElementById('notify-user-list');
+  if (!listEl) return;
+  listEl.innerHTML = '<div style="padding:14px;text-align:center;color:var(--text3);font-size:13px">Loading subscribed users…</div>';
+
+  // Get subscribed devices to know who can receive pushes
+  let subscribedUserIds = new Set();
+  try {
+    const sub = await Sheets.get('getSubscribedDevices');
+    if (sub?.success) {
+      (sub.devices || []).forEach(d => { if (d.userId) subscribedUserIds.add(d.userId); });
+    }
+  } catch(e) {}
+
+  // Use cached users from Users tab, or fetch
+  let users = _cachedAdminUsers;
+  if (!users || !users.length) {
+    try {
+      const r = await Sheets.get('getAllUsers');
+      if (r?.success) users = r.users || [];
+    } catch(e) { users = []; }
+  }
+
+  const realUsers = users.filter(u => (u.role||'USER').toUpperCase() !== 'ADMIN');
+  // Sort: subscribed first (alphabetical within each)
+  realUsers.sort((a, b) => {
+    const aSub = subscribedUserIds.has(a.id) ? 0 : 1;
+    const bSub = subscribedUserIds.has(b.id) ? 0 : 1;
+    if (aSub !== bSub) return aSub - bSub;
+    return (a.name||'').localeCompare(b.name||'');
+  });
+
+  listEl.innerHTML = realUsers.map(u => {
+    const subscribed = subscribedUserIds.has(u.id);
+    const checked = _notifySelectedUsers.has(u.id);
+    const safeId = (u.id||'').replace(/'/g, "\\'");
+    return `
+      <label class="notify-user-row ${subscribed ? '' : 'notify-user-unsub'}" data-name="${(u.name||'').toLowerCase()}" data-email="${(u.email||'').toLowerCase()}">
+        <input type="checkbox" ${checked ? 'checked' : ''} ${subscribed ? '' : 'disabled'}
+          onchange="_toggleNotifyUser('${safeId}', this.checked)">
+        <div class="notify-user-info">
+          <div class="notify-user-name">${u.name || '—'}${subscribed ? '' : ' <span style="font-size:10px;color:var(--text3);font-weight:400">(not subscribed)</span>'}</div>
+          <div class="notify-user-email">${u.email || ''}</div>
+        </div>
+        ${subscribed ? '<span class="notify-sub-badge">🔔</span>' : ''}
+      </label>
+    `;
+  }).join('') || '<div style="padding:14px;text-align:center;color:var(--text3);font-size:13px">No users found</div>';
+
+  _updateSendButtonLabel();
+}
+
+function _toggleNotifyUser(userId, checked) {
+  if (checked) _notifySelectedUsers.add(userId);
+  else _notifySelectedUsers.delete(userId);
+  _updateSendButtonLabel();
+}
+
+function _selectAllNotifyUsers(selectAll) {
+  document.querySelectorAll('#notify-user-list input[type="checkbox"]:not(:disabled)').forEach(cb => {
+    cb.checked = selectAll;
+    const userId = cb.getAttribute('onchange').match(/'([^']+)'/)[1].replace(/\\\\'/g, "'");
+    if (selectAll) _notifySelectedUsers.add(userId);
+    else _notifySelectedUsers.delete(userId);
+  });
+  _updateSendButtonLabel();
+}
+
+function _filterNotifyUserList() {
+  const q = (document.getElementById('notify-picker-search')?.value || '').toLowerCase().trim();
+  document.querySelectorAll('.notify-user-row').forEach(row => {
+    const name = row.getAttribute('data-name') || '';
+    const email = row.getAttribute('data-email') || '';
+    row.style.display = (!q || name.includes(q) || email.includes(q)) ? '' : 'none';
+  });
+}
+
+function _updateSendButtonLabel() {
+  const btn = document.getElementById('notify-send-btn');
+  if (!btn) return;
+  let label = '🚀 Send to All Subscribers';
+  if (_notifyAudience === 'active') label = '🚀 Send to Active Users';
+  else if (_notifyAudience === 'atrisk') label = '🚀 Send to At-Risk Users';
+  else if (_notifyAudience === 'specific') {
+    const n = _notifySelectedUsers.size;
+    label = n > 0
+      ? `🚀 Send to ${n} Selected User${n === 1 ? '' : 's'}`
+      : '⚠️ Select at least 1 user';
+  }
+  btn.innerHTML = label;
+}
+
+// Compute target user IDs based on audience selection
+function _computeNotifyTargetUserIds() {
+  if (_notifyAudience === 'all') return null;  // null = all subscribed
+  if (_notifyAudience === 'specific') {
+    return Array.from(_notifySelectedUsers);
+  }
+
+  // 'active' or 'atrisk' — derive from dashboard data
+  const data = _adminDashboardData || {};
+  const realUsers = (data.users || []).filter(u => (u.role||'USER').toUpperCase() !== 'ADMIN');
+  const allLogs = data.allLogs || [];
+
+  const last7 = (() => {
+    const d = new Date(); d.setDate(d.getDate() - 7);
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  })();
+
+  const userLastActivity = {};
+  allLogs.forEach(l => { if (!userLastActivity[l.userId] || l.date > userLastActivity[l.userId]) userLastActivity[l.userId] = l.date; });
+
+  if (_notifyAudience === 'active') {
+    return realUsers.filter(u => (userLastActivity[u.id] || '') >= last7).map(u => u.id);
+  }
+  if (_notifyAudience === 'atrisk') {
+    return realUsers.filter(u => !userLastActivity[u.id] || userLastActivity[u.id] < last7).map(u => u.id);
+  }
+  return null;
+}
+
+
+// Fetches and displays current subscribed-device count
+async function _refreshAudienceCount() {
+  const el = document.getElementById('notify-audience-text');
+  if (el) el.textContent = 'Loading…';
+  try {
+    const res = await Sheets.get('getSubscribedDevices');
+    if (res?.success) {
+      const count = res.count || 0;
+      const devices = res.devices || [];
+      if (count === 0) {
+        if (el) el.innerHTML = '<strong style="color:var(--accent)">⚠️ 0 subscribers</strong> — push won\'t reach anyone yet';
+      } else {
+        const summary = devices.slice(0, 3).map(d => d.name || d.email || (d.deviceModel + ' user')).join(', ');
+        const more = count > 3 ? ` and ${count - 3} more` : '';
+        if (el) el.innerHTML = `<strong>${count} subscribed device${count === 1 ? '' : 's'}</strong> — ${summary}${more}`;
+      }
+    } else {
+      if (el) el.textContent = 'Could not load subscriber count';
+    }
+  } catch(e) {
+    if (el) el.textContent = 'Error loading count';
+  }
 }
 
 const _NOTIFY_TEMPLATES = {
@@ -3346,16 +3548,33 @@ async function _sendAdminNotification() {
   if (!msg)   { showToast('Message is required', 'error'); return; }
 
   const btn = document.getElementById('notify-send-btn');
-  if (!confirm(`Send this push to ALL subscribed users now?\n\nTitle: ${title}\n\nMessage: ${msg}`)) return;
+  // Build human-readable audience description for confirm
+  let audienceDesc = 'all subscribed users';
+  if (_notifyAudience === 'active') audienceDesc = 'active users (7d)';
+  else if (_notifyAudience === 'atrisk') audienceDesc = 'at-risk users (7+ days inactive)';
+  else if (_notifyAudience === 'specific') audienceDesc = _notifySelectedUsers.size + ' selected user' + (_notifySelectedUsers.size === 1 ? '' : 's');
+  if (!confirm(`Send this push to ${audienceDesc}?\n\nTitle: ${title}\n\nMessage: ${msg}`)) return;
 
   btn.disabled = true;
   btn.textContent = 'Sending…';
 
   try {
+    // Compute target users based on audience selection
+    const targetUserIds = _computeNotifyTargetUserIds();
+
+    // If specific selection but nothing chosen, abort
+    if (_notifyAudience === 'specific' && (!targetUserIds || !targetUserIds.length)) {
+      btn.disabled = false;
+      btn.innerHTML = _notifyAudience === 'specific' ? '⚠️ Select at least 1 user' : '🚀 Send';
+      showToast('Please select at least one user', 'error');
+      return;
+    }
+
     const res = await Sheets.post('sendAdminPush', {
       title,
       message: msg,
       sentBy: APP.currentUser?.email || 'admin',
+      targetUserIds: targetUserIds,  // null = all subscribed
     });
     if (res?.success) {
       // res.targeted = devices we sent to (reliable)
