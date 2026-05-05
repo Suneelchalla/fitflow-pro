@@ -1911,14 +1911,68 @@ function renderAchievements() {
   `;
 }
 
+
+// Coerce any date value (Date object, string, number) to YYYY-MM-DD string
+function _toYMD(v) {
+  if (!v) return '';
+  if (typeof v === 'string') {
+    if (v.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(v)) return v.substring(0, 10);
+    const d = new Date(v);
+    if (isNaN(d.getTime())) return '';
+    return d.toISOString().split('T')[0];
+  }
+  if (v instanceof Date) {
+    if (isNaN(v.getTime())) return '';
+    const y = v.getFullYear();
+    const m = String(v.getMonth() + 1).padStart(2, '0');
+    const d = String(v.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+  return '';
+}
+
+// Calendar state for running history
+let _runHistoryYear  = new Date().getFullYear();
+let _runHistoryMonth = new Date().getMonth();
+let _selectedRunDate = todayStr();
+
+function changeRunMonth(delta) {
+  _runHistoryMonth += delta;
+  if (_runHistoryMonth > 11) { _runHistoryMonth = 0;  _runHistoryYear++; }
+  if (_runHistoryMonth < 0)  { _runHistoryMonth = 11; _runHistoryYear--; }
+  const now = new Date();
+  const nextBtn = document.getElementById('run-next-btn');
+  if (nextBtn) {
+    const atCurrent = _runHistoryYear === now.getFullYear() && _runHistoryMonth >= now.getMonth();
+    nextBtn.disabled      = atCurrent;
+    nextBtn.style.opacity = atCurrent ? '0.3' : '1';
+  }
+  renderRunHistory();
+}
+
+function selectRunDate(dateStr) {
+  _selectedRunDate = dateStr;
+  renderRunHistory();
+  navigator.vibrate && navigator.vibrate(20);
+}
+
 function renderRunHistory() {
   const user      = APP.currentUser;
+  // Normalize each log's date to YYYY-MM-DD so grouping/calendar works
   const allLogs   = Store.getUserRunLogs(user.id)
+    .map(r => ({
+      ...r,
+      date:      _toYMD(r.date),
+      timestamp: typeof r.timestamp === 'string'
+        ? r.timestamp
+        : (r.timestamp instanceof Date && !isNaN(r.timestamp.getTime()) ? r.timestamp.toISOString() : ''),
+    }))
     .sort((a, b) => (b.timestamp||b.date||'').localeCompare(a.timestamp||a.date||''));
+
   const container = document.getElementById('run-history-list');
   const statsEl   = document.getElementById('run-stats-row');
 
-  // Summary stats
+  // ── Summary stats ─────────────────────────────────────────────
   const totalKm   = allLogs.reduce((a, r) => a + (r.distance || 0), 0);
   const totalRuns = allLogs.length;
   const totalTime = allLogs.reduce((a, r) => a + (r.duration || 0), 0);
@@ -1935,40 +1989,72 @@ function renderRunHistory() {
       <div class="stat-card"><div class="stat-val">${totalKcal}</div><div class="stat-label">Total kcal</div></div>
     </div>`;
 
+  // ── Calendar ──────────────────────────────────────────────────
+  const calEl     = document.getElementById('run-cal');
+  const monthLbl  = document.getElementById('run-month-label');
+  if (monthLbl) {
+    monthLbl.textContent = new Date(_runHistoryYear, _runHistoryMonth, 1)
+      .toLocaleDateString('en-IN', { month: 'long', year: 'numeric' });
+  }
+  if (calEl) {
+    calEl.innerHTML = _buildRunCalendar(allLogs, _runHistoryYear, _runHistoryMonth);
+  }
+
+  // ── Day log title ─────────────────────────────────────────────
+  const logTitleEl = document.getElementById('run-log-title');
+  if (logTitleEl) {
+    const isToday = _selectedRunDate === todayStr();
+    if (isToday) {
+      logTitleEl.textContent = 'Today\'s Activities';
+    } else {
+      const d = new Date(_selectedRunDate + 'T12:00:00');
+      logTitleEl.textContent = isNaN(d.getTime())
+        ? 'Activity Log'
+        : d.toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+    }
+  }
+
   if (!container) return;
   if (!allLogs.length) {
     container.innerHTML = '<div class="empty-state"><div class="empty-icon">🏃</div><p>No activities logged yet.<br>Start your first one!</p></div>';
     return;
   }
 
-  // Group runs by date
-  const byDate = {};
-  allLogs.forEach((r, globalIdx) => {
-    const d = r.date || 'Unknown';
-    if (!byDate[d]) byDate[d] = [];
-    byDate[d].push({ ...r, _globalIdx: globalIdx });
-  });
+  // ── Filter to selected day's runs ─────────────────────────────
+  const dayRuns = allLogs
+    .map((r, gi) => ({ ...r, _globalIdx: gi }))
+    .filter(r => r.date === _selectedRunDate);
 
-  const sortedDates = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
+  if (!dayRuns.length) {
+    const isFuture = _selectedRunDate > todayStr();
+    const isToday  = _selectedRunDate === todayStr();
+    container.innerHTML = `
+      <div style="text-align:center;padding:28px 16px">
+        <div style="font-size:40px;margin-bottom:10px">${isFuture ? '🗓️' : isToday ? '🏃' : '😴'}</div>
+        <div style="font-weight:700;font-size:15px;margin-bottom:6px">
+          ${isFuture ? 'Future date' : isToday ? 'No activity yet today' : 'No activity'}
+        </div>
+        <div style="font-size:13px;color:var(--text3)">
+          ${isFuture ? 'Come back on this date!' : isToday ? 'Start a run to log it here.' : 'Recovery day.'}
+        </div>
+      </div>`;
+    return;
+  }
 
-  container.innerHTML = sortedDates.map(date => {
-    const dayRuns = byDate[date];
-    const dayKm   = dayRuns.reduce((a, r) => a + (r.distance || 0), 0);
-    const dateObj = new Date(date + 'T12:00:00');
-    const dateStr = isNaN(dateObj.getTime())
-      ? date
-      : dateObj.toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short', year:'numeric' });
-    const isToday = date === todayStr();
-
-    const runsHtml = dayRuns.map(r => {
-      const type = r.activityType || 'run';
-      const meta = ACTIVITY_META[type] || ACTIVITY_META.run;
-      const kcal = Math.round((r.distance || 0) * meta.kcalPerKm);
-      const timeStr = r.timestamp
+  // ── Day's runs ────────────────────────────────────────────────
+  container.innerHTML = `
+    <div style="font-size:13px;color:var(--text3);margin-bottom:10px">
+      ${dayRuns.length} activit${dayRuns.length > 1 ? 'ies' : 'y'} on this day
+    </div>
+    ${dayRuns.map(r => {
+      const type     = r.activityType || 'run';
+      const meta     = ACTIVITY_META[type] || ACTIVITY_META.run;
+      const kcal     = Math.round((r.distance || 0) * meta.kcalPerKm);
+      const timeStr  = r.timestamp
         ? new Date(r.timestamp).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true })
         : '';
-      const hasMap = r.coords && r.coords.length >= 2;
-      const idx = r._globalIdx;
+      const hasMap   = r.coords && r.coords.length >= 2;
+      const idx      = r._globalIdx;
       return `
         <div class="card run-history-card" style="margin-bottom:8px;cursor:pointer"
           onclick="_showRunDetail(${idx})">
@@ -2006,22 +2092,70 @@ function renderRunHistory() {
             </div>
           </div>
         </div>`;
-    }).join('');
+    }).join('')}
+  `;
+}
 
-    return `
-      <div style="margin-bottom:16px">
-        <div style="display:flex;align-items:center;justify-content:space-between;
-          margin-bottom:8px;padding:0 2px">
-          <div style="font-size:13px;font-weight:700;color:var(--text2)">
-            ${isToday ? '📅 Today' : dateStr}
-          </div>
-          <div style="font-size:12px;color:var(--text3)">
-            ${dayRuns.length} run${dayRuns.length>1?'s':''} · ${dayKm.toFixed(1)} km
-          </div>
-        </div>
-        ${runsHtml}
-      </div>`;
-  }).join('');
+// Build calendar grid for running history
+function _buildRunCalendar(logs, year, month) {
+  const now = new Date();
+  const firstDay    = new Date(year, month, 1).getDay();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const todayStr_   = now.toISOString().split('T')[0];
+
+  // Map: date → number of activities + total km
+  const dayMap = {};
+  logs.forEach(l => {
+    const d = l.date || '';
+    if (!d) return;
+    if (!dayMap[d]) dayMap[d] = { count: 0, km: 0, emoji: null };
+    dayMap[d].count++;
+    dayMap[d].km += (l.distance || 0);
+    if (!dayMap[d].emoji) {
+      const meta = ACTIVITY_META[l.activityType || 'run'] || ACTIVITY_META.run;
+      dayMap[d].emoji = meta.emoji;
+    }
+  });
+
+  const headers = ['S','M','T','W','T','F','S']
+    .map(d => `<div class="cal-day header">${d}</div>`).join('');
+
+  let cells = Array(firstDay).fill('<div class="cal-day" style="background:transparent"></div>').join('');
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr  = `${year}-${String(month+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const isToday  = dateStr === todayStr_;
+    const isFuture = new Date(dateStr + 'T12:00:00') > now && !isToday;
+    const data     = dayMap[dateStr];
+    const hasActivity = !!data;
+    const isSelected  = dateStr === _selectedRunDate;
+
+    let cellClass = 'cal-day';
+    let innerHtml = d;
+
+    if (isFuture) {
+      cellClass += ' cal-future';
+    } else if (hasActivity) {
+      cellClass += ' completed';
+      if (isToday) cellClass += ' today';
+      innerHtml = `<span style="font-size:14px">${data.emoji || '🏃'}</span>`;
+    } else if (isToday) {
+      cellClass += ' today';
+    }
+
+    const sel = isSelected && !isFuture
+      ? 'outline:2px solid var(--accent);outline-offset:2px;' : '';
+    const cursor = isFuture ? 'default' : 'pointer';
+    const click  = isFuture ? '' : `onclick="selectRunDate('${dateStr}')"`;
+
+    cells += `<div class="${cellClass}" ${click} style="cursor:${cursor};${sel}" title="${dateStr}${data?` — ${data.count} run${data.count>1?'s':''} · ${data.km.toFixed(1)}km`:''}">${innerHtml}</div>`;
+  }
+
+  return `<div class="cal-grid">${headers}${cells}</div>
+    <div style="display:flex;gap:12px;margin-top:10px;font-size:11px;color:var(--text3);justify-content:center">
+      <span><span style="display:inline-block;width:14px;height:14px;border-radius:4px;background:var(--g3);margin-right:4px;vertical-align:middle"></span>Activity</span>
+      <span><span style="display:inline-block;width:14px;height:14px;border-radius:4px;border:2px solid var(--accent);margin-right:4px;vertical-align:middle"></span>Today</span>
+    </div>`;
 }
 
 // ── KM SPLITS ────────────────────────────────────────────────────
