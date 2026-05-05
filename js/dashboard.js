@@ -2026,6 +2026,8 @@ function toggleProfileMenu() {
     const em = document.getElementById('profile-menu-email');
     if (el) el.textContent = APP.currentUser.name;
     if (em) em.textContent = APP.currentUser.email;
+    // Refresh notification toggle switch state when menu opens
+    _updateNotifToggleVisual();
   }
   // Close menu when clicking outside
   if (!isOpen) {
@@ -2190,20 +2192,48 @@ function openFeedbackModal() {
 }
 
 function toggleNotificationSetting() {
-  const menu = document.getElementById('profile-menu');
-  if (menu) menu.style.display = 'none';
+  // Don't close menu — let user see toggle flip
   if (typeof PUSH !== 'undefined' && PUSH.isSupported()) {
     PUSH.isSubscribed().then(subscribed => {
       if (subscribed) {
-        PUSH.unsubscribe();
-        showToast('Daily reminders disabled', 'info');
+        PUSH.unsubscribe().then(() => {
+          _updateNotifToggleVisual();
+          showToast('Daily reminders disabled', 'info');
+        });
       } else {
         acceptPushNotifications();
+        // Visual will refresh next time menu opens, or via callback
+        setTimeout(_updateNotifToggleVisual, 1500);
       }
     });
   } else {
     showToast('Push notifications not supported on this device', 'error');
   }
+}
+
+// Update the notification toggle switch's visual state based on current subscription
+function _updateNotifToggleVisual() {
+  const sw   = document.getElementById('notif-toggle-switch');
+  const knob = document.getElementById('notif-toggle-knob');
+  if (!sw || !knob) return;
+  if (typeof PUSH === 'undefined' || !PUSH.isSupported()) {
+    // Not supported — show off and disabled-looking
+    sw.style.background = 'rgba(255,255,255,0.08)';
+    sw.style.opacity    = '0.4';
+    knob.style.left     = '3px';
+    sw.setAttribute('data-on', 'false');
+    return;
+  }
+  sw.style.opacity = '1';
+  PUSH.isSubscribed().then(on => {
+    sw.setAttribute('data-on', on ? 'true' : 'false');
+    sw.style.background = on ? 'var(--g4)' : 'rgba(255,255,255,0.15)';
+    knob.style.left     = on ? '21px' : '3px';
+  }).catch(() => {
+    sw.setAttribute('data-on', 'false');
+    sw.style.background = 'rgba(255,255,255,0.15)';
+    knob.style.left     = '3px';
+  });
 }
 
 // ── CUSTOM WORKOUTS & WEEKLY REPORT RELAY ────────────────────────
