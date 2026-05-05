@@ -2205,7 +2205,7 @@ function _renderDashboardContent() {
 
     <!-- TOP ROW: 4 KPI cards -->
     <div class="dash-grid dash-grid-4">
-      ${_kpiCard('Today\\'s Sessions', todayLogs.length, dodSessions, 'sessions', '📅', 'green')}
+      ${_kpiCard("Today's Sessions", todayLogs.length, dodSessions, 'sessions', '📅', 'green')}
       ${_kpiCard('This Week', thisWeekLogs.length, wowSessions, 'workouts', '📈', 'blue')}
       ${_kpiCard('Active Users (7d)', activeUserIds7d.length, null, `${engagementRate}% engagement`, '👥', 'purple')}
       ${_kpiCard('New This Week', newThisWeek, null, `${newThisMonth} this month`, '✨', 'amber')}
