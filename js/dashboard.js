@@ -395,8 +395,8 @@ function renderYogaProgressivePage() {
     ? { ...baseYogaData, schedule: savedYoga.schedule || baseYogaData?.schedule }
     : baseYogaData;
 
-  document.getElementById('module-title').textContent        = 'Yoga';
-  document.getElementById('module-emoji-header').textContent = '\U0001f9d8';
+  document.getElementById('module-title').textContent = 'Yoga';
+  document.getElementById('module-emoji-header').textContent = '🧘';
 
   const schedule  = yogaData?.schedule || {};
   const allDays   = Object.keys(schedule).sort((a,b) =>
@@ -508,7 +508,7 @@ function renderYogaDayView(dayKey, allDays, yogaProgress, yogaData, user) {
           </div>`
         : `<button onclick="completeYogaDay('${dayKey}')" id="yoga-complete-btn"
             style="width:100%;padding:18px;background:linear-gradient(135deg,#7b1fa2,#9c27b0);color:white;border:none;border-radius:14px;font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 4px 20px rgba(123,31,162,0.35);">
-            \U0001f9d8 Mark Day ${dayNum} Complete
+            🧘 Mark Day ${dayNum} Complete
           </button>
           <div style="text-align:center;margin-top:7px;font-size:11px;color:var(--text3)">Logs your session and unlocks Day ${Math.min(dayNum+1,totalDays)}</div>`
       }
@@ -630,7 +630,7 @@ async function completeYogaDay(dayKey) {
   const logResult = Store.addLog({ userId:user.id, email:user.email, module:'yoga', day:dayKey, date:today });
   if (logResult) Sheets.post('logCompletion', { userId:user.id, email:user.email, module:'yoga', day:dayKey, date:today }).catch(()=>{});
 
-  showToast('\u2705 ' + dayKey + ' complete! Great practice \U0001f9d8', 'success');
+  showToast('✅ ' + dayKey + ' complete! Great practice 🧘', 'success');
 
   const baseYoga  = (window.APP_DATA_DEFAULT || window.APP_DATA).modules?.yoga;
   const savedYoga = Store.getContent('exercises_yoga');
@@ -1564,7 +1564,44 @@ function _showHistoryWorkoutDetail(moduleId, date, day) {
 function renderGlobalHistory() {
   _historyYear         = new Date().getFullYear();
   _historyMonth        = new Date().getMonth();
-  _selectedHistoryDate = todayStr(); // always open on today
+  _selectedHistoryDate = todayStr();
+
+  // Show loading then sync from Sheets before rendering
+  const statsEl = document.getElementById('history-stats');
+  if (statsEl) statsEl.innerHTML = '<div style="padding:16px;text-align:center;color:var(--text3);font-size:13px">Loading…</div>';
+
+  _syncHistoryThenRender();
+}
+
+async function _syncHistoryThenRender() {
+  try {
+    const user = APP.currentUser;
+    if (user) {
+      // Sync completion logs
+      const res = await Sheets.get('getUserLogs', { userId: user.id });
+      if (res?.success && Array.isArray(res.logs) && res.logs.length) {
+        const local = Store.getLogs();
+        let ch = false;
+        res.logs.forEach(sl => {
+          if (!local.find(l => l.userId===sl.userId && l.module===sl.module && l.day===sl.day && l.date===sl.date)) {
+            local.push({ ...sl, id: sl.id||('log_'+Date.now()+Math.random()) });
+            ch = true;
+          }
+        });
+        if (ch) Store.set('ff_logs', local);
+      }
+      // Sync run logs
+      const rr = await Sheets.get('getUserRunLogs', { userId: user.id });
+      if (rr?.success && Array.isArray(rr.logs) && rr.logs.length) {
+        const lr = Store.getRunLogs(); let ch2 = false;
+        rr.logs.forEach(r => {
+          if (!lr.find(l => l.id===r.id||(l.userId===r.userId&&l.date===r.date&&Math.abs((l.distance||0)-(r.distance||0))<0.01)))
+            { lr.push(r); ch2=true; }
+        });
+        if (ch2) Store.set('ff_runlogs', lr);
+      }
+    }
+  } catch(e) { console.warn('History sync skipped:', e.message); }
 
   const user    = APP.currentUser;
   const logs    = Store.getUserLogs(user.id);
@@ -1575,7 +1612,7 @@ function renderGlobalHistory() {
       <div class="stat-card"><div class="stat-val">${logs.length}</div><div class="stat-label">Total Workouts</div></div>
       <div class="stat-card"><div class="stat-val">${calcStreak(user.id)}🔥</div><div class="stat-label">Day Streak</div></div>
       <div class="stat-card"><div class="stat-val">${runLogs.length}</div><div class="stat-label">Activities</div></div>
-      <div class="stat-card"><div class="stat-val">${runLogs.reduce((a, r) => a + (r.distance || 0), 0).toFixed(1)}</div><div class="stat-label">Total km</div></div>
+      <div class="stat-card"><div class="stat-val">${runLogs.reduce((a,r)=>a+(r.distance||0),0).toFixed(1)}</div><div class="stat-label">Total km</div></div>
     </div>`;
 
   _renderHistoryCalendar();
@@ -2161,16 +2198,12 @@ function openCreateWorkout() {
 }
 
 function openWeeklyReport() {
-  // Auto-show last week on Mon/Tue — current week barely started
-  const jsDay = new Date().getDay();
-  window._weekOffset = (jsDay === 1 || jsDay === 2) ? -1 : 0;
   showPage('page-weekly-report');
-  if (typeof _loadAndRender === 'function') {
-    _loadAndRender();
+  if (typeof renderWeeklyReport === 'function') {
+    renderWeeklyReport();
   } else {
     setTimeout(() => {
-      if (typeof _loadAndRender === 'function') _loadAndRender();
-      else if (typeof renderWeeklyReport === 'function') renderWeeklyReport();
+      if (typeof renderWeeklyReport === 'function') renderWeeklyReport();
     }, 300);
   }
 }
