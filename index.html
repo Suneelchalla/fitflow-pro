@@ -9,15 +9,6 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="FitFlow Pro">
 <meta name="description" content="Android-first all-in-one fitness app — workouts, running, yoga, diet & more.">
-    <script>
-  if ('serviceWorker' in navigator) {
-    window.addEventListener('load', function() {
-      navigator.serviceWorker.register('./sw.js')
-        .then(function(reg) { console.log('SW registered'); })
-        .catch(function(err) { console.log('SW failed:', err); });
-    });
-  }
-</script>
 <title>FitFlow Pro</title>
 <link rel="manifest" href="manifest.json">
     <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32.png">
@@ -1592,6 +1583,9 @@ document.addEventListener('DOMContentLoaded', () => {
         <div id="cw-name-error" style="color:#ef9a9a;font-size:13px;min-height:16px;margin-top:4px"></div>
       </div>
 
+      <!-- Structured fields: category, goal, difficulty, days, notes -->
+      <div id="cw-structured-fields" style="margin-bottom:16px"></div>
+
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <div class="section-title" style="margin:0">Exercises</div>
         <button class="btn btn-outline btn-sm" onclick="addExerciseToCW()">+ Add Exercise</button>
@@ -1618,6 +1612,7 @@ document.addEventListener('DOMContentLoaded', () => {
       <div style="width:38px"></div>
     </div>
     <div class="container" style="padding-top:16px">
+      <div id="cw-workout-notes" style="display:none;font-size:13px;color:var(--text3);margin-bottom:14px;padding:10px 14px;background:var(--bg3);border-radius:10px;line-height:1.5"></div>
       <div id="cw-workout-exercises" style="margin-bottom:16px"></div>
       <button id="cw-complete-btn" class="btn btn-primary btn-full" style="margin-bottom:20px">Mark Complete</button>
     </div>
