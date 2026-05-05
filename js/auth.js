@@ -220,18 +220,20 @@ async function _syncUserLogs(userId) {
     const res = await Sheets.get('getUserLogs', { userId });
     if (!res?.success || !Array.isArray(res.logs) || !res.logs.length) return;
 
-    // Merge Sheets logs with local logs (avoid duplicates)
+    // Merge Sheets logs with local logs — dedup by (userId, module, date)
+    // Don't depend on 'day' field matching exactly (case/locale differences)
     const local = Store.getLogs();
     let changed = false;
+    // Build a Set of existing log keys for fast lookup
+    const seen = new Set();
+    local.forEach(l => {
+      seen.add((l.userId||'') + '|' + (l.module||'') + '|' + (l.date||''));
+    });
     res.logs.forEach(sheetLog => {
-      const exists = local.find(l =>
-        l.userId === sheetLog.userId &&
-        l.module === sheetLog.module &&
-        l.day    === sheetLog.day    &&
-        l.date   === sheetLog.date
-      );
-      if (!exists) {
+      const key = (sheetLog.userId||'') + '|' + (sheetLog.module||'') + '|' + (sheetLog.date||'');
+      if (!seen.has(key)) {
         local.push({ ...sheetLog, id: sheetLog.id || 'log_' + Date.now() + Math.random() });
+        seen.add(key);
         changed = true;
       }
     });
