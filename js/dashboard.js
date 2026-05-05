@@ -1160,9 +1160,21 @@ function buildCalendar(logs, moduleFilter, year, month, context) {
   const todayStr_   = now.toISOString().split('T')[0];
 
   // Build a map: dateStr → [emoji, emoji, ...]
+  // Defensive: normalize l.date to YYYY-MM-DD in case caller passed Date objects
+  const _normYMD = v => {
+    if (!v) return '';
+    if (typeof v === 'string') {
+      return /^\d{4}-\d{2}-\d{2}/.test(v) ? v.substring(0, 10) :
+        (isNaN(new Date(v).getTime()) ? '' : new Date(v).toISOString().split('T')[0]);
+    }
+    if (v instanceof Date && !isNaN(v.getTime())) {
+      return `${v.getFullYear()}-${String(v.getMonth()+1).padStart(2,'0')}-${String(v.getDate()).padStart(2,'0')}`;
+    }
+    return '';
+  };
   const dateMap = {};
   logs.forEach(l => {
-    const d = l.date || '';
+    const d = _normYMD(l.date);
     if (!d) return;
     if (!dateMap[d]) dateMap[d] = new Set();
     dateMap[d].add(getModuleEmoji(l.module));
@@ -1269,19 +1281,39 @@ function _renderHistoryCalendar() {
   const user = APP.currentUser;
   const now  = new Date();
 
-  // Merge workout logs + run logs into one unified list for calendar + activity display
-  const workoutLogs = Store.getUserLogs(user.id);
-  const runEntries  = Store.getUserRunLogs(user.id).map(r => ({
-    userId:       r.userId,
-    module:       'running',
-    day:          r.date ? new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' }) : '',
-    date:         r.date      || '',
-    timestamp:    r.timestamp || r.date || '',
-    _isRun:       true,
-    _runKm:       r.distance  || 0,
-    _runTs:       r.timestamp || '',  // store exact timestamp for matching
-    _activityType: r.activityType || 'run',
-  }));
+  // Helper to coerce any date value to YYYY-MM-DD string
+  const toYMD = v => {
+    if (!v) return '';
+    if (typeof v === 'string') {
+      if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.substring(0, 10);
+      const dt = new Date(v);
+      return isNaN(dt.getTime()) ? '' : dt.toISOString().split('T')[0];
+    }
+    if (v instanceof Date && !isNaN(v.getTime())) {
+      const y = v.getFullYear();
+      const m = String(v.getMonth() + 1).padStart(2, '0');
+      const dd = String(v.getDate()).padStart(2, '0');
+      return `${y}-${m}-${dd}`;
+    }
+    return '';
+  };
+
+  // Merge workout logs + run logs into one unified list — normalize all dates to YYYY-MM-DD
+  const workoutLogs = Store.getUserLogs(user.id).map(l => ({ ...l, date: toYMD(l.date) }));
+  const runEntries  = Store.getUserRunLogs(user.id).map(r => {
+    const ymd = toYMD(r.date);
+    return {
+      userId:       r.userId,
+      module:       'running',
+      day:          ymd ? new Date(ymd + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' }) : '',
+      date:         ymd,
+      timestamp:    r.timestamp || ymd || '',
+      _isRun:       true,
+      _runKm:       r.distance  || 0,
+      _runTs:       r.timestamp || '',
+      _activityType: r.activityType || 'run',
+    };
+  });
   // Combine workout logs + run entries
   // Dedup only if exact same timestamp already exists (avoid double-counting)
   const logs = [...workoutLogs];
@@ -1317,14 +1349,32 @@ function selectHistoryDay(dateStr, el) {
   _selectedHistoryDate = dateStr;
   // Re-render calendar to update selected highlight
   const user = APP.currentUser;
-  const workoutLogs = Store.getUserLogs(user.id);
-  const runEntries  = Store.getUserRunLogs(user.id).map(r => ({
-    userId: r.userId, module: 'running',
-    day:    r.date ? new Date(r.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' }) : '',
-    date:   r.date || '', timestamp: r.timestamp || r.date || '',
-    _isRun: true, _runKm: r.distance || 0,
-    _runTs: r.timestamp || '', _activityType: r.activityType || 'run',
-  }));
+  const toYMD = v => {
+    if (!v) return '';
+    if (typeof v === 'string') {
+      if (/^\d{4}-\d{2}-\d{2}/.test(v)) return v.substring(0, 10);
+      const dt = new Date(v);
+      return isNaN(dt.getTime()) ? '' : dt.toISOString().split('T')[0];
+    }
+    if (v instanceof Date && !isNaN(v.getTime())) {
+      const y = v.getFullYear();
+      const m = String(v.getMonth() + 1).padStart(2, '0');
+      const dd = String(v.getDate()).padStart(2, '0');
+      return `${y}-${m}-${dd}`;
+    }
+    return '';
+  };
+  const workoutLogs = Store.getUserLogs(user.id).map(l => ({ ...l, date: toYMD(l.date) }));
+  const runEntries  = Store.getUserRunLogs(user.id).map(r => {
+    const ymd = toYMD(r.date);
+    return {
+      userId: r.userId, module: 'running',
+      day:    ymd ? new Date(ymd + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long' }) : '',
+      date:   ymd, timestamp: r.timestamp || ymd || '',
+      _isRun: true, _runKm: r.distance || 0,
+      _runTs: r.timestamp || '', _activityType: r.activityType || 'run',
+    };
+  });
   const logs = [...workoutLogs];
   runEntries.forEach(r => {
     const isDuplicate = logs.find(l =>
