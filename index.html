@@ -649,7 +649,20 @@ window.addEventListener('DOMContentLoaded', function() {
       <!-- HISTORY TAB -->
       <div id="run-tab-history" class="run-tab-content" style="padding:16px">
         <div id="run-stats-row" style="margin-bottom:16px"></div>
-        <div class="section-title">Activity Log</div>
+
+        <!-- Month navigation for calendar -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <button class="btn btn-ghost btn-sm" onclick="changeRunMonth(-1)" style="font-size:18px;padding:6px 14px">‹</button>
+          <div id="run-month-label" class="section-title" style="margin:0"></div>
+          <button class="btn btn-ghost btn-sm" onclick="changeRunMonth(1)" id="run-next-btn" style="font-size:18px;padding:6px 14px">›</button>
+        </div>
+
+        <div class="card" style="margin-bottom:16px" id="run-cal"></div>
+
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+          <div class="section-title" style="margin:0" id="run-log-title">Activity Log</div>
+          <div style="font-size:11px;color:var(--text3)">Tap a date above</div>
+        </div>
         <div id="run-history-list"></div>
       </div>
 
