@@ -1040,11 +1040,24 @@ window.addEventListener('DOMContentLoaded', function() {
     <div class="modal-handle"></div>
     <div style="text-align:center;margin-bottom:20px">
       <div style="font-size:48px;margin-bottom:10px">🔑</div>
-      <div class="modal-title" style="margin-bottom:4px">Change Password</div>
-      <div style="font-size:14px;color:var(--text2)">Enter your current password to confirm, then set a new one.</div>
+      <div class="modal-title" style="margin-bottom:4px">Password Settings</div>
+      <div id="cp-subtitle" style="font-size:14px;color:var(--text2)">Enter your current password to confirm, then set a new one.</div>
     </div>
+
+    <!-- Google user info banner -->
+    <div id="cp-google-note" style="display:none;background:rgba(66,133,244,0.1);border:1px solid rgba(66,133,244,0.3);border-radius:12px;padding:12px 14px;margin-bottom:14px;display:none">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+        <span style="font-size:18px">G</span>
+        <span style="font-size:13px;font-weight:700;color:#90caf9">Signed in with Google</span>
+      </div>
+      <div style="font-size:12px;color:#90caf9;line-height:1.5">
+        Your account is managed by Google. You can set an <strong>app password</strong> below to also enable email + password login as a backup.
+      </div>
+    </div>
+
     <div style="display:flex;flex-direction:column;gap:14px">
-      <div class="form-group">
+      <!-- Current password — hidden for Google users -->
+      <div id="cp-current-block" class="form-group">
         <label class="form-label">Current Password</label>
         <div style="position:relative">
           <input id="cp-current" type="password" class="form-input" placeholder="Your current password" autocomplete="current-password" style="padding-right:48px">
@@ -1123,12 +1136,21 @@ window.addEventListener('DOMContentLoaded', function() {
 <div id="modal-admin-reset-password" class="modal-overlay">
   <div class="modal-sheet">
     <div class="modal-handle"></div>
-    <div style="text-align:center;margin-bottom:20px">
+    <div style="text-align:center;margin-bottom:16px">
       <div style="font-size:48px;margin-bottom:10px">🔑</div>
       <div class="modal-title" style="margin-bottom:4px">Reset Password</div>
-      <div style="font-size:14px;color:var(--text2)">
-        Setting a new password for <strong id="arp-user-name"></strong>.<br>
-        Share the new password with them securely.
+      <div style="font-size:13px;font-weight:600;color:var(--g5);margin-bottom:6px">User: <strong id="arp-user-name"></strong></div>
+      <div id="arp-description" style="font-size:13px;color:var(--text2);line-height:1.5">Set a temporary password. The user will be prompted to change it on next login.</div>
+    </div>
+
+    <!-- Google user warning -->
+    <div id="arp-google-warning" style="display:none;background:rgba(66,133,244,0.1);border:1px solid rgba(66,133,244,0.3);border-radius:12px;padding:12px 14px;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+        <span style="font-size:16px;font-weight:700;color:#90caf9">G</span>
+        <span style="font-size:13px;font-weight:700;color:#90caf9">Google Account</span>
+      </div>
+      <div style="font-size:12px;color:#90caf9;line-height:1.5">
+        This user signed in with Google. Setting a temp password <strong>enables email login</strong> as a backup. It does NOT change their Google account password — they can still sign in with Google normally.
       </div>
     </div>
     <div style="display:flex;flex-direction:column;gap:14px">
@@ -1583,9 +1605,6 @@ document.addEventListener('DOMContentLoaded', () => {
         <div id="cw-name-error" style="color:#ef9a9a;font-size:13px;min-height:16px;margin-top:4px"></div>
       </div>
 
-      <!-- Structured fields: category, goal, difficulty, days, notes -->
-      <div id="cw-structured-fields" style="margin-bottom:16px"></div>
-
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <div class="section-title" style="margin:0">Exercises</div>
         <button class="btn btn-outline btn-sm" onclick="addExerciseToCW()">+ Add Exercise</button>
@@ -1612,7 +1631,6 @@ document.addEventListener('DOMContentLoaded', () => {
       <div style="width:38px"></div>
     </div>
     <div class="container" style="padding-top:16px">
-      <div id="cw-workout-notes" style="display:none;font-size:13px;color:var(--text3);margin-bottom:14px;padding:10px 14px;background:var(--bg3);border-radius:10px;line-height:1.5"></div>
       <div id="cw-workout-exercises" style="margin-bottom:16px"></div>
       <button id="cw-complete-btn" class="btn btn-primary btn-full" style="margin-bottom:20px">Mark Complete</button>
     </div>
