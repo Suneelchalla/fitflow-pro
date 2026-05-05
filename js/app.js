@@ -469,21 +469,43 @@ function getMonday() {
   return d.toISOString().split('T')[0];
 }
 function calcStreak(uid, asOfDate) {
+  // ── Helper: coerce any value to YYYY-MM-DD string safely ──────
+  const toDateStr = v => {
+    if (!v) return '';
+    if (typeof v === 'string') {
+      // Already YYYY-MM-DD or ISO string — strip time portion
+      return v.length >= 10 ? v.substring(0, 10) : v;
+    }
+    if (v instanceof Date) {
+      if (isNaN(v.getTime())) return '';
+      const y = v.getFullYear();
+      const m = String(v.getMonth() + 1).padStart(2, '0');
+      const d = String(v.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+    // Number or other — try to parse, fall back to empty
+    const dt = new Date(v);
+    if (isNaN(dt.getTime())) return '';
+    return dt.toISOString().split('T')[0];
+  };
+
   // Merge workout dates AND run dates — a run day counts toward streak
-  const workoutDates = Store.getUserLogs(uid).map(l => l.date);
-  const runDates     = Store.getUserRunLogs(uid).map(r => r.date);
+  const workoutDates = Store.getUserLogs(uid).map(l => toDateStr(l.date)).filter(Boolean);
+  const runDates     = Store.getUserRunLogs(uid).map(r => toDateStr(r.date)).filter(Boolean);
   const dates = [...new Set([...workoutDates, ...runDates])].sort().reverse();
   if (!dates.length) return 0;
 
   // Start from asOfDate if given (for weekly report), else today
-  const ref = asOfDate || new Date().toISOString().split('T')[0];
+  const ref = toDateStr(asOfDate) || new Date().toISOString().split('T')[0];
 
   // Find most recent active date on or before ref
   const startDate = dates.find(d => d <= ref);
   if (!startDate) return 0;
 
-  // Count consecutive days backwards
+  // Count consecutive days backwards — use noon UTC to avoid DST issues
   const cur = new Date(startDate + 'T12:00:00');
+  if (isNaN(cur.getTime())) return 0; // safety net — should never happen now
+
   let streak = 0;
   for (let i = 0; i < 366; i++) {
     const d = cur.toISOString().split('T')[0];
