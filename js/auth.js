@@ -47,12 +47,11 @@ async function attemptLogin(email, password) {
 
   if (cfg.webAppUrl) {
     try {
-      // POST login — avoids all URL encoding issues with special chars in email/password
-      const r = await fetch(cfg.webAppUrl, {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ action: 'login', email: email.trim().toLowerCase(), password }),
-      });
+      // Use GET with pwcodes — Apps Script supports GET with CORS
+      // POST with Content-Type:application/json triggers CORS preflight which Apps Script blocks
+      const pwCodes = Array.from(password).map(c => c.charCodeAt(0)).join('-');
+      const qs = new URLSearchParams({ action: 'login', email: email.trim().toLowerCase(), pwcodes: pwCodes }).toString();
+      const r = await fetch(`${cfg.webAppUrl}?${qs}`);
 
       // Guard against Apps Script returning HTML error page instead of JSON
       const text = await r.text();
@@ -60,12 +59,12 @@ async function attemptLogin(email, password) {
       try {
         res = JSON.parse(text);
       } catch {
-        // Apps Script crashed and returned an HTML error page
-        console.warn('[Login] Apps Script returned non-JSON:', text.substring(0, 200));
-        return { success: false, error: 'Server error. Please try again in a moment.' };
+        console.warn('[Login] Non-JSON response:', text.substring(0, 300));
+        return { success: false, error: 'Server error. Please try again.' };
       }
 
       if (res && res.success !== undefined) return res;
+      return { success: false, error: res?.error || 'Login failed. Please try again.' };
     } catch (e) {
       console.warn('[Login] Network error:', e.message);
       return { success: false, error: 'Connection failed. Check your internet and try again.' };
