@@ -1913,15 +1913,16 @@ function renderAchievements() {
 
 function renderRunHistory() {
   const user      = APP.currentUser;
-  const logs      = Store.getUserRunLogs(user.id).sort((a, b) => (b.timestamp||b.date||'').localeCompare(a.timestamp||a.date||'')).slice(0, 30);
+  const allLogs   = Store.getUserRunLogs(user.id)
+    .sort((a, b) => (b.timestamp||b.date||'').localeCompare(a.timestamp||a.date||''));
   const container = document.getElementById('run-history-list');
   const statsEl   = document.getElementById('run-stats-row');
 
   // ── Summary stats ─────────────────────────────────────────────
-  const totalKm   = logs.reduce((a, r) => a + (r.distance || 0), 0);
-  const totalRuns = logs.length;
-  const totalTime = logs.reduce((a, r) => a + (r.duration || 0), 0);
-  const totalKcal = logs.reduce((a, r) => {
+  const totalKm   = allLogs.reduce((a, r) => a + (r.distance || 0), 0);
+  const totalRuns = allLogs.length;
+  const totalTime = allLogs.reduce((a, r) => a + (r.duration || 0), 0);
+  const totalKcal = allLogs.reduce((a, r) => {
     const meta = ACTIVITY_META[r.activityType || 'run'] || ACTIVITY_META.run;
     return a + Math.round((r.distance || 0) * meta.kcalPerKm);
   }, 0);
@@ -1935,62 +1936,91 @@ function renderRunHistory() {
     </div>`;
 
   if (!container) return;
-  if (!logs.length) {
+  if (!allLogs.length) {
     container.innerHTML = '<div class="empty-state"><div class="empty-icon">🏃</div><p>No activities logged yet.<br>Start your first one!</p></div>';
     return;
   }
 
-  container.innerHTML = logs.map((r, idx) => {
-    const type     = r.activityType || 'run';
-    const meta     = ACTIVITY_META[type] || ACTIVITY_META.run;
-    const speedKph = r.duration > 0 ? (r.distance / r.duration * 3600) : 0;
-    const kcal     = Math.round((r.distance || 0) * meta.kcalPerKm);
-    const dateObj  = r.timestamp ? new Date(r.timestamp) : new Date(r.date);
-    const dateStr  = dateObj.toLocaleDateString('en-IN', { day:'numeric', month:'short', year:'numeric' });
-    const timeStr  = r.timestamp ? dateObj.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true }) : '';
-    const hasMap   = r.coords && r.coords.length >= 2;
+  // ── Group by date ─────────────────────────────────────────────
+  const byDate = {};
+  allLogs.forEach((r, globalIdx) => {
+    const d = r.date || 'Unknown';
+    if (!byDate[d]) byDate[d] = [];
+    byDate[d].push({ ...r, _globalIdx: globalIdx });
+  });
 
-    return `
-      <div class="card run-history-card" style="margin-bottom:12px;cursor:pointer"
-        onclick="_showRunDetail(${idx})">
+  const sortedDates = Object.keys(byDate).sort((a, b) => b.localeCompare(a));
 
-        <!-- Activity header -->
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-          <div style="display:flex;align-items:center;gap:10px">
-            <div style="width:40px;height:40px;border-radius:12px;
-              background:${meta.color}22;border:1.5px solid ${meta.color}55;
-              display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0">
-              ${meta.emoji}
+  container.innerHTML = sortedDates.map(date => {
+    const dayRuns = byDate[date];
+    const dayKm   = dayRuns.reduce((a, r) => a + (r.distance || 0), 0);
+    const dateObj = new Date(date + 'T12:00:00');
+    const dateStr = dateObj.toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short', year:'numeric' });
+    const isToday = date === todayStr();
+    const safeDate = date.replace(/-/g, '_');
+
+    const runsHtml = dayRuns.map((r, dayIdx) => {
+      const type     = r.activityType || 'run';
+      const meta     = ACTIVITY_META[type] || ACTIVITY_META.run;
+      const kcal     = Math.round((r.distance || 0) * meta.kcalPerKm);
+      const timeStr  = r.timestamp
+        ? new Date(r.timestamp).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true })
+        : '';
+      const hasMap   = r.coords && r.coords.length >= 2;
+      const idx      = r._globalIdx;
+
+      return `
+        <div class="card run-history-card" style="margin-bottom:8px;cursor:pointer"
+          onclick="_showRunDetail(${idx})">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:10px">
+              <div style="width:38px;height:38px;border-radius:10px;
+                background:${meta.color}22;border:1.5px solid ${meta.color}55;
+                display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0">
+                ${meta.emoji}
+              </div>
+              <div>
+                <div style="font-weight:700;font-size:14px">${meta.label} · ${r.planType || 'Free Activity'}</div>
+                ${timeStr ? `<div style="font-size:11px;color:var(--text3)">${timeStr}</div>` : ''}
+              </div>
+            </div>
+            <div style="font-size:12px;color:var(--text3)">${hasMap ? '🗺 ' : ''}›</div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;
+            background:var(--bg3);border-radius:10px;padding:10px;text-align:center">
+            <div>
+              <div style="font-family:var(--font-display);font-size:18px;color:var(--g5)">${(r.distance||0).toFixed(2)}</div>
+              <div style="font-size:10px;color:var(--text3)">km</div>
             </div>
             <div>
-              <div style="font-weight:700;font-size:15px;color:var(--text)">${meta.label} · ${r.planType || 'Free Activity'}</div>
-              <div style="font-size:12px;color:var(--text3);margin-top:1px">${dateStr}${timeStr ? ' · ' + timeStr : ''}</div>
+              <div style="font-family:var(--font-display);font-size:18px;color:var(--g5)">${fmtTime(r.duration||0)}</div>
+              <div style="font-size:10px;color:var(--text3)">time</div>
+            </div>
+            <div>
+              <div style="font-family:var(--font-display);font-size:18px;color:var(--g5)">${typeof r.pace === 'number' ? fmtPace(r.distance,r.duration) : (r.pace||'--')}</div>
+              <div style="font-size:10px;color:var(--text3)">pace</div>
+            </div>
+            <div>
+              <div style="font-family:var(--font-display);font-size:18px;color:var(--g5)">${kcal}</div>
+              <div style="font-size:10px;color:var(--text3)">kcal</div>
             </div>
           </div>
-          <div style="font-size:12px;color:var(--text3)">${hasMap ? '🗺' : ''} ›</div>
-        </div>
+        </div>`;
+    }).join('');
 
-        <!-- Key stats row -->
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:6px;
-          background:var(--bg3);border-radius:12px;padding:12px 8px">
-          <div style="text-align:center">
-            <div style="font-family:var(--font-display);font-size:22px;color:${meta.color};line-height:1">${(r.distance||0).toFixed(2)}</div>
-            <div style="font-size:10px;color:var(--text3);margin-top:2px;text-transform:uppercase">km</div>
+    return `
+      <!-- Date group: ${date} -->
+      <div style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;justify-content:space-between;
+          margin-bottom:8px;padding:0 2px">
+          <div style="font-size:13px;font-weight:700;color:var(--text2)">
+            ${isToday ? '📅 Today' : dateStr}
           </div>
-          <div style="text-align:center">
-            <div style="font-family:var(--font-display);font-size:22px;color:var(--g5);line-height:1">${fmtTime(r.duration||0)}</div>
-            <div style="font-size:10px;color:var(--text3);margin-top:2px;text-transform:uppercase">time</div>
-          </div>
-          <div style="text-align:center">
-            <div style="font-family:var(--font-display);font-size:22px;color:var(--g5);line-height:1">${fmtPace(r.distance, r.duration)}</div>
-            <div style="font-size:10px;color:var(--text3);margin-top:2px;text-transform:uppercase">pace</div>
-          </div>
-          <div style="text-align:center">
-            <div style="font-family:var(--font-display);font-size:22px;color:var(--g5);line-height:1">${kcal}</div>
-            <div style="font-size:10px;color:var(--text3);margin-top:2px;text-transform:uppercase">kcal</div>
+          <div style="font-size:12px;color:var(--text3)">
+            ${dayRuns.length} run${dayRuns.length>1?'s':''} · ${dayKm.toFixed(1)} km
           </div>
         </div>
-
+        ${runsHtml}
       </div>`;
   }).join('');
 }
