@@ -256,8 +256,9 @@ function renderWeeklyReport() {
 
 // ── DATE HELPERS ──────────────────────────────────────────────────
 function _monday(offset) {
+  const off = (typeof offset === 'number' && isFinite(offset)) ? offset : 0;
   const d = new Date(), day = d.getDay();
-  d.setDate(d.getDate() - (day === 0 ? 6 : day - 1) + offset * 7);
+  d.setDate(d.getDate() - (day === 0 ? 6 : day - 1) + off * 7);
   return d.toISOString().split('T')[0];
 }
 function _addDays(dateStr, n) {
@@ -266,8 +267,10 @@ function _addDays(dateStr, n) {
   return d.toISOString().split('T')[0];
 }
 function _fmt(dateStr) {
-  return new Date(dateStr + 'T12:00:00')
-    .toLocaleDateString('en-IN', { month:'short', day:'numeric', year:'numeric' });
+  if (!dateStr || typeof dateStr !== 'string') return '';
+  const d = new Date(dateStr + 'T12:00:00');
+  if (isNaN(d.getTime())) return dateStr; // fallback: return as-is if invalid
+  return d.toLocaleDateString('en-IN', { month:'short', day:'numeric', year:'numeric' });
 }
 
 // Backward compat
