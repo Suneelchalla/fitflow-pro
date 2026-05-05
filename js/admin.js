@@ -20,9 +20,9 @@ function renderAdminPanel() {
   const nameEl = document.getElementById('admin-user-name');
   if (nameEl) nameEl.textContent = '👑 ' + (APP.currentUser.name || 'Admin');
   renderAdminStats();
-  // Default to users tab
-  const firstBtn = document.querySelector('.admin-nav-btn, .admin-tab-btn');
-  if (firstBtn) switchAdminTab('users', firstBtn);
+  // Default to Dashboard tab
+  const dashBtn = document.querySelector('.admin-nav-btn[data-tab="dashboard"]');
+  if (dashBtn) switchAdminTab('dashboard', dashBtn);
 }
 
 function renderAdminStats() {
@@ -47,6 +47,7 @@ function switchAdminTab(tab, btn) {
   document.querySelectorAll('.admin-tab-content').forEach(el => el.style.display = 'none');
   const tabEl = document.getElementById('admin-tab-' + tab);
   if (tabEl) tabEl.style.display = 'block';
+  if (tab === 'dashboard') renderAdminDashboard();
   if (tab === 'users')     loadAdminUsers();
   if (tab === 'analytics') renderAdminAnalytics();
   if (tab === 'history')   renderAllHistory();
@@ -2035,4 +2036,366 @@ async function saveCalisthenicsEditorChanges() {
     showToast('Save failed: ' + e.message, 'error');
     if (btn) { btn.disabled = false; btn.textContent = '💾 Save Calisthenics'; }
   }
+}
+
+
+// ════════════════════════════════════════════════════════════════
+// LIVE ADMIN DASHBOARD
+// Comprehensive overview with auto-refresh every 30 seconds
+// ════════════════════════════════════════════════════════════════
+
+let _adminDashboardInterval = null;
+let _adminDashboardData     = null;
+
+async function renderAdminDashboard() {
+  const container = document.getElementById('admin-dashboard-content');
+  if (!container) return;
+
+  // Show loading skeleton on first render
+  if (!_adminDashboardData) {
+    container.innerHTML = `
+      <div class="dash-grid">
+        ${Array(8).fill('<div class="dash-card dash-skeleton"></div>').join('')}
+      </div>`;
+  }
+
+  // Fetch all data in parallel
+  let users = [], allLogs = Store.getLogs(), allRuns = Store.getRunLogs();
+  try {
+    const [usersRes, logsRes, runsRes] = await Promise.all([
+      Sheets.get('getAllUsers').catch(() => null),
+      Sheets.get('getAllLogs').catch(() => null),
+      Sheets.get('getAllRunLogs').catch(() => null),
+    ]);
+    if (usersRes?.success) users   = usersRes.users || [];
+    if (logsRes?.success)  allLogs = logsRes.logs   || allLogs;
+    if (runsRes?.success)  allRuns = runsRes.logs   || allRuns;
+  } catch(e) { console.warn('Dashboard fetch:', e.message); }
+
+  _adminDashboardData = { users, allLogs, allRuns, fetchedAt: new Date() };
+  _renderDashboardContent();
+
+  // Update last-refresh label
+  const lr = document.getElementById('dash-last-refresh');
+  if (lr) lr.textContent = 'Updated ' + new Date().toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', second:'2-digit', hour12:true });
+
+  // Auto-refresh every 30 seconds while Dashboard tab is active
+  if (_adminDashboardInterval) clearInterval(_adminDashboardInterval);
+  _adminDashboardInterval = setInterval(() => {
+    const dashTab = document.getElementById('admin-tab-dashboard');
+    if (dashTab && dashTab.style.display !== 'none') {
+      renderAdminDashboard();
+    } else {
+      clearInterval(_adminDashboardInterval);
+      _adminDashboardInterval = null;
+    }
+  }, 30000);
+}
+
+function _renderDashboardContent() {
+  const container = document.getElementById('admin-dashboard-content');
+  if (!container || !_adminDashboardData) return;
+  const { users, allLogs, allRuns } = _adminDashboardData;
+
+  // ── Date helpers ──
+  const today  = todayStr();
+  const monday = getMonday();
+  const _ymd = (d) => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  const _daysAgo = (n) => { const d=new Date(); d.setDate(d.getDate()-n); return _ymd(d); };
+
+  const last7  = _daysAgo(7);
+  const last30 = _daysAgo(30);
+  const yesterday = _daysAgo(1);
+  const prevMon = (() => { const d=new Date(monday); d.setDate(d.getDate()-7); return _ymd(d); })();
+  const prevSun = (() => { const d=new Date(monday); d.setDate(d.getDate()-1); return _ymd(d); })();
+
+  // ── User stats ──
+  const realUsers     = users.filter(u => (u.role||'USER').toUpperCase() !== 'ADMIN');
+  const activeUsers   = realUsers.filter(u => (u.status||'ACTIVE').toUpperCase() === 'ACTIVE');
+  const inactiveUsers = realUsers.length - activeUsers.length;
+  const newThisMonth  = realUsers.filter(u => u.createdDate >= last30).length;
+  const newThisWeek   = realUsers.filter(u => u.createdDate >= last7).length;
+
+  // ── Activity stats ──
+  const todayLogs    = allLogs.filter(l => l.date === today);
+  const yestLogs     = allLogs.filter(l => l.date === yesterday);
+  const thisWeekLogs = allLogs.filter(l => l.date >= monday);
+  const lastWeekLogs = allLogs.filter(l => l.date >= prevMon && l.date <= prevSun);
+  const thisMonthLogs= allLogs.filter(l => l.date >= last30);
+
+  const todayRuns    = allRuns.filter(r => r.date === today);
+  const thisWeekRuns = allRuns.filter(r => r.date >= monday);
+
+  // ── Live: who's active right now (last hour) ──
+  const oneHourAgo = new Date(Date.now() - 60*60*1000).toISOString();
+  const activeNow = allLogs.filter(l => l.timestamp && l.timestamp > oneHourAgo);
+  const activeNowUserIds = [...new Set(activeNow.map(l => l.userId))];
+
+  // ── Active users (7 day) ──
+  const activeUserIds7d = [...new Set(allLogs.filter(l => l.date >= last7).map(l => l.userId))];
+  const activeUserIds30d= [...new Set(allLogs.filter(l => l.date >= last30).map(l => l.userId))];
+
+  // ── Engagement rate ──
+  const engagementRate = realUsers.length ? Math.round(activeUserIds7d.length / realUsers.length * 100) : 0;
+
+  // ── Total stats ──
+  const totalKm    = allRuns.reduce((sum,r) => sum + (r.distance||0), 0);
+  const totalKcal  = allRuns.reduce((sum,r) => sum + ((r.distance||0) * 60), 0);
+
+  // ── Trend calculations ──
+  const wowSessions = lastWeekLogs.length ? Math.round((thisWeekLogs.length-lastWeekLogs.length)/lastWeekLogs.length*100) : null;
+  const dodSessions = yestLogs.length ? Math.round((todayLogs.length-yestLogs.length)/yestLogs.length*100) : null;
+
+  // ── Last 30 day trend (sparkline) ──
+  const dayActivity = {};
+  for (let i=29; i>=0; i--) dayActivity[_daysAgo(i)] = 0;
+  allLogs.forEach(l => { if (dayActivity[l.date]!==undefined) dayActivity[l.date]++; });
+
+  // ── Module breakdown ──
+  const modCounts = {};
+  allLogs.forEach(l => {
+    const m = (l.module||'').startsWith('custom_') ? 'custom' : (l.module||'unknown');
+    modCounts[m] = (modCounts[m]||0)+1;
+  });
+  const topMods = Object.entries(modCounts).sort((a,b)=>b[1]-a[1]).slice(0, 6);
+
+  // ── Top performing users (by sessions in last 30 days) ──
+  const userSessionCount = {};
+  allLogs.filter(l => l.date >= last30).forEach(l => {
+    userSessionCount[l.userId] = (userSessionCount[l.userId]||0) + 1;
+  });
+  const topUsers = Object.entries(userSessionCount)
+    .map(([uid, count]) => {
+      const u = realUsers.find(u => u.id === uid);
+      return u ? { name: u.name||'?', email: u.email, count } : null;
+    })
+    .filter(Boolean)
+    .sort((a,b) => b.count - a.count)
+    .slice(0, 5);
+
+  // ── Recent activity feed ──
+  const recentActivity = [...allLogs, ...allRuns.map(r => ({...r, module:'run', distance:r.distance}))]
+    .filter(l => l.timestamp)
+    .sort((a,b) => (b.timestamp||'').localeCompare(a.timestamp||''))
+    .slice(0, 12);
+
+  // ── Dropout risk users ──
+  const userLastActivity = {};
+  allLogs.forEach(l => { if (!userLastActivity[l.userId] || l.date > userLastActivity[l.userId]) userLastActivity[l.userId] = l.date; });
+  const dropoutUsers = realUsers
+    .filter(u => {
+      const last = userLastActivity[u.id];
+      return !last || last < last7;
+    })
+    .map(u => ({ ...u, lastActivity: userLastActivity[u.id] || 'Never' }))
+    .slice(0, 5);
+
+  // ── Render the dashboard ──
+  container.innerHTML = `
+    <!-- LIVE INDICATOR + key metrics -->
+    <div class="dash-live-bar">
+      <div class="dash-live-pill">
+        <span class="dash-live-dot"></span>
+        <strong>${activeNowUserIds.length}</strong> active in last hour
+      </div>
+      <div class="dash-live-meta">
+        ${realUsers.length} total users · ${allLogs.length} workouts · ${allRuns.length} runs · ${totalKm.toFixed(1)} km logged
+      </div>
+    </div>
+
+    <!-- TOP ROW: 4 KPI cards -->
+    <div class="dash-grid dash-grid-4">
+      ${_kpiCard('Today\\'s Sessions', todayLogs.length, dodSessions, 'sessions', '📅', 'green')}
+      ${_kpiCard('This Week', thisWeekLogs.length, wowSessions, 'workouts', '📈', 'blue')}
+      ${_kpiCard('Active Users (7d)', activeUserIds7d.length, null, `${engagementRate}% engagement`, '👥', 'purple')}
+      ${_kpiCard('New This Week', newThisWeek, null, `${newThisMonth} this month`, '✨', 'amber')}
+    </div>
+
+    <!-- 2-COLUMN ROW: Activity trend + Module breakdown -->
+    <div class="dash-grid dash-grid-2">
+
+      <!-- Activity Trend (30-day sparkline + week comparison) -->
+      <div class="dash-card">
+        <div class="dash-card-head">
+          <h3 class="dash-card-title">📊 Activity Trend</h3>
+          <span class="dash-card-sub">Last 30 days</span>
+        </div>
+        <div class="dash-sparkline">
+          ${_renderSparkline(dayActivity)}
+        </div>
+        <div class="dash-trend-row">
+          <div class="dash-trend">
+            <div class="dash-trend-val">${thisWeekLogs.length}</div>
+            <div class="dash-trend-lbl">This week</div>
+          </div>
+          <div class="dash-trend dash-trend-vs">
+            <div class="dash-trend-arrow ${(wowSessions||0) >= 0 ? 'up' : 'down'}">${(wowSessions||0) >= 0 ? '↑' : '↓'} ${Math.abs(wowSessions||0)}%</div>
+            <div class="dash-trend-lbl">vs last week</div>
+          </div>
+          <div class="dash-trend">
+            <div class="dash-trend-val">${lastWeekLogs.length}</div>
+            <div class="dash-trend-lbl">Last week</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Module Popularity -->
+      <div class="dash-card">
+        <div class="dash-card-head">
+          <h3 class="dash-card-title">🏋️ Top Modules</h3>
+          <span class="dash-card-sub">All time</span>
+        </div>
+        <div class="dash-mod-list">
+          ${topMods.map(([mod, n]) => {
+            const pct = Math.round(n / Math.max(...topMods.map(m=>m[1])) * 100);
+            return `
+              <div class="dash-mod-row">
+                <div class="dash-mod-label">${_modIcon(mod)} ${_modName(mod)}</div>
+                <div class="dash-mod-bar"><div class="dash-mod-fill" style="width:${pct}%"></div></div>
+                <div class="dash-mod-count">${n}</div>
+              </div>`;
+          }).join('') || '<div style="color:var(--text3);font-size:13px;padding:20px;text-align:center">No activity yet</div>'}
+        </div>
+      </div>
+    </div>
+
+    <!-- 2-COLUMN ROW: Top users + Dropout risk -->
+    <div class="dash-grid dash-grid-2">
+
+      <!-- Top Users (last 30 days) -->
+      <div class="dash-card">
+        <div class="dash-card-head">
+          <h3 class="dash-card-title">🏆 Top Users</h3>
+          <span class="dash-card-sub">Last 30 days</span>
+        </div>
+        <div class="dash-user-list">
+          ${topUsers.length ? topUsers.map((u,i) => `
+            <div class="dash-user-row">
+              <div class="dash-user-rank ${i===0?'gold':i===1?'silver':i===2?'bronze':''}">${i+1}</div>
+              <div class="dash-user-info">
+                <div class="dash-user-name">${u.name}</div>
+                <div class="dash-user-email">${u.email||''}</div>
+              </div>
+              <div class="dash-user-count">${u.count} <span style="font-size:10px;color:var(--text3)">sessions</span></div>
+            </div>
+          `).join('') : '<div style="color:var(--text3);font-size:13px;padding:20px;text-align:center">No active users yet</div>'}
+        </div>
+      </div>
+
+      <!-- Dropout Risk -->
+      <div class="dash-card">
+        <div class="dash-card-head">
+          <h3 class="dash-card-title">⚠️ At-Risk Users</h3>
+          <span class="dash-card-sub">No activity in 7+ days</span>
+        </div>
+        <div class="dash-user-list">
+          ${dropoutUsers.length ? dropoutUsers.map(u => `
+            <div class="dash-user-row dash-user-warn">
+              <div class="dash-user-info">
+                <div class="dash-user-name">${u.name||'—'}</div>
+                <div class="dash-user-email">${u.email||''}</div>
+              </div>
+              <div class="dash-user-meta">
+                Last: <strong>${u.lastActivity}</strong>
+              </div>
+            </div>
+          `).join('') : '<div style="color:var(--text3);font-size:13px;padding:20px;text-align:center">🎉 All users active!</div>'}
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent activity feed -->
+    <div class="dash-card">
+      <div class="dash-card-head">
+        <h3 class="dash-card-title">⚡ Recent Activity</h3>
+        <span class="dash-card-sub">Live feed</span>
+      </div>
+      <div class="dash-feed">
+        ${recentActivity.length ? recentActivity.map(a => {
+          const u = realUsers.find(u => u.id === a.userId);
+          const time = a.timestamp ? new Date(a.timestamp).toLocaleString('en-IN', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit', hour12:true }) : '';
+          const isRun = a.module === 'run' || (a.distance !== undefined);
+          return `
+            <div class="dash-feed-item">
+              <div class="dash-feed-icon">${isRun?'🏃':_modIcon(a.module)}</div>
+              <div class="dash-feed-info">
+                <div class="dash-feed-text"><strong>${u?.name||a.userId||'Unknown'}</strong> completed <strong>${isRun?(a.distance||0).toFixed(2)+' km '+(a.activityType||'run'):_modName(a.module)}</strong></div>
+                <div class="dash-feed-time">${time}</div>
+              </div>
+            </div>`;
+        }).join('') : '<div style="color:var(--text3);font-size:13px;padding:20px;text-align:center">No recent activity</div>'}
+      </div>
+    </div>
+
+    <!-- BOTTOM ROW: Aggregated totals -->
+    <div class="dash-grid dash-grid-4 dash-totals">
+      <div class="dash-total">
+        <div class="dash-total-icon">🎯</div>
+        <div class="dash-total-val">${allLogs.length.toLocaleString()}</div>
+        <div class="dash-total-lbl">Total Workouts</div>
+      </div>
+      <div class="dash-total">
+        <div class="dash-total-icon">🏃</div>
+        <div class="dash-total-val">${allRuns.length.toLocaleString()}</div>
+        <div class="dash-total-lbl">Total Runs</div>
+      </div>
+      <div class="dash-total">
+        <div class="dash-total-icon">📍</div>
+        <div class="dash-total-val">${totalKm.toFixed(1)}</div>
+        <div class="dash-total-lbl">Total km</div>
+      </div>
+      <div class="dash-total">
+        <div class="dash-total-icon">🔥</div>
+        <div class="dash-total-val">${Math.round(totalKcal).toLocaleString()}</div>
+        <div class="dash-total-lbl">Total kcal burned</div>
+      </div>
+    </div>
+  `;
+}
+
+// ── Helper: KPI card ──
+function _kpiCard(label, value, trend, sub, icon, color) {
+  const trendHTML = trend !== null && trend !== undefined ? `
+    <div class="dash-kpi-trend ${trend >= 0 ? 'up' : 'down'}">
+      ${trend >= 0 ? '↑' : '↓'} ${Math.abs(trend)}%
+    </div>` : '';
+  return `
+    <div class="dash-card dash-kpi dash-kpi-${color}">
+      <div class="dash-kpi-icon">${icon}</div>
+      <div class="dash-kpi-body">
+        <div class="dash-kpi-val">${value}</div>
+        <div class="dash-kpi-label">${label}</div>
+        <div class="dash-kpi-sub">${sub}</div>
+      </div>
+      ${trendHTML}
+    </div>`;
+}
+
+// ── Helper: Sparkline ──
+function _renderSparkline(dayActivity) {
+  const entries = Object.entries(dayActivity);
+  const values  = entries.map(([,v]) => v);
+  const max     = Math.max(...values, 1);
+  const today   = todayStr();
+  return `
+    <div class="dash-spark">
+      ${entries.map(([d, v]) => {
+        const h = Math.max(2, Math.round(v / max * 60));
+        const isToday = d === today;
+        return `<div class="dash-spark-bar-wrap" title="${d}: ${v} sessions">
+          <div class="dash-spark-bar ${isToday ? 'dash-spark-today' : ''}" style="height:${h}px"></div>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+// ── Helper: Module name ──
+function _modName(mod) {
+  const map = { calisthenics:'Calisthenics', cardio:'Cardio', yoga:'Yoga', stretch:'Stretching', stretching:'Stretching', custom:'Custom Workouts', running:'Running', run:'Run' };
+  return map[mod] || (mod ? mod.charAt(0).toUpperCase() + mod.slice(1) : 'Other');
+}
+
+function _modIcon(mod) {
+  const map = { calisthenics:'💪', cardio:'❤️', yoga:'🧘', stretch:'🤸', stretching:'🤸', custom:'⭐', running:'🏃', run:'🏃' };
+  return map[mod] || '🏋️';
 }
