@@ -178,7 +178,11 @@ function showPage(id, addToHistory = true) {
   if (pg) { pg.classList.add('active'); APP.currentPage = id; pg.scrollTop = 0; }
   window.history.pushState({ page: id }, '', '#' + id);
   // Persist last page so refresh restores user to same page
-  if (APP.currentUser) Store.set('ff_last_page_' + APP.currentUser.id, id);
+  // Don't persist transient pages that need context to render properly
+  const _skipPersist = ['page-weekly-report', 'page-quote', 'page-onboarding'];
+  if (APP.currentUser && !_skipPersist.includes(id)) {
+    Store.set('ff_last_page_' + APP.currentUser.id, id);
+  }
 }
 
 function goBack() {
@@ -453,32 +457,18 @@ function getMonday() {
   d.setDate(d.getDate() - day + (day === 0 ? -6 : 1));
   return d.toISOString().split('T')[0];
 }
-function calcStreak(uid, asOfDate) {
+function calcStreak(uid) {
   // Merge workout dates AND run dates — a run day counts toward streak
   const workoutDates = Store.getUserLogs(uid).map(l => l.date);
   const runDates     = Store.getUserRunLogs(uid).map(r => r.date);
   const dates = [...new Set([...workoutDates, ...runDates])].sort().reverse();
   if (!dates.length) return 0;
-
-  // Start from asOfDate if provided, otherwise today
-  const ref = asOfDate || new Date().toISOString().split('T')[0];
-
-  // Find the most recent active date on or before ref
-  // This ensures: if viewing last week, streak starts from last active day in that period
-  const startDate = dates.find(d => d <= ref);
-  if (!startDate) return 0;
-
-  // Count consecutive days backwards from startDate
-  const cur = new Date(startDate + 'T12:00:00');
-  let streak = 0;
-  for (let i = 0; i < 366; i++) {
+  let streak = 0, cur = new Date();
+  for (let i = 0; i < 60; i++) {
     const d = cur.toISOString().split('T')[0];
-    if (dates.includes(d)) {
-      streak++;
-      cur.setDate(cur.getDate() - 1);
-    } else {
-      break;
-    }
+    if (dates.includes(d)) { streak++; cur.setDate(cur.getDate() - 1); }
+    else if (i > 0) break;
+    else { cur.setDate(cur.getDate() - 1); if (!dates.includes(cur.toISOString().split('T')[0])) break; }
   }
   return streak;
 }
@@ -548,6 +538,12 @@ document.addEventListener('DOMContentLoaded', () => {
   if (session) {
     APP.currentUser = session;
 
+    // Clear stale last-page values that can't be restored cleanly
+    const _stalePage = Store.get('ff_last_page_' + session.id);
+    if (_stalePage === 'page-weekly-report' || _stalePage === 'page-quote') {
+      Store.set('ff_last_page_' + session.id, 'page-dashboard');
+    }
+
     // Restore to correct page INSTANTLY before any rendering
     // This prevents the login page flash on pull-down / reload
     const savedLastPage = Store.get('ff_last_page_' + session.id);
@@ -595,7 +591,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (typeof renderCustomWorkoutsList === 'function') renderCustomWorkoutsList();
       setActiveNav('home');
     } else if (targetPage === 'page-weekly-report') {
-      if (typeof renderWeeklyReport === 'function') renderWeeklyReport();
+      // Redirect to dashboard — weekly report needs fresh sync, don't restore it directly
+      const dashEl = document.getElementById('page-dashboard');
+      if (dashEl) { dashEl.classList.add('active'); APP.currentPage = 'page-dashboard'; }
       setActiveNav('home');
     } else if (targetPage === 'page-my-plan') {
       if (typeof renderMyPlan === 'function') renderMyPlan();
