@@ -1952,6 +1952,210 @@ function saveBodyProfile(userId, profile) {
   }
 }
 
+
+// ── Personal Records ──────────────────────────────────────────────
+
+// ── Activity Heatmap (GitHub-style green squares) ────────────────
+function _renderActivityHeatmap(userId, weeks) {
+  weeks = weeks || 26; // default 26 weeks (~6 months)
+  const logs = Store.getUserLogs(userId);
+  const runs = Store.getUserRunLogs(userId);
+  const dayCount = {};
+  [...logs, ...runs].forEach(l => {
+    if (l.date) dayCount[l.date] = (dayCount[l.date]||0) + 1;
+  });
+  const max = Math.max(1, ...Object.values(dayCount));
+
+  // Build grid: weeks columns × 7 rows (Sun..Sat)
+  const today = new Date();
+  // Find the most recent Saturday (end of current week)
+  const totalDays = weeks * 7;
+  const cols = [];
+  let cursor = new Date(today);
+  cursor.setDate(today.getDate() - (totalDays - 1));
+  // Snap cursor back to Sunday
+  cursor.setDate(cursor.getDate() - cursor.getDay());
+
+  for (let w = 0; w < weeks + 2; w++) {
+    const week = [];
+    for (let d = 0; d < 7; d++) {
+      const dateStr = cursor.getFullYear() + '-' + String(cursor.getMonth()+1).padStart(2,'0') + '-' + String(cursor.getDate()).padStart(2,'0');
+      const future = cursor > today;
+      const count = dayCount[dateStr] || 0;
+      const intensity = future ? -1 : (count === 0 ? 0 : Math.min(4, Math.ceil(count / max * 4)));
+      week.push({ date: dateStr, count, intensity, future });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    cols.push(week);
+  }
+
+  // Month labels (only show when month changes)
+  const monthLabels = [];
+  let lastMonth = -1;
+  cols.forEach((col, i) => {
+    const firstDay = new Date(col[0].date);
+    if (!isNaN(firstDay.getTime())) {
+      const m = firstDay.getMonth();
+      if (m !== lastMonth) {
+        monthLabels.push({ idx: i, label: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m] });
+        lastMonth = m;
+      }
+    }
+  });
+
+  const dayLabels = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
+
+  return `
+    <div class="hm-wrapper">
+      <div class="hm-months">
+        ${monthLabels.map(m => `<div class="hm-month-label" style="left:${m.idx * 14}px">${m.label}</div>`).join('')}
+      </div>
+      <div class="hm-body">
+        <div class="hm-day-labels">
+          ${dayLabels.map(d => `<div class="hm-day-label">${d}</div>`).join('')}
+        </div>
+        <div class="hm-grid">
+          ${cols.map(col => `
+            <div class="hm-col">
+              ${col.map(day => `
+                <div class="hm-cell hm-cell-${day.future ? 'future' : day.intensity}" 
+                     title="${day.future ? day.date + ' (future)' : day.date + ': ' + day.count + ' session' + (day.count === 1 ? '' : 's')}"></div>
+              `).join('')}
+            </div>
+          `).join('')}
+        </div>
+      </div>
+      <div class="hm-legend">
+        <span style="font-size:11px;color:var(--text3)">Less</span>
+        <div class="hm-cell hm-cell-0"></div>
+        <div class="hm-cell hm-cell-1"></div>
+        <div class="hm-cell hm-cell-2"></div>
+        <div class="hm-cell hm-cell-3"></div>
+        <div class="hm-cell hm-cell-4"></div>
+        <span style="font-size:11px;color:var(--text3)">More</span>
+      </div>
+    </div>`;
+}
+
+function _computePersonalRecords(userId) {
+  const logs = Store.getUserLogs(userId);
+  const runs = Store.getUserRunLogs(userId);
+  const pr = {};
+
+  // Longest run
+  if (runs.length) {
+    const longest = [...runs].sort((a,b) => (b.distance||0) - (a.distance||0))[0];
+    pr.longestRun = { value: (longest.distance||0).toFixed(2) + ' km', date: longest.date, raw: longest };
+    // Fastest pace (only count runs ≥1km for fairness)
+    const validForPace = runs.filter(r => (r.distance||0) >= 1 && (r.duration||0) > 0);
+    if (validForPace.length) {
+      const fastest = [...validForPace].sort((a,b) => {
+        const pa = (a.duration||0) / (a.distance||1);
+        const pb = (b.duration||0) / (b.distance||1);
+        return pa - pb;
+      })[0];
+      const paceSecPerKm = (fastest.duration||0) / (fastest.distance||1);
+      const min = Math.floor(paceSecPerKm / 60);
+      const sec = Math.round(paceSecPerKm % 60);
+      pr.fastestPace = {
+        value: `${min}:${String(sec).padStart(2,'0')} /km`,
+        date: fastest.date,
+        raw: fastest,
+      };
+    }
+    // Longest run duration
+    const longestDur = [...runs].sort((a,b) => (b.duration||0) - (a.duration||0))[0];
+    if (longestDur.duration) {
+      pr.longestDuration = {
+        value: (typeof fmtTime === 'function') ? fmtTime(longestDur.duration) : Math.round(longestDur.duration/60) + ' min',
+        date: longestDur.date,
+        raw: longestDur,
+      };
+    }
+  }
+
+  // Most workouts in a single day
+  const byDay = {};
+  [...logs, ...runs].forEach(l => { if (l.date) byDay[l.date] = (byDay[l.date]||0)+1; });
+  const topDay = Object.entries(byDay).sort((a,b) => b[1] - a[1])[0];
+  if (topDay) pr.bestDay = { value: topDay[1] + ' sessions', date: topDay[0] };
+
+  // Longest streak (lifetime, not just current)
+  const allDates = [...new Set([...logs.map(l=>l.date), ...runs.map(r=>r.date)])].filter(Boolean).sort();
+  let longestStreak = 0, currentRun = 0;
+  for (let i = 0; i < allDates.length; i++) {
+    if (i === 0) { currentRun = 1; }
+    else {
+      const prev = new Date(allDates[i-1]);
+      const cur = new Date(allDates[i]);
+      const diffDays = Math.round((cur - prev) / 86400000);
+      if (diffDays === 1) currentRun++;
+      else currentRun = 1;
+    }
+    longestStreak = Math.max(longestStreak, currentRun);
+  }
+  if (longestStreak > 0) pr.longestStreak = { value: longestStreak + ' days', date: '' };
+
+  // Highest weekly volume (Mon-Sun)
+  const byWeek = {};
+  [...logs, ...runs].forEach(l => {
+    if (!l.date) return;
+    const d = new Date(l.date);
+    if (isNaN(d.getTime())) return;
+    const day = d.getDay() || 7; // Sun=7 in our scheme
+    const monday = new Date(d);
+    monday.setDate(d.getDate() - (day - 1));
+    const wkKey = monday.getFullYear() + '-' + String(monday.getMonth()+1).padStart(2,'0') + '-' + String(monday.getDate()).padStart(2,'0');
+    byWeek[wkKey] = (byWeek[wkKey]||0)+1;
+  });
+  const topWeek = Object.entries(byWeek).sort((a,b) => b[1] - a[1])[0];
+  if (topWeek) pr.bestWeek = { value: topWeek[1] + ' sessions', date: 'Week of ' + topWeek[0] };
+
+  // Highest monthly volume
+  const byMonth = {};
+  [...logs, ...runs].forEach(l => {
+    if (!l.date) return;
+    const ym = l.date.substring(0, 7);
+    byMonth[ym] = (byMonth[ym]||0)+1;
+  });
+  const topMonth = Object.entries(byMonth).sort((a,b) => b[1] - a[1])[0];
+  if (topMonth) pr.bestMonth = { value: topMonth[1] + ' sessions', date: topMonth[0] };
+
+  return pr;
+}
+
+function _renderPersonalRecords(userId) {
+  const pr = _computePersonalRecords(userId);
+  const records = [
+    { key: 'longestRun',      icon: '🏃', label: 'Longest Run',      data: pr.longestRun },
+    { key: 'fastestPace',     icon: '⚡', label: 'Fastest Pace',     data: pr.fastestPace },
+    { key: 'longestDuration', icon: '⏱', label: 'Longest Duration', data: pr.longestDuration },
+    { key: 'bestDay',         icon: '🔥', label: 'Best Day',          data: pr.bestDay },
+    { key: 'longestStreak',   icon: '📅', label: 'Best Streak',      data: pr.longestStreak },
+    { key: 'bestWeek',        icon: '📊', label: 'Best Week',         data: pr.bestWeek },
+    { key: 'bestMonth',       icon: '🏆', label: 'Best Month',        data: pr.bestMonth },
+  ].filter(r => r.data);
+
+  if (!records.length) {
+    return `<div class="card card-sm" style="text-align:center;padding:20px;color:var(--text3);font-size:13px">
+      Start logging workouts to set your first records!</div>`;
+  }
+
+  return `
+    <div class="pr-grid">
+      ${records.map(r => `
+        <div class="pr-card">
+          <div class="pr-icon">${r.icon}</div>
+          <div class="pr-info">
+            <div class="pr-value">${r.data.value}</div>
+            <div class="pr-label">${r.label}</div>
+            ${r.data.date ? `<div class="pr-date">${r.data.date}</div>` : ''}
+          </div>
+        </div>
+      `).join('')}
+    </div>`;
+}
+
 function renderProfilePage() {
   const user    = APP.currentUser;
   const logs    = Store.getUserLogs(user.id);
@@ -2000,6 +2204,18 @@ function renderProfilePage() {
       <div class="stat-card"><div class="stat-val">${totalKm.toFixed(1)}</div><div class="stat-label">km Run</div></div>
       <div class="stat-card"><div class="stat-val">${favMod ? favMod[1] : 0}</div><div class="stat-label">${favMod ? getModuleName(favMod[0]).split(' ')[0] + ' Sessions' : 'Sessions'}</div></div>
     </div>
+
+    <!-- Activity Heatmap -->
+    <div class="section-title" style="margin-bottom:10px">📈 Activity</div>
+    <div class="card card-sm" style="margin-bottom:16px;padding:14px 12px">
+      ${_renderActivityHeatmap(user.id, 26)}
+    </div>
+
+    <!-- Personal Records -->
+    <div class="section-title" style="margin-bottom:10px">🏆 Personal Records</div>
+    ${_renderPersonalRecords(user.id)}
+
+    <div style="height:18px"></div>
 
     <!-- Highlights -->
     <div class="section-title" style="margin-bottom:10px">Highlights</div>
