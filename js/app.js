@@ -489,7 +489,15 @@ function fmtPace(km, secs) {
   const p = secs / 60 / km, pm = Math.floor(p), ps = Math.round((p - pm) * 60);
   return `${pm}:${String(ps).padStart(2, '0')}`;
 }
-function todayStr()    { return new Date().toISOString().split('T')[0]; }
+function todayStr() {
+  // Returns LOCAL YYYY-MM-DD (not UTC) — fixes timezone bug where
+  // workouts done after 6:30 PM IST were saved with yesterday's date
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + day;
+}
 function dayName()     { return ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()]; }
 function getWeekDays() { return ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday']; }
 function getGreeting() {
@@ -508,9 +516,13 @@ setInterval(() => {
   }
 }, 60000);
 function getMonday() {
+  // Returns LOCAL YYYY-MM-DD for Monday of current week
   const d = new Date(), day = d.getDay();
   d.setDate(d.getDate() - day + (day === 0 ? -6 : 1));
-  return d.toISOString().split('T')[0];
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return y + '-' + m + '-' + dd;
 }
 function calcStreak(uid, asOfDate) {
   // ── Helper: coerce any value to YYYY-MM-DD string safely ──────
