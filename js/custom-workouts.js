@@ -296,6 +296,7 @@ function _renderExerciseList() {
             ${ex.rest ? `<span style="font-size:12px;background:var(--bg3);color:var(--text2);padding:2px 10px;border-radius:50px">⏱ ${ex.rest}s rest</span>` : ''}
           </div>
           ${ex.desc ? `<div style="font-size:13px;color:var(--text2);margin-top:6px">${ex.desc}</div>` : ''}
+          ${ex.video ? `<a href="${ex.video}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--g5);margin-top:6px;text-decoration:none;background:rgba(67,160,90,0.12);border:1px solid rgba(67,160,90,0.3);padding:4px 10px;border-radius:50px">📺 Watch video</a>` : ''}
         </div>
         <div style="display:flex;flex-direction:column;gap:4px;flex-shrink:0">
           ${i > 0 ? `<button class="btn btn-ghost btn-sm" style="padding:4px 8px" onclick="moveExercise(${i},-1)">↑</button>` : '<div style="height:28px"></div>'}
@@ -327,6 +328,8 @@ function openExerciseModal(idx) {
   document.getElementById('cw-ex-reps').value  = ex.reps  || '10 reps';
   document.getElementById('cw-ex-rest').value  = ex.rest  || '';
   document.getElementById('cw-ex-desc').value  = ex.desc  || '';
+  const vidEl = document.getElementById('cw-ex-video');
+  if (vidEl) vidEl.value = ex.video || '';
   document.getElementById('cw-ex-idx').value   = idx === null ? '' : idx;
   document.getElementById('cw-ex-error').textContent = '';
   openModal('modal-cw-exercise');
@@ -338,12 +341,19 @@ function saveExerciseModal() {
   const reps = document.getElementById('cw-ex-reps').value.trim() || '10 reps';
   const rest = document.getElementById('cw-ex-rest').value.trim();
   const desc = document.getElementById('cw-ex-desc').value.trim();
+  const vidEl = document.getElementById('cw-ex-video');
+  const video = vidEl ? vidEl.value.trim() : '';
   const idx  = document.getElementById('cw-ex-idx').value;
   const errEl = document.getElementById('cw-ex-error');
 
   if (!name) { errEl.textContent = 'Exercise name is required.'; return; }
+  // Validate video URL if provided
+  if (video && !/^https?:\/\//i.test(video)) {
+    errEl.textContent = 'Video link must start with http:// or https://';
+    return;
+  }
 
-  const ex = { name, sets, reps, rest, desc };
+  const ex = { name, sets, reps, rest, desc, video };
 
   if (idx === '') {
     _cwEdit.exercises.push(ex);
@@ -484,6 +494,7 @@ function renderCustomWorkoutPage(w) {
             ${ex.rest?`<span>⏱ ${ex.rest}s rest</span>`:''}
           </div>
           ${ex.desc?`<div class="exercise-desc">${ex.desc}</div>`:''}
+        ${ex.video?`<a href="${ex.video}" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--g5);margin-top:8px;text-decoration:none;background:rgba(67,160,90,0.12);border:1px solid rgba(67,160,90,0.3);padding:6px 12px;border-radius:50px">📺 Watch video</a>`:''}
           <div class="sets-grid">${setsHtml}</div>
         </div>
       </div>`;
