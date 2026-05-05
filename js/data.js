@@ -117,83 +117,55 @@ window.APP_DATA = {
       name: "Gym Workouts",
       emoji: "🏋️",
       color: "grad-gym",
-      // Day labels shown in UI header
-      dayLabels: {
-        Monday:    "Monday — Chest 🫁",
-        Tuesday:   "Tuesday — Shoulders 🏋️",
-        Wednesday: "Wednesday — Lats / Back 🦾",
-        Thursday:  "Thursday — Biceps 💪",
-        Friday:    "Friday — Triceps 🔱",
-        Saturday:  "Saturday — Legs / Squats 🦵",
-      },
       days: {
-
-        // ── MONDAY — CHEST ───────────────────────────────────────────
         Monday: [
-          { name:"Flat Barbell Bench Press", sets:4, reps:"10 reps", desc:"Lie flat on bench. Grip bar slightly wider than shoulder-width. Lower bar to mid-chest with control, press up to full extension. Keep feet flat on floor, back slightly arched. Primary chest builder.", image:"", demo:"https://www.youtube.com/results?search_query=flat+barbell+bench+press+form", _section:"main" },
-          { name:"Incline Dumbbell Press", sets:4, reps:"12 reps", desc:"Set bench to 30-45°. Press dumbbells from chest level upward. Incline angle targets upper chest. Control the descent — don't let dumbbells drop.", image:"", demo:"https://www.youtube.com/results?search_query=incline+dumbbell+press+form", _section:"main" },
-          { name:"Decline Bench Press", sets:3, reps:"12 reps", desc:"Feet locked at top of decline bench. Lower bar to lower chest. Targets lower pecs. Keep elbows at 75° angle — don't flare them out.", image:"", demo:"https://www.youtube.com/results?search_query=decline+bench+press+form", _section:"main" },
-          { name:"Dumbbell Chest Fly", sets:3, reps:"12 reps", desc:"Lie flat. Hold dumbbells above chest, slight bend in elbows. Open arms wide in arc motion until chest fully stretched. Bring back together squeezing the chest. Isolation movement.", image:"", demo:"https://www.youtube.com/results?search_query=dumbbell+chest+fly+form", _section:"main" },
-          { name:"Cable Crossover", sets:3, reps:"15 reps", desc:"Set cables at shoulder height. Step forward, bring handles together in front of chest in a hugging arc. Squeeze chest at the bottom. Excellent finishing isolation exercise.", image:"", demo:"https://www.youtube.com/results?search_query=cable+crossover+chest+form", _section:"main" },
-          { name:"Push-Ups (Burnout)", sets:3, reps:"Max reps", desc:"Standard push-up position, hands slightly wider than shoulders. Go to failure on each set. Burnout finisher after heavy pressing. Squeeze chest at the top of each rep.", image:"", demo:"https://www.youtube.com/results?search_query=push+ups+proper+form", _section:"main" },
-          { name:"Chest Dips", sets:3, reps:"12 reps", desc:"On parallel bars, lean torso forward at 30°. Lower until elbows reach 90°. Forward lean shifts stress from triceps to lower chest. Add weight with belt if bodyweight is too easy.", image:"", demo:"https://www.youtube.com/results?search_query=chest+dips+form+technique", _section:"main" },
+          { name:"Barbell Squat", sets:3, reps:"12 reps", desc:"Bar on traps, feet shoulder-width. Squat until thighs parallel to floor.", image:"", demo:"https://www.youtube.com/results?search_query=barbell+squat+form" },
+          { name:"Bench Press", sets:3, reps:"10 reps", desc:"Grip bar slightly wider than shoulders. Lower to mid-chest, press up.", image:"", demo:"https://www.youtube.com/results?search_query=bench+press+form" },
+          { name:"Bent-Over Row", sets:3, reps:"12 reps", desc:"Hinge at hips, pull bar to lower chest. Squeeze shoulder blades.", image:"", demo:"https://www.youtube.com/results?search_query=bent+over+row+form" },
+          { name:"Overhead Press", sets:3, reps:"10 reps", desc:"Press barbell from shoulders to overhead. Lock out elbows.", image:"", demo:"https://www.youtube.com/results?search_query=overhead+press+form" },
+          { name:"Romanian Deadlift", sets:3, reps:"12 reps", desc:"Slight knee bend, hinge at hips, lower bar along legs.", image:"", demo:"https://www.youtube.com/results?search_query=romanian+deadlift+form" },
+          { name:"Cable Plank", sets:3, reps:"45 sec", desc:"Plank with cable weight. Advanced core anti-extension drill.", image:"", demo:"https://www.youtube.com/results?search_query=plank+exercise+gym" },
         ],
-
-        // ── TUESDAY — SHOULDERS ──────────────────────────────────────
         Tuesday: [
-          { name:"Barbell Overhead Press", sets:4, reps:"10 reps", desc:"Standing or seated. Press barbell from front of shoulders to full overhead lockout. Keep core braced. Don't hyperextend lower back. Most compound shoulder movement.", image:"", demo:"https://www.youtube.com/results?search_query=barbell+overhead+press+form", _section:"main" },
-          { name:"Dumbbell Shoulder Press", sets:4, reps:"12 reps", desc:"Seated or standing. Start with dumbbells at ear height. Press overhead until arms almost lock out. Neutral spine throughout. Greater range of motion than barbell variant.", image:"", demo:"https://www.youtube.com/results?search_query=dumbbell+shoulder+press+form", _section:"main" },
-          { name:"Dumbbell Lateral Raise", sets:4, reps:"15 reps", desc:"Stand with dumbbells at sides, slight bend in elbows. Raise arms to shoulder height — no higher. Pause 1 second at top. Lower slowly in 3 seconds. Targets medial deltoid for width.", image:"", demo:"https://www.youtube.com/results?search_query=lateral+raise+proper+form", _section:"main" },
-          { name:"Front Raise", sets:3, reps:"12 reps", desc:"Hold dumbbells in front of thighs. Raise one or both arms straight to shoulder height. Keep slight bend at elbow. Targets anterior deltoid. Don't swing body.", image:"", demo:"https://www.youtube.com/results?search_query=dumbbell+front+raise+form", _section:"main" },
-          { name:"Rear Delt Fly", sets:3, reps:"15 reps", desc:"Bend forward at hips 45°. Hold dumbbells hanging down. Raise arms out to sides like wings — elbows slightly bent. Squeeze rear delts. Targets posterior deltoid.", image:"", demo:"https://www.youtube.com/results?search_query=rear+delt+fly+form", _section:"main" },
-          { name:"Face Pulls", sets:3, reps:"15 reps", desc:"Cable at face height with rope attachment. Pull rope toward face, elbows high and flared out. Targets rear delts and external rotators. Essential for shoulder health and posture.", image:"", demo:"https://www.youtube.com/results?search_query=face+pulls+proper+form", _section:"main" },
-          { name:"Arnold Press", sets:3, reps:"12 reps", desc:"Start with dumbbells at chin, palms facing you. As you press up, rotate palms outward. At top, palms face forward. Works all three heads of the deltoid in one movement.", image:"", demo:"https://www.youtube.com/results?search_query=arnold+press+form", _section:"main" },
+          { name:"Deadlift", sets:3, reps:"8 reps", desc:"Feet hip-width, bar over laces. Push floor away, keep bar close.", image:"", demo:"https://www.youtube.com/results?search_query=deadlift+form+tutorial" },
+          { name:"Incline Dumbbell Press", sets:3, reps:"12 reps", desc:"30-45° bench angle. Press dumbbells from chest level upward.", image:"", demo:"https://www.youtube.com/results?search_query=incline+dumbbell+press" },
+          { name:"Lat Pulldown", sets:3, reps:"12 reps", desc:"Grip wide. Pull bar to upper chest, lean slightly back.", image:"", demo:"https://www.youtube.com/results?search_query=lat+pulldown+form" },
+          { name:"Leg Press", sets:3, reps:"15 reps", desc:"Feet shoulder-width on platform. Lower sled until 90° knee angle.", image:"", demo:"https://www.youtube.com/results?search_query=leg+press+form" },
+          { name:"Dumbbell Curl", sets:3, reps:"12 each", desc:"Supinate wrist as you curl. Full range of motion.", image:"", demo:"https://www.youtube.com/results?search_query=dumbbell+bicep+curl+form" },
+          { name:"Tricep Pushdown", sets:3, reps:"15 reps", desc:"Cable attachment at shoulder height. Push down to lockout.", image:"", demo:"https://www.youtube.com/results?search_query=tricep+pushdown+cable" },
         ],
-
-        // ── WEDNESDAY — LATS / BACK ──────────────────────────────────
         Wednesday: [
-          { name:"Deadlift", sets:4, reps:"8 reps", desc:"Feet hip-width, bar over mid-foot. Grip just outside legs. Push floor away, keep bar close to body. Lock out hips and knees at top. King of all back exercises. Full posterior chain activation.", image:"", demo:"https://www.youtube.com/results?search_query=deadlift+form+tutorial", _section:"main" },
-          { name:"Pull-Ups / Lat Pulldown", sets:4, reps:"10 reps", desc:"Wide grip, overhand. Pull until chin over bar or bar to upper chest. Full stretch at bottom. Lat pulldown is the machine alternative. Targets lats, teres major, and biceps.", image:"", demo:"https://www.youtube.com/results?search_query=pull+ups+lat+pulldown+form", _section:"main" },
-          { name:"Barbell Bent-Over Row", sets:4, reps:"10 reps", desc:"Hinge at hips until torso is nearly parallel to floor. Pull bar to lower chest or upper abs. Squeeze shoulder blades together at top. Keep back flat throughout. Massive upper back builder.", image:"", demo:"https://www.youtube.com/results?search_query=barbell+bent+over+row+form", _section:"main" },
-          { name:"Seated Cable Row", sets:3, reps:"12 reps", desc:"Sit upright, feet on platform. Pull handle to navel, elbows close to body. Fully stretch forward between reps. Keep chest tall. Targets mid-back, rhomboids, and lats.", image:"", demo:"https://www.youtube.com/results?search_query=seated+cable+row+form", _section:"main" },
-          { name:"Single-Arm Dumbbell Row", sets:3, reps:"12 each side", desc:"One knee and hand on bench. Pull dumbbell to hip level. Elbow should go past your torso. Keep back flat. Full stretch at bottom. Unilateral — corrects imbalances.", image:"", demo:"https://www.youtube.com/results?search_query=single+arm+dumbbell+row+form", _section:"main" },
-          { name:"T-Bar Row", sets:3, reps:"10 reps", desc:"Straddle bar with V-grip attachment. Hinge forward and row bar toward chest. Elbows close to body. Excellent thickness builder for mid-back. Keep lower back neutral.", image:"", demo:"https://www.youtube.com/results?search_query=t+bar+row+form", _section:"main" },
-          { name:"Straight-Arm Pulldown", sets:3, reps:"15 reps", desc:"Stand at cable with straight bar attachment. Arms straight, pull bar from overhead down to thighs. Pure lat isolation — no bicep involvement. Great finisher for lat mind-muscle connection.", image:"", demo:"https://www.youtube.com/results?search_query=straight+arm+pulldown+form", _section:"main" },
+          { name:"Hack Squat", sets:3, reps:"12 reps", desc:"Machine squat variant. Feet forward on platform.", image:"", demo:"https://www.youtube.com/results?search_query=hack+squat+machine" },
+          { name:"Dumbbell Shoulder Press", sets:3, reps:"12 reps", desc:"Seated or standing. Press dumbbells from ear height to overhead.", image:"", demo:"https://www.youtube.com/results?search_query=dumbbell+shoulder+press" },
+          { name:"Seated Cable Row", sets:3, reps:"12 reps", desc:"Pull cable handle to lower abs. Keep chest tall.", image:"", demo:"https://www.youtube.com/results?search_query=seated+cable+row+form" },
+          { name:"Leg Curl", sets:3, reps:"12 reps", desc:"Lying or seated. Curl heel toward glute.", image:"", demo:"https://www.youtube.com/results?search_query=leg+curl+machine" },
+          { name:"Dumbbell Lateral Raise", sets:3, reps:"15 reps", desc:"Raise arms to shoulder height with slight bend.", image:"", demo:"https://www.youtube.com/results?search_query=lateral+raise+form" },
+          { name:"Ab Crunch Machine", sets:3, reps:"20 reps", desc:"Pull handles toward knees while contracting abs.", image:"", demo:"https://www.youtube.com/results?search_query=ab+crunch+machine" },
         ],
-
-        // ── THURSDAY — BICEPS ────────────────────────────────────────
         Thursday: [
-          { name:"Barbell Bicep Curl", sets:4, reps:"10 reps", desc:"Stand with barbell, hands shoulder-width, underhand grip. Curl bar to shoulder height. Squeeze bicep at top. Lower slowly in 3 seconds. Keep elbows pinned to sides. Classic mass builder.", image:"", demo:"https://www.youtube.com/results?search_query=barbell+bicep+curl+form", _section:"main" },
-          { name:"Dumbbell Alternating Curl", sets:4, reps:"12 each arm", desc:"Stand or sit. Curl one dumbbell at a time, supinating wrist as you lift (palm faces up at top). Full range of motion. Alternate arms. Allows better contraction than barbell.", image:"", demo:"https://www.youtube.com/results?search_query=dumbbell+alternating+bicep+curl+form", _section:"main" },
-          { name:"Hammer Curl", sets:3, reps:"12 each arm", desc:"Neutral grip (thumbs pointing up throughout). Curl dumbbell without rotating wrist. Targets brachialis and brachioradialis for thick arm appearance. Also works biceps.", image:"", demo:"https://www.youtube.com/results?search_query=hammer+curl+proper+form", _section:"main" },
-          { name:"Incline Dumbbell Curl", sets:3, reps:"12 each arm", desc:"Sit on incline bench (45-60°), arms hang straight down. Curl without swinging. The incline position gives greater stretch at the bottom — intense stretch on long head of bicep.", image:"", demo:"https://www.youtube.com/results?search_query=incline+dumbbell+curl+form", _section:"main" },
-          { name:"Preacher Curl", sets:3, reps:"10 reps", desc:"Use preacher bench or Scott curl pad. Rest upper arm flat on pad. Curl barbell or dumbbells. Eliminates cheating. Full isolation of bicep — peak contraction exercise.", image:"", demo:"https://www.youtube.com/results?search_query=preacher+curl+form", _section:"main" },
-          { name:"Concentration Curl", sets:3, reps:"12 each arm", desc:"Sit, elbow resting on inner thigh. Curl dumbbell with full supination. Squeeze hard at top for 2 seconds. Best exercise for bicep peak. Full isolation with zero swing.", image:"", demo:"https://www.youtube.com/results?search_query=concentration+curl+form", _section:"main" },
-          { name:"Cable Curl", sets:3, reps:"15 reps", desc:"Stand at low cable pulley. Curl bar or rope to shoulder. Constant tension throughout entire range of motion — unlike dumbbells which lose tension at top. Great for pump finisher.", image:"", demo:"https://www.youtube.com/results?search_query=cable+bicep+curl+form", _section:"main" },
+          { name:"Bulgarian Split Squat", sets:3, reps:"10 each", desc:"Rear foot elevated. Lower front leg until 90°.", image:"", demo:"https://www.youtube.com/results?search_query=bulgarian+split+squat" },
+          { name:"Cable Fly", sets:3, reps:"15 reps", desc:"Mid-height cables. Bring handles together in arc motion.", image:"", demo:"https://www.youtube.com/results?search_query=cable+fly+chest+form" },
+          { name:"Face Pulls", sets:3, reps:"15 reps", desc:"Cable at head height. Pull to face, elbows high.", image:"", demo:"https://www.youtube.com/results?search_query=face+pulls+form" },
+          { name:"Hammer Curl", sets:3, reps:"12 each", desc:"Neutral grip (thumbs up). Curl without supinating.", image:"", demo:"https://www.youtube.com/results?search_query=hammer+curl+form" },
+          { name:"Calf Raise", sets:3, reps:"20 reps", desc:"On platform or flat floor. Rise onto toes, hold 1 second.", image:"", demo:"https://www.youtube.com/results?search_query=calf+raise+form" },
+          { name:"Hanging Leg Raise", sets:3, reps:"12 reps", desc:"Hang from bar. Raise legs to 90°.", image:"", demo:"https://www.youtube.com/results?search_query=hanging+leg+raise+form" },
         ],
-
-        // ── FRIDAY — TRICEPS ─────────────────────────────────────────
         Friday: [
-          { name:"Close-Grip Bench Press", sets:4, reps:"10 reps", desc:"Lie on flat bench. Hands 10-12 inches apart on bar. Lower to lower chest, elbows tucked close to body. Press up. Keeps emphasis on triceps, not chest. Heavy compound tricep exercise.", image:"", demo:"https://www.youtube.com/results?search_query=close+grip+bench+press+form", _section:"main" },
-          { name:"Tricep Pushdown", sets:4, reps:"15 reps", desc:"Cable at shoulder height, straight bar or rope attachment. Push down to full lockout, elbows pinned to sides. Squeeze triceps hard at bottom. Rope version allows wrists to rotate out for better contraction.", image:"", demo:"https://www.youtube.com/results?search_query=tricep+pushdown+cable+form", _section:"main" },
-          { name:"Overhead Tricep Extension", sets:3, reps:"12 reps", desc:"Stand or sit with single dumbbell or EZ bar held overhead. Lower behind head until elbows are at 90°. Extend up fully. Stretches long head of tricep. Keep elbows close together overhead.", image:"", demo:"https://www.youtube.com/results?search_query=overhead+tricep+extension+form", _section:"main" },
-          { name:"EZ Bar Skull Crusher", sets:3, reps:"12 reps", desc:"Lie on bench with EZ bar. Lower bar to forehead by bending elbows. Extend back up. Keep upper arms perpendicular to floor throughout. Targets all three heads. Don't let elbows flare.", image:"", demo:"https://www.youtube.com/results?search_query=skull+crushers+ez+bar+form", _section:"main" },
-          { name:"Tricep Dips", sets:3, reps:"12 reps", desc:"Parallel bars, torso upright (NOT leaning forward like chest dips). Lower until elbows reach 90°. Press back up. Upright torso shifts load from chest to triceps. Add weight belt if needed.", image:"", demo:"https://www.youtube.com/results?search_query=tricep+dips+proper+form", _section:"main" },
-          { name:"Kickbacks", sets:3, reps:"15 each arm", desc:"Hinge forward at hips. Elbow pinned at hip height. Extend forearm straight back until arm is fully straight. Squeeze tricep hard at lockout. Keep upper arm still throughout movement.", image:"", demo:"https://www.youtube.com/results?search_query=tricep+kickback+form", _section:"main" },
-          { name:"Diamond Push-Ups (Burnout)", sets:3, reps:"Max reps", desc:"Hands form diamond shape directly under chest. Elbows track backward along ribs as you lower. Full extension at top. Best bodyweight tricep finisher. Go to failure on each set.", image:"", demo:"https://www.youtube.com/results?search_query=diamond+push+ups+form", _section:"main" },
+          { name:"Power Clean", sets:3, reps:"6 reps", desc:"Olympic lift. Pull bar from floor explosively, catch at shoulders.", image:"", demo:"https://www.youtube.com/results?search_query=power+clean+form+tutorial" },
+          { name:"Dips", sets:3, reps:"12 reps", desc:"On parallel bars, lower until elbows 90°.", image:"", demo:"https://www.youtube.com/results?search_query=dips+exercise+form" },
+          { name:"Pull-Ups", sets:3, reps:"8 reps", desc:"Full hang, pull until chin over bar.", image:"", demo:"https://www.youtube.com/results?search_query=pull+ups+form" },
+          { name:"Leg Extension", sets:3, reps:"15 reps", desc:"Machine. Extend legs to full lockout.", image:"", demo:"https://www.youtube.com/results?search_query=leg+extension+machine+form" },
+          { name:"EZ Bar Skull Crusher", sets:3, reps:"12 reps", desc:"Lying on bench, lower bar to forehead, extend.", image:"", demo:"https://www.youtube.com/results?search_query=skull+crushers+form" },
+          { name:"Farmer's Carry", sets:3, reps:"40m", desc:"Hold heavy dumbbells, walk with tall posture.", image:"", demo:"https://www.youtube.com/results?search_query=farmers+carry+exercise" },
         ],
-
-        // ── SATURDAY — LEGS / SQUATS ─────────────────────────────────
         Saturday: [
-          { name:"Barbell Back Squat", sets:4, reps:"10 reps", desc:"Bar on upper traps, feet shoulder-width, toes slightly out. Squat until thighs parallel to floor or below. Drive knees out, chest up. King of all leg exercises. Full quad, glute, and hamstring activation.", image:"", demo:"https://www.youtube.com/results?search_query=barbell+back+squat+form", _section:"main" },
-          { name:"Front Squat", sets:3, reps:"10 reps", desc:"Bar resting on front delts, elbows high. Squat with more upright torso than back squat. Greater quad activation and core demand. More difficult technically — start lighter.", image:"", demo:"https://www.youtube.com/results?search_query=front+squat+form+tutorial", _section:"main" },
-          { name:"Leg Press", sets:4, reps:"15 reps", desc:"Feet shoulder-width on platform. Lower sled until knees reach 90°. Press back up without locking knees. Foot position changes emphasis — high feet = more glutes, low feet = more quads.", image:"", demo:"https://www.youtube.com/results?search_query=leg+press+form", _section:"main" },
-          { name:"Romanian Deadlift", sets:3, reps:"12 reps", desc:"Slight knee bend throughout. Hinge at hips pushing them back, lower bar along legs until you feel hamstring stretch. Drive hips forward to stand. Pure hamstring and glute isolation.", image:"", demo:"https://www.youtube.com/results?search_query=romanian+deadlift+form", _section:"main" },
-          { name:"Bulgarian Split Squat", sets:3, reps:"10 each leg", desc:"Rear foot elevated on bench. Lower front leg until knee nearly touches floor. Front knee tracks over toes. Brutal unilateral leg exercise — corrects imbalances. Use dumbbells or barbell.", image:"", demo:"https://www.youtube.com/results?search_query=bulgarian+split+squat+form", _section:"main" },
-          { name:"Leg Curl", sets:3, reps:"12 reps", desc:"Lying or seated leg curl machine. Curl heels toward glutes through full range. Hamstring isolation. Pause at peak contraction for 1 second. Lower slowly in 3 seconds.", image:"", demo:"https://www.youtube.com/results?search_query=leg+curl+machine+form", _section:"main" },
-          { name:"Calf Raise", sets:4, reps:"20 reps", desc:"Standing or seated calf raise machine. Rise onto toes as high as possible. Hold 2 seconds at top. Lower until full stretch at bottom. Calves need high volume and full range to grow.", image:"", demo:"https://www.youtube.com/results?search_query=calf+raise+proper+form", _section:"main" },
+          { name:"Full Body Circuit", sets:3, reps:"5 rounds", desc:"Squat 8 + Push 8 + Row 8 + Press 8. Light-moderate weight.", image:"", demo:"https://www.youtube.com/results?search_query=full+body+circuit+gym" },
+          { name:"Cable Woodchop", sets:3, reps:"12 each", desc:"Rotate cable from high to low across body.", image:"", demo:"https://www.youtube.com/results?search_query=cable+woodchop+exercise" },
+          { name:"Seated Row Close Grip", sets:3, reps:"12 reps", desc:"Close-grip attachment. Pull to navel.", image:"", demo:"https://www.youtube.com/results?search_query=close+grip+seated+row" },
+          { name:"Hip Thrust", sets:3, reps:"15 reps", desc:"Shoulders on bench, bar on hips. Drive hips to ceiling.", image:"", demo:"https://www.youtube.com/results?search_query=barbell+hip+thrust+form" },
+          { name:"Shrugs", sets:3, reps:"15 reps", desc:"Heavy dumbbells or barbell. Shrug shoulders straight up.", image:"", demo:"https://www.youtube.com/results?search_query=shrugs+exercise+form" },
+          { name:"Ab Wheel Rollout", sets:3, reps:"10 reps", desc:"From knees, roll wheel out to full extension, return.", image:"", demo:"https://www.youtube.com/results?search_query=ab+wheel+rollout+form" },
         ],
-
       }
     },
 
@@ -201,55 +173,465 @@ window.APP_DATA = {
       name: "Yoga",
       emoji: "🧘",
       color: "grad-yoga",
-      days: {
-        Monday: [
-          { name:"Sun Salutation A", hold:"5 rounds", rounds:3, desc:"Mountain → Forward Fold → Halfway Lift → Plank → Cobra → Downdog.", image:"", demo:"https://www.youtube.com/results?search_query=sun+salutation+A+yoga" },
-          { name:"Warrior I", hold:"45 sec each", rounds:3, desc:"Front knee bent 90°, back leg straight, arms reach overhead.", image:"", demo:"https://www.youtube.com/results?search_query=warrior+1+yoga+pose" },
-          { name:"Warrior II", hold:"45 sec each", rounds:3, desc:"Wide stance, front knee over ankle, arms parallel to floor.", image:"", demo:"https://www.youtube.com/results?search_query=warrior+2+yoga+pose" },
-          { name:"Tree Pose", hold:"30 sec each", rounds:3, desc:"Balance on one leg, foot on inner thigh. Hands at heart or overhead.", image:"", demo:"https://www.youtube.com/results?search_query=tree+pose+yoga" },
-          { name:"Child's Pose", hold:"60 sec", rounds:3, desc:"Kneel, extend arms forward, rest forehead on mat.", image:"", demo:"https://www.youtube.com/results?search_query=child's+pose+yoga" },
-          { name:"Savasana", hold:"3 min", rounds:1, desc:"Complete relaxation on back. Allow body to absorb the practice.", image:"", demo:"https://www.youtube.com/results?search_query=savasana+yoga" },
-        ],
-        Tuesday: [
-          { name:"Cat-Cow", hold:"10 rounds", rounds:3, desc:"Alternate arching and rounding spine with breath.", image:"", demo:"https://www.youtube.com/results?search_query=cat+cow+yoga" },
-          { name:"Downward Dog", hold:"60 sec", rounds:3, desc:"Inverted V shape. Press hands and feet into mat.", image:"", demo:"https://www.youtube.com/results?search_query=downward+dog+yoga" },
-          { name:"Pigeon Pose", hold:"60 sec each", rounds:3, desc:"Deep hip opener. Front shin parallel to mat, back leg extended.", image:"", demo:"https://www.youtube.com/results?search_query=pigeon+pose+yoga" },
-          { name:"Seated Forward Fold", hold:"60 sec", rounds:3, desc:"Legs extended, hinge forward from hips.", image:"", demo:"https://www.youtube.com/results?search_query=seated+forward+fold+yoga" },
-          { name:"Supine Twist", hold:"45 sec each", rounds:3, desc:"Lie on back, knee across body, arms wide.", image:"", demo:"https://www.youtube.com/results?search_query=supine+spinal+twist+yoga" },
-          { name:"Legs Up The Wall", hold:"3 min", rounds:1, desc:"Passive inversion. Legs vertical against wall.", image:"", demo:"https://www.youtube.com/results?search_query=legs+up+wall+yoga" },
-        ],
-        Wednesday: [
-          { name:"Triangle Pose", hold:"45 sec each", rounds:3, desc:"Wide stance, extend over front leg, hand to shin or floor.", image:"", demo:"https://www.youtube.com/results?search_query=triangle+pose+yoga" },
-          { name:"Boat Pose", hold:"30 sec", rounds:3, desc:"Balance on sit bones, legs and torso form a V.", image:"", demo:"https://www.youtube.com/results?search_query=boat+pose+yoga" },
-          { name:"Camel Pose", hold:"30 sec", rounds:3, desc:"Kneeling back bend. Hands on heels. Opens chest.", image:"", demo:"https://www.youtube.com/results?search_query=camel+pose+yoga" },
-          { name:"Extended Side Angle", hold:"45 sec each", rounds:3, desc:"Front arm rests on thigh or floor, back arm stretches overhead.", image:"", demo:"https://www.youtube.com/results?search_query=extended+side+angle+yoga" },
-          { name:"Bridge Pose", hold:"45 sec", rounds:3, desc:"Lie on back, feet flat, lift hips. Squeeze glutes.", image:"", demo:"https://www.youtube.com/results?search_query=bridge+pose+yoga" },
-          { name:"Happy Baby", hold:"2 min", rounds:1, desc:"Lie on back, hold outer feet. Rock gently side to side.", image:"", demo:"https://www.youtube.com/results?search_query=happy+baby+pose+yoga" },
-        ],
-        Thursday: [
-          { name:"Chair Pose", hold:"45 sec", rounds:3, desc:"Feet together, sit back as if on invisible chair.", image:"", demo:"https://www.youtube.com/results?search_query=chair+pose+yoga" },
-          { name:"Eagle Pose", hold:"30 sec each", rounds:3, desc:"One leg wrapped around other, arms intertwined.", image:"", demo:"https://www.youtube.com/results?search_query=eagle+pose+yoga" },
-          { name:"Half Moon Pose", hold:"30 sec each", rounds:3, desc:"Balance on one leg and hand. Other arm and leg extend.", image:"", demo:"https://www.youtube.com/results?search_query=half+moon+pose+yoga" },
-          { name:"Wide-Leg Forward Fold", hold:"60 sec", rounds:3, desc:"Feet wide, fold forward, head toward floor.", image:"", demo:"https://www.youtube.com/results?search_query=wide+legged+forward+fold+yoga" },
-          { name:"Fish Pose", hold:"30 sec", rounds:3, desc:"On back, arch thoracic spine, crown of head on mat.", image:"", demo:"https://www.youtube.com/results?search_query=fish+pose+yoga" },
-          { name:"Corpse Pose Extended", hold:"4 min", rounds:1, desc:"Extended Savasana with body scan meditation.", image:"", demo:"https://www.youtube.com/results?search_query=savasana+body+scan+yoga" },
-        ],
-        Friday: [
-          { name:"Crow Pose Prep", hold:"5 attempts", rounds:3, desc:"Squat, place knees on upper arms, lean forward and find balance.", image:"", demo:"https://www.youtube.com/results?search_query=crow+pose+yoga+beginners" },
-          { name:"Plank to Chaturanga", hold:"10 reps", rounds:3, desc:"High plank, lower with elbows hugging body.", image:"", demo:"https://www.youtube.com/results?search_query=chaturanga+yoga+form" },
-          { name:"Cobra Pose", hold:"30 sec", rounds:3, desc:"Lie prone, place hands under shoulders. Press up, elbows soft.", image:"", demo:"https://www.youtube.com/results?search_query=cobra+pose+yoga" },
-          { name:"Lizard Pose", hold:"45 sec each", rounds:3, desc:"Low lunge with front foot outside hand. Deep hip flexor stretch.", image:"", demo:"https://www.youtube.com/results?search_query=lizard+pose+yoga" },
-          { name:"Headstand Prep", hold:"30 sec", rounds:3, desc:"Forearms on mat, crown on mat, hips lift (dolphin pose).", image:"", demo:"https://www.youtube.com/results?search_query=headstand+prep+yoga" },
-          { name:"Meditation Sit", hold:"5 min", rounds:1, desc:"Comfortable seated position. Focus on breath.", image:"", demo:"https://www.youtube.com/results?search_query=yoga+meditation+breathing" },
-        ],
-        Saturday: [
-          { name:"Full Flow Practice", hold:"20 min", rounds:1, desc:"Freestyle: combine all learned poses.", image:"", demo:"https://www.youtube.com/results?search_query=20+minute+yoga+flow+full+body" },
-          { name:"Yin Hip Sequence", hold:"5 min", rounds:1, desc:"Hold each hip-opening pose for 1 minute: Dragon, Shoelace, Frog.", image:"", demo:"https://www.youtube.com/results?search_query=yin+yoga+hips" },
-          { name:"Shoulder Opener", hold:"45 sec each", rounds:3, desc:"Thread-the-needle, shoulder-to-floor stretches.", image:"", demo:"https://www.youtube.com/results?search_query=shoulder+opener+yoga" },
-          { name:"Restorative Child's Pose", hold:"3 min", rounds:1, desc:"Supported with blanket under torso.", image:"", demo:"https://www.youtube.com/results?search_query=restorative+yoga+childs+pose" },
-          { name:"Seated Meditation", hold:"10 min", rounds:1, desc:"Eyes closed, breath awareness, body scan.", image:"", demo:"https://www.youtube.com/results?search_query=10+minute+guided+meditation" },
-          { name:"Gratitude Journaling", hold:"5 min", rounds:1, desc:"Write 3 things you're grateful for and 1 fitness win this week.", image:"", demo:"" },
-        ],
+      // Progressive Day-based schedule — Day 1 to Day 90
+      // Phase 1: Days 1-20  — Foundation (Beginner)
+      // Phase 2: Days 21-45 — Building (Intermediate)
+      // Phase 3: Days 46-65 — Deepening (Advanced Beginner)
+      // Phase 4: Days 66-80 — Strength & Inversion (Intermediate-Advanced)
+      // Phase 5: Days 81-90 — Professional Flow (Advanced)
+      useProgressive: true,
+      phases: [
+        { from:1,  to:20, label:"Phase 1 — Foundation",          color:"#2e7d46" },
+        { from:21, to:45, label:"Phase 2 — Building",            color:"#1565c0" },
+        { from:46, to:65, label:"Phase 3 — Deepening",           color:"#6a1b9a" },
+        { from:66, to:80, label:"Phase 4 — Strength & Inversions", color:"#bf360c" },
+        { from:81, to:90, label:"Phase 5 — Professional Flow",   color:"#ad1457" },
+      ],
+      schedule: {
+
+        // ══════════════════════════════════════════════════════
+        // PHASE 1 — FOUNDATION (Days 1–20) — Beginner
+        // ══════════════════════════════════════════════════════
+        "Day 1": {
+          focus: "Breath & Body Awareness",
+          poses: [
+            { name:"Diaphragmatic Breathing", hold:"5 min", desc:"Lie on back, hands on belly. Breathe deep into abdomen, feel belly rise. Exhale fully. Foundation of all yoga practice.", demo:"https://www.youtube.com/results?search_query=diaphragmatic+breathing+yoga" },
+            { name:"Cat-Cow Stretch", hold:"10 rounds", desc:"On all fours. Inhale — arch back, lift head (cow). Exhale — round spine, tuck chin (cat). Sync breath with movement.", demo:"https://www.youtube.com/results?search_query=cat+cow+yoga+beginners" },
+            { name:"Child's Pose", hold:"2 min", desc:"Kneel, sit back on heels, extend arms forward, rest forehead on mat. Complete surrender. Rest here whenever needed.", demo:"https://www.youtube.com/results?search_query=child's+pose+yoga+beginners" },
+            { name:"Corpse Pose (Savasana)", hold:"5 min", desc:"Lie flat on back, arms at sides, palms up. Close eyes. Let the body completely relax. Absorb the practice.", demo:"https://www.youtube.com/results?search_query=savasana+yoga+beginner" },
+          ]
+        },
+        "Day 2": {
+          focus: "Spine Mobility",
+          poses: [
+            { name:"Cat-Cow (warmup)", hold:"8 rounds", desc:"Gentle spine warm-up. Focus on moving one vertebra at a time.", demo:"https://www.youtube.com/results?search_query=cat+cow+spine+mobility" },
+            { name:"Seated Forward Fold", hold:"90 sec", desc:"Sit with legs extended. Inhale lengthen spine, exhale fold forward. Hold shins, ankles or feet. Don't round upper back — hinge from hips.", demo:"https://www.youtube.com/results?search_query=seated+forward+fold+beginner+yoga" },
+            { name:"Supine Spinal Twist", hold:"60 sec each side", desc:"Lie on back, bring right knee to chest then across body to the left. Arms wide. Turn head right. Hold, breathe, switch sides.", demo:"https://www.youtube.com/results?search_query=supine+spinal+twist+yoga" },
+            { name:"Legs Up The Wall", hold:"3 min", desc:"Lie on back, legs vertical against wall. Passive inversion. Relieves tired legs and calms nervous system.", demo:"https://www.youtube.com/results?search_query=legs+up+wall+yoga" },
+          ]
+        },
+        "Day 3": {
+          focus: "Standing Foundation",
+          poses: [
+            { name:"Mountain Pose (Tadasana)", hold:"2 min", desc:"Stand feet hip-width, arms at sides. Root through feet, lift through crown. Feel the alignment. This is the base of all standing poses.", demo:"https://www.youtube.com/results?search_query=mountain+pose+tadasana+yoga" },
+            { name:"Forward Fold (Uttanasana)", hold:"60 sec", desc:"From standing, hinge at hips, let upper body hang. Bend knees generously. Gravity does the work — don't force.", demo:"https://www.youtube.com/results?search_query=standing+forward+fold+yoga+beginner" },
+            { name:"Low Lunge (Anjaneyasana)", hold:"60 sec each", desc:"Step right foot forward, lower left knee to mat. Hips sink forward and down. Arms overhead or on front thigh. Deep hip flexor opener.", demo:"https://www.youtube.com/results?search_query=low+lunge+yoga+beginner" },
+            { name:"Child's Pose", hold:"2 min", desc:"Rest and recover after standing work.", demo:"https://www.youtube.com/results?search_query=child's+pose+yoga" },
+          ]
+        },
+        "Day 4": {
+          focus: "Hip Opening — Beginner",
+          poses: [
+            { name:"Butterfly Pose", hold:"2 min", desc:"Soles of feet together, knees wide. Hold feet or ankles. Fold forward gently. Gentle inner thigh and groin opener.", demo:"https://www.youtube.com/results?search_query=butterfly+pose+yoga" },
+            { name:"Figure 4 Stretch", hold:"90 sec each", desc:"Lie on back, cross ankle over opposite thigh (figure 4). Pull both legs toward chest. Excellent glute and piriformis opener.", demo:"https://www.youtube.com/results?search_query=figure+4+hip+stretch+yoga" },
+            { name:"Pigeon Pose Prep", hold:"90 sec each", desc:"From downward dog, bring right knee behind right wrist. Lower to mat. Support with hands. Focus on the breath — this will be intense.", demo:"https://www.youtube.com/results?search_query=pigeon+pose+beginner+yoga" },
+            { name:"Happy Baby", hold:"2 min", desc:"Lie on back, hold outer edges of feet. Knees wide toward armpits. Rock side to side to massage lower back.", demo:"https://www.youtube.com/results?search_query=happy+baby+pose+yoga" },
+          ]
+        },
+        "Day 5": {
+          focus: "Sun Salutation Introduction",
+          poses: [
+            { name:"Sun Salutation A — Step by step", hold:"5 slow rounds", desc:"Mountain → Arms up → Forward fold → Halfway lift → Plank → Lower down → Cobra → Downward dog → Forward fold → Arms up → Mountain. Learn each transition slowly.", demo:"https://www.youtube.com/results?search_query=sun+salutation+A+step+by+step+beginner" },
+            { name:"Downward Facing Dog", hold:"90 sec", desc:"Inverted V shape. Hands shoulder-width, feet hip-width. Press through palms, lift hips high. Pedal feet to stretch calves.", demo:"https://www.youtube.com/results?search_query=downward+dog+alignment+yoga" },
+            { name:"Child's Pose", hold:"2 min", desc:"Rest after first Surya Namaskar practice.", demo:"https://www.youtube.com/results?search_query=child's+pose+yoga" },
+          ]
+        },
+        "Day 6": {
+          focus: "Balance Introduction",
+          poses: [
+            { name:"Tree Pose (Vrksasana)", hold:"45 sec each", desc:"Stand on right leg. Place left foot on inner calf or inner thigh (never on knee). Hands at heart or overhead. Find a fixed gaze point (drishti).", demo:"https://www.youtube.com/results?search_query=tree+pose+yoga+beginner" },
+            { name:"Warrior I (Virabhadrasana I)", hold:"45 sec each", desc:"Step right foot forward 4 feet. Front knee over ankle. Back foot at 45°. Hips square forward. Arms reach overhead. Strong and grounded.", demo:"https://www.youtube.com/results?search_query=warrior+1+yoga+beginners" },
+            { name:"Warrior II (Virabhadrasana II)", hold:"45 sec each", desc:"Wide stance. Front knee over ankle. Arms parallel to floor. Gaze over front fingers. Hips open to the side. Hold like a warrior.", demo:"https://www.youtube.com/results?search_query=warrior+2+yoga+beginners" },
+            { name:"Savasana", hold:"4 min", desc:"Complete rest. Allow all effort to dissolve.", demo:"https://www.youtube.com/results?search_query=savasana+yoga" },
+          ]
+        },
+        "Day 7": {
+          focus: "Rest & Restore",
+          poses: [
+            { name:"Yin Forward Fold", hold:"3 min", desc:"Seated, legs extended. Completely relax — no effort. Let gravity slowly open the hamstrings. Yin principle: passive hold.", demo:"https://www.youtube.com/results?search_query=yin+yoga+forward+fold" },
+            { name:"Yin Butterfly", hold:"3 min", desc:"Soles together, fully relax forward. No forcing. Breathe into the hips.", demo:"https://www.youtube.com/results?search_query=yin+yoga+butterfly" },
+            { name:"Legs Up Wall", hold:"5 min", desc:"Complete inversion rest. Close eyes, breathe naturally.", demo:"https://www.youtube.com/results?search_query=legs+up+wall+yin+yoga" },
+            { name:"Savasana with Body Scan", hold:"7 min", desc:"Systematically relax every body part from feet to crown. Week 1 complete — celebrate your consistency.", demo:"https://www.youtube.com/results?search_query=savasana+body+scan+yoga" },
+          ]
+        },
+        "Day 8": {
+          focus: "Core Awakening",
+          poses: [
+            { name:"Boat Pose (Navasana)", hold:"30 sec × 3", desc:"Sit, lean back, lift feet. Legs straight or bent. Arms parallel to floor. Core braces hard. Build core strength essential for advanced poses.", demo:"https://www.youtube.com/results?search_query=boat+pose+yoga+beginner" },
+            { name:"Plank Hold", hold:"30 sec × 3", desc:"Wrists under shoulders, body straight. Engage belly in and up. Build foundational arm and core strength for inversions later.", demo:"https://www.youtube.com/results?search_query=plank+pose+yoga" },
+            { name:"Bridge Pose (Setu Bandha)", hold:"60 sec × 3", desc:"Lie on back, feet flat near glutes. Press feet down, lift hips high. Clasp hands under back. Opens chest and strengthens back.", demo:"https://www.youtube.com/results?search_query=bridge+pose+yoga" },
+            { name:"Supine Twist", hold:"90 sec each", desc:"Release lower back after core work.", demo:"https://www.youtube.com/results?search_query=supine+twist+yoga" },
+          ]
+        },
+        "Day 9": {
+          focus: "Chest & Shoulder Opening",
+          poses: [
+            { name:"Cobra Pose (Bhujangasana)", hold:"45 sec × 3", desc:"Lie prone, hands under shoulders. Inhale, press into hands, lift chest. Elbows soft. Shoulders away from ears. Gentle backbend.", demo:"https://www.youtube.com/results?search_query=cobra+pose+yoga" },
+            { name:"Camel Pose (Ustrasana)", hold:"30 sec × 3", desc:"Kneel, hands on lower back. Lift chest to ceiling. Option to reach for heels. Intense chest and throat opener.", demo:"https://www.youtube.com/results?search_query=camel+pose+yoga+beginner" },
+            { name:"Thread the Needle", hold:"90 sec each", desc:"On all fours. Slide right arm under body along floor. Shoulder and cheek rest on mat. Deep shoulder opener and spinal twist.", demo:"https://www.youtube.com/results?search_query=thread+the+needle+yoga" },
+            { name:"Child's Pose", hold:"2 min", desc:"Counter pose after backbends.", demo:"https://www.youtube.com/results?search_query=child's+pose+yoga" },
+          ]
+        },
+        "Day 10": {
+          focus: "Flow — Sun Salutation Practice",
+          poses: [
+            { name:"Sun Salutation A × 5", hold:"5 rounds", desc:"Each round smoother than the last. Focus on breath linking movement — inhale up, exhale fold. Build heat gradually.", demo:"https://www.youtube.com/results?search_query=sun+salutation+A+flow+yoga" },
+            { name:"Sun Salutation B × 3", hold:"3 rounds", desc:"Adds Chair Pose and Warrior I. More challenging. Take your time learning the sequence.", demo:"https://www.youtube.com/results?search_query=sun+salutation+B+beginner+yoga" },
+            { name:"Seated Forward Fold", hold:"2 min", desc:"Cool down the body after the flow.", demo:"https://www.youtube.com/results?search_query=seated+forward+fold+yoga" },
+            { name:"Savasana", hold:"5 min", desc:"Day 10 milestone — you've built a real foundation.", demo:"https://www.youtube.com/results?search_query=savasana+yoga" },
+          ]
+        },
+        "Day 11": {
+          focus: "Twists & Detox",
+          poses: [
+            { name:"Seated Spinal Twist (Ardha Matsyendrasana)", hold:"90 sec each", desc:"Sit with legs extended. Bend right knee, place foot outside left thigh. Right hand on floor behind, left elbow on right knee. Twist and breathe.", demo:"https://www.youtube.com/results?search_query=seated+spinal+twist+yoga" },
+            { name:"Revolved Chair Pose", hold:"30 sec each", desc:"Chair pose, bring hands to heart, twist right elbow to left knee. Challenges balance and deepens the twist.", demo:"https://www.youtube.com/results?search_query=revolved+chair+pose+yoga" },
+            { name:"Supine Twist", hold:"2 min each", desc:"Lying down deep spinal twist to release after standing work.", demo:"https://www.youtube.com/results?search_query=supine+twist+yoga" },
+            { name:"Legs Up Wall", hold:"4 min", desc:"Passive recovery — great after twisting sequence.", demo:"https://www.youtube.com/results?search_query=legs+up+wall+yoga" },
+          ]
+        },
+        "Day 12": {
+          focus: "Triangle & Extended Poses",
+          poses: [
+            { name:"Triangle Pose (Trikonasana)", hold:"60 sec each", desc:"Feet 4 feet apart, front foot forward. Reach front arm to shin/floor, back arm to ceiling. Both legs straight. Side body fully opens.", demo:"https://www.youtube.com/results?search_query=triangle+pose+yoga" },
+            { name:"Extended Side Angle", hold:"60 sec each", desc:"Warrior II shape. Lower arm to front thigh or floor. Top arm reaches overhead beside ear. Full lateral body stretch.", demo:"https://www.youtube.com/results?search_query=extended+side+angle+pose+yoga" },
+            { name:"Wide-Leg Forward Fold (Prasarita Padottanasana)", hold:"90 sec", desc:"Feet wide (4-5 feet). Fold forward, hands to floor. Head may reach floor in time. Excellent inner leg and hamstring opener.", demo:"https://www.youtube.com/results?search_query=wide+leg+forward+fold+yoga" },
+            { name:"Child's Pose", hold:"2 min", desc:"Rest after intense standing sequence.", demo:"https://www.youtube.com/results?search_query=child's+pose+yoga" },
+          ]
+        },
+        "Day 13": {
+          focus: "Hip Flexors & Lunges",
+          poses: [
+            { name:"Crescent Lunge", hold:"60 sec each", desc:"High lunge — back knee lifted. Arms reach overhead. Sink hips forward. Powerful hip flexor and quad stretch.", demo:"https://www.youtube.com/results?search_query=crescent+lunge+yoga" },
+            { name:"Lizard Pose", hold:"90 sec each", desc:"Low lunge, front foot outside hand. Lower forearms for deeper opening. Most effective hip flexor and groin stretch.", demo:"https://www.youtube.com/results?search_query=lizard+pose+yoga" },
+            { name:"Pigeon Pose", hold:"2 min each", desc:"From downward dog, bring right shin parallel to front of mat. Square hips. Lower down. Go deeper with every exhale. This pose changes everything.", demo:"https://www.youtube.com/results?search_query=pigeon+pose+yoga" },
+            { name:"Reclined Hero (Supta Virasana)", hold:"60 sec", desc:"Sit between heels. Lean back on elbows or full recline. Intense quad and hip flexor stretch. Use bolster under back if needed.", demo:"https://www.youtube.com/results?search_query=reclined+hero+pose+yoga" },
+          ]
+        },
+        "Day 14": {
+          focus: "Week 2 Integration",
+          poses: [
+            { name:"Sun Salutation A × 5", hold:"5 rounds", desc:"Full flow — smooth transitions, breath-linked movement.", demo:"https://www.youtube.com/results?search_query=sun+salutation+A+flow" },
+            { name:"Warrior I + II + Triangle", hold:"45 sec each", desc:"Standing sequence: right side then left. Flow between poses with breath.", demo:"https://www.youtube.com/results?search_query=warrior+1+2+triangle+yoga+flow" },
+            { name:"Pigeon Pose", hold:"2 min each", desc:"Hold deeply and breathe.", demo:"https://www.youtube.com/results?search_query=pigeon+pose+yoga" },
+            { name:"Savasana", hold:"6 min", desc:"Two weeks of yoga — you are building something real.", demo:"https://www.youtube.com/results?search_query=savasana+yoga" },
+          ]
+        },
+        "Day 15": {
+          focus: "Backbends Introduction",
+          poses: [
+            { name:"Sphinx Pose", hold:"2 min", desc:"Forearms on floor, elbows under shoulders. Gentle supported backbend. Excellent for lower back health.", demo:"https://www.youtube.com/results?search_query=sphinx+pose+yoga" },
+            { name:"Locust Pose (Shalabhasana)", hold:"30 sec × 3", desc:"Lie prone, arms at sides. Inhale, lift chest, arms and legs simultaneously. Strengthens entire back body.", demo:"https://www.youtube.com/results?search_query=locust+pose+yoga" },
+            { name:"Bow Pose (Dhanurasana)", hold:"20 sec × 3", desc:"Lie prone. Reach back and hold ankles. Inhale, kick feet into hands to lift chest and thighs. Full backbend.", demo:"https://www.youtube.com/results?search_query=bow+pose+yoga+beginner" },
+            { name:"Child's Pose", hold:"3 min", desc:"Counter pose — essential after backbends. Let the spine decompress.", demo:"https://www.youtube.com/results?search_query=child's+pose+yoga" },
+          ]
+        },
+        "Day 16": {
+          focus: "Balance — Intermediate",
+          poses: [
+            { name:"Warrior III (Virabhadrasana III)", hold:"30 sec each", desc:"From Warrior I, hinge forward, lift back leg parallel to floor. Arms forward or at sides. One-leg balance with full body parallel to ground.", demo:"https://www.youtube.com/results?search_query=warrior+3+yoga+beginner" },
+            { name:"Eagle Pose (Garudasana)", hold:"45 sec each", desc:"Cross right leg over left, hook foot behind calf if possible. Cross right arm under left, bind at forearms or hands. Hips sink. Focus gaze.", demo:"https://www.youtube.com/results?search_query=eagle+pose+yoga" },
+            { name:"Standing Split", hold:"30 sec each", desc:"Forward fold, lift one leg as high as possible. Hands to floor. Excellent hamstring and balance work.", demo:"https://www.youtube.com/results?search_query=standing+split+yoga" },
+            { name:"Savasana", hold:"4 min", desc:"Balance requires full concentration — rest after this work.", demo:"https://www.youtube.com/results?search_query=savasana+yoga" },
+          ]
+        },
+        "Day 17": {
+          focus: "Shoulder & Neck Release",
+          poses: [
+            { name:"Cow Face Arms (Gomukhasana arms)", hold:"90 sec each", desc:"Reach right arm up, bend at elbow to touch upper back. Left arm reaches behind from below. Clasp fingers or hold strap. Intense shoulder opener.", demo:"https://www.youtube.com/results?search_query=cow+face+arms+yoga" },
+            { name:"Puppy Pose (Uttana Shishosana)", hold:"2 min", desc:"On all fours, walk hands forward while hips stay over knees. Chest melts toward floor. Powerful shoulder and thoracic spine opener.", demo:"https://www.youtube.com/results?search_query=puppy+pose+yoga" },
+            { name:"Dolphin Pose", hold:"60 sec × 3", desc:"Forearms on mat, hips lift high like downward dog on forearms. Builds shoulder stability for headstand later.", demo:"https://www.youtube.com/results?search_query=dolphin+pose+yoga" },
+            { name:"Neck Rolls + Thread the Needle", hold:"90 sec each", desc:"Gentle neck circles then deep shoulder thread. Neck and shoulder release.", demo:"https://www.youtube.com/results?search_query=thread+the+needle+yoga" },
+          ]
+        },
+        "Day 18": {
+          focus: "Grounding Flow",
+          poses: [
+            { name:"Sun Salutation × 6", hold:"6 rounds", desc:"Build heat. Go faster rounds 3-4, slower rounds 5-6. Feel the flow becoming natural.", demo:"https://www.youtube.com/results?search_query=sun+salutation+yoga+flow" },
+            { name:"Chair Pose (Utkatasana)", hold:"60 sec × 3", desc:"Feet together, sit back deeply. Arms overhead. Quads burn. Builds leg strength crucial for advanced poses.", demo:"https://www.youtube.com/results?search_query=chair+pose+yoga" },
+            { name:"Goddess Pose", hold:"60 sec × 2", desc:"Wide squat, toes out, arms wide or at heart. Builds inner thigh strength and hip opening simultaneously.", demo:"https://www.youtube.com/results?search_query=goddess+pose+yoga" },
+            { name:"Savasana", hold:"5 min", desc:"Ground the body after strong practice.", demo:"https://www.youtube.com/results?search_query=savasana+yoga" },
+          ]
+        },
+        "Day 19": {
+          focus: "Yin Deep Release",
+          poses: [
+            { name:"Dragon Pose (Low Lunge Yin)", hold:"3 min each", desc:"Low lunge, hold still and breathe. Don't adjust. Let tissues slowly open over time. This is yin — passive, long holds.", demo:"https://www.youtube.com/results?search_query=dragon+pose+yin+yoga" },
+            { name:"Sleeping Swan (Yin Pigeon)", hold:"4 min each", desc:"Pigeon shape but fully relaxed. Forehead on mat or block. Deepest hip release in yoga.", demo:"https://www.youtube.com/results?search_query=sleeping+swan+yin+yoga" },
+            { name:"Shoelace Pose", hold:"3 min each", desc:"Stack knees on top of each other, fold forward. Deep outer hip and IT band release.", demo:"https://www.youtube.com/results?search_query=shoelace+pose+yin+yoga" },
+            { name:"Savasana", hold:"7 min", desc:"Yin sessions need longer integration time. Lie still.", demo:"https://www.youtube.com/results?search_query=savasana+yoga" },
+          ]
+        },
+        "Day 20": {
+          focus: "Phase 1 Completion — Full Practice",
+          poses: [
+            { name:"Sun Salutation A × 5 + B × 3", hold:"8 rounds total", desc:"Complete Surya Namaskar practice — both sequences back to back. You've earned this.", demo:"https://www.youtube.com/results?search_query=sun+salutation+A+B+yoga" },
+            { name:"Standing Sequence", hold:"45 sec each", desc:"Warrior I → Warrior II → Triangle → Extended Side Angle. Both sides. Strong and confident.", demo:"https://www.youtube.com/results?search_query=standing+yoga+sequence+beginner" },
+            { name:"Pigeon Pose", hold:"2 min each", desc:"Your hips have opened significantly since Day 1. Notice the difference.", demo:"https://www.youtube.com/results?search_query=pigeon+pose+yoga" },
+            { name:"Bridge Pose", hold:"60 sec × 3", desc:"Strong and controlled. You've built real foundation.", demo:"https://www.youtube.com/results?search_query=bridge+pose+yoga" },
+            { name:"Savasana", hold:"8 min", desc:"Phase 1 complete. You are no longer a beginner. Rest deeply.", demo:"https://www.youtube.com/results?search_query=savasana+yoga" },
+          ]
+        },
+
+        // ══════════════════════════════════════════════════════
+        // PHASE 2 — BUILDING (Days 21–45) — Intermediate
+        // ══════════════════════════════════════════════════════
+        "Day 21": {
+          focus: "Phase 2 Begins — Pranayama",
+          poses: [
+            { name:"Nadi Shodhana (Alternate Nostril Breathing)", hold:"10 min", desc:"Close right nostril, inhale left. Close left, exhale right. Inhale right. Close right, exhale left. One round. Balances nervous system and prepares for deeper practice.", demo:"https://www.youtube.com/results?search_query=alternate+nostril+breathing+yoga" },
+            { name:"Ujjayi Breath Practice", hold:"5 min", desc:"Ocean breath — constrict the back of the throat slightly. Creates audible breath. Used throughout Ashtanga and Vinyasa practice. Master this now.", demo:"https://www.youtube.com/results?search_query=ujjayi+breath+yoga" },
+            { name:"Extended Puppy Pose", hold:"3 min", desc:"Deepening the shoulder opener from Phase 1.", demo:"https://www.youtube.com/results?search_query=extended+puppy+pose+yoga" },
+            { name:"Legs Up Wall", hold:"5 min", desc:"Calm and integrate the pranayama practice.", demo:"https://www.youtube.com/results?search_query=legs+up+wall+yoga" },
+          ]
+        },
+        "Day 22": {
+          focus: "Half Moon & Advanced Balance",
+          poses: [
+            { name:"Half Moon Pose (Ardha Chandrasana)", hold:"45 sec each", desc:"From Triangle, shift weight to front foot and bottom hand. Lift back leg parallel to floor. Top arm reaches to ceiling. Challenging balance requiring strength and focus.", demo:"https://www.youtube.com/results?search_query=half+moon+pose+yoga" },
+            { name:"Dancer's Pose (Natarajasana) Prep", hold:"30 sec each", desc:"Stand on right foot, hold left ankle behind. Kick foot into hand, lift leg. Lean forward slightly. Balance and backbend combined.", demo:"https://www.youtube.com/results?search_query=dancer+pose+yoga+beginner" },
+            { name:"Revolved Triangle (Parivrtta Trikonasana)", hold:"45 sec each", desc:"Triangle but with a twist. Front leg straight, opposite hand to shin or floor. Back arm to ceiling. Challenging balance and twist.", demo:"https://www.youtube.com/results?search_query=revolved+triangle+pose+yoga" },
+            { name:"Savasana", hold:"5 min", desc:"Rest after complex balance work.", demo:"https://www.youtube.com/results?search_query=savasana+yoga" },
+          ]
+        },
+        "Day 23": {
+          focus: "Wheel Pose Preparation",
+          poses: [
+            { name:"Bridge Pose × 5", hold:"60 sec × 5", desc:"Build the back strength and chest opening needed for wheel. Press actively. Increase duration each round.", demo:"https://www.youtube.com/results?search_query=bridge+pose+yoga" },
+            { name:"Supported Wheel (Urdhva Dhanurasana prep)", hold:"30 sec × 3", desc:"Lie on back, hands by ears, feet flat. Press up to the top of the head first. Pause. Assess. Then attempt to straighten arms. Biggest backbend yet.", demo:"https://www.youtube.com/results?search_query=wheel+pose+yoga+beginner" },
+            { name:"Fish Pose (Matsyasana)", hold:"60 sec × 2", desc:"On back, arch thoracic spine, crown of head on mat. Chest lifts high. Counter pose for forward folds and excellent for wheel prep.", demo:"https://www.youtube.com/results?search_query=fish+pose+yoga" },
+            { name:"Child's Pose", hold:"3 min", desc:"Essential counter pose after intensive backbend work.", demo:"https://www.youtube.com/results?search_query=child's+pose+yoga" },
+          ]
+        },
+        "Day 24": {
+          focus: "Crow Pose (First Arm Balance)",
+          poses: [
+            { name:"Wrist Warm-Up", hold:"3 min", desc:"Circles, extensions, flexions. Critical before any arm balance. Don't skip this.", demo:"https://www.youtube.com/results?search_query=wrist+warm+up+yoga+arm+balance" },
+            { name:"Crow Pose (Bakasana)", hold:"5-10 attempts", desc:"Squat, place hands shoulder-width. Put knees on backs of upper arms. Lean forward and shift weight until feet lift. First arm balance. May take weeks to get — that's normal.", demo:"https://www.youtube.com/results?search_query=crow+pose+yoga+step+by+step" },
+            { name:"Chaturanga Push-Ups", hold:"10 reps × 3", desc:"High plank → lower to low plank with elbows hugging ribs. Builds tricep and core strength for all arm balances.", demo:"https://www.youtube.com/results?search_query=chaturanga+yoga+tutorial" },
+            { name:"Child's Pose", hold:"2 min", desc:"Rest wrists and reset.", demo:"https://www.youtube.com/results?search_query=child's+pose+yoga" },
+          ]
+        },
+        "Day 25": {
+          focus: "Standing Splits & Hip Flexors",
+          poses: [
+            { name:"Standing Split (Urdhva Prasarita Eka Padasana)", hold:"60 sec each", desc:"Forward fold on one leg, lift other leg as high as possible. Hands to blocks or floor. Hamstring and hip flexor deep work.", demo:"https://www.youtube.com/results?search_query=standing+split+yoga" },
+            { name:"Splits Prep — Hanumanasana", hold:"2 min each", desc:"From low lunge, slowly slide front foot forward and back foot back. Use blocks under hands. This is the long journey to full splits.", demo:"https://www.youtube.com/results?search_query=splits+preparation+yoga+beginner" },
+            { name:"Lizard Pose Deep", hold:"2 min each", desc:"Forearms on floor in lizard. Deepest hip flexor variation.", demo:"https://www.youtube.com/results?search_query=lizard+pose+yoga+forearms" },
+            { name:"Reclined Hamstring Stretch", hold:"2 min each", desc:"On back, strap or towel around foot, leg to ceiling. Gentle hamstring lengthening.", demo:"https://www.youtube.com/results?search_query=reclined+hamstring+stretch+yoga" },
+          ]
+        },
+        "Day 26": {
+          focus: "Vinyasa Flow Building",
+          poses: [
+            { name:"Vinyasa Flow × 8 rounds", hold:"8 rounds", desc:"Sun Sal A with added Warrior I, Warrior II, Triangle per side. This is now your standard flow. Move with Ujjayi breath. Build internal heat (tapas).", demo:"https://www.youtube.com/results?search_query=vinyasa+yoga+flow+intermediate" },
+            { name:"Pigeon Pose", hold:"3 min each", desc:"Settle deeply. You've been practicing 25 days — feel the difference in your hips.", demo:"https://www.youtube.com/results?search_query=pigeon+pose+yoga" },
+            { name:"Savasana", hold:"6 min", desc:"Rest after strong flow practice.", demo:"https://www.youtube.com/results?search_query=savasana+yoga" },
+          ]
+        },
+        "Day 27": {
+          focus: "Twists — Intermediate",
+          poses: [
+            { name:"Revolved Side Angle (Parivrtta Parsvakonasana)", hold:"45 sec each", desc:"Warrior I, bring opposite elbow to front knee. Prayer or bind with arms. Deep twist with strength. Challenging — use blocks if needed.", demo:"https://www.youtube.com/results?search_query=revolved+side+angle+pose+yoga" },
+            { name:"Seated Twist — Marichyasana C", hold:"90 sec each", desc:"One leg extended, other bent. Wrap opposite arm around bent knee. Deep compression twist. Detoxifying for organs.", demo:"https://www.youtube.com/results?search_query=marichyasana+C+yoga" },
+            { name:"Supine Twist — Deep", hold:"3 min each", desc:"Deeper version — both knees stacked to one side. Let gravity do the work.", demo:"https://www.youtube.com/results?search_query=supine+spinal+twist+yoga+deep" },
+            { name:"Savasana", hold:"5 min", desc:"Integrate the detoxifying effects of twisting.", demo:"https://www.youtube.com/results?search_query=savasana+yoga" },
+          ]
+        },
+        "Day 28": {
+          focus: "Four Weeks Complete — Milestone Practice",
+          poses: [
+            { name:"Full Vinyasa Flow with All Poses Learned", hold:"30 min", desc:"String together everything from the past 28 days. Sun Sals, Warriors, Triangle, Twists, Balance poses. Your own practice. This is yoga.", demo:"https://www.youtube.com/results?search_query=30+minute+intermediate+yoga+flow" },
+            { name:"Crow Pose Practice", hold:"10 attempts", desc:"Keep working at Bakasana. Consistency is the key.", demo:"https://www.youtube.com/results?search_query=crow+pose+yoga" },
+            { name:"Wheel Pose Attempt", hold:"3 attempts", desc:"Try your wheel. Use the strength you've built.", demo:"https://www.youtube.com/results?search_query=wheel+pose+yoga" },
+            { name:"Long Savasana", hold:"10 min", desc:"One month of yoga. You've changed your body and mind. Rest deeply.", demo:"https://www.youtube.com/results?search_query=savasana+yoga+long" },
+          ]
+        },
+        "Day 29": {
+          focus: "Shoulder Stands Intro",
+          poses: [
+            { name:"Legs Up Wall Variation", hold:"5 min", desc:"Preparatory inversion. Get comfortable with legs overhead.", demo:"https://www.youtube.com/results?search_query=legs+up+wall+yoga" },
+            { name:"Plow Pose (Halasana)", hold:"60 sec × 3", desc:"From lying, lift hips and swing legs overhead, toes to floor. Hands support lower back. Intense neck and shoulder stretch. Contraindicated for neck issues.", demo:"https://www.youtube.com/results?search_query=plow+pose+yoga" },
+            { name:"Supported Shoulder Stand (Sarvangasana)", hold:"2 min × 2", desc:"From plow, lift legs to ceiling. Hands on lower back, elbows on mat. Queen of all poses — builds tremendous strength and reverses fatigue.", demo:"https://www.youtube.com/results?search_query=shoulder+stand+yoga+beginners" },
+            { name:"Fish Pose", hold:"60 sec", desc:"Counter pose after shoulder stand. Must do.", demo:"https://www.youtube.com/results?search_query=fish+pose+yoga" },
+          ]
+        },
+        "Day 30": {
+          focus: "Full Wheel & Heart Opening",
+          poses: [
+            { name:"Wheel Pose (Urdhva Dhanurasana) × 5", hold:"30 sec × 5", desc:"Full wheel. Press strongly through hands and feet. Head hangs. Chest opens. This pose energises the entire nervous system.", demo:"https://www.youtube.com/results?search_query=wheel+pose+yoga+full" },
+            { name:"Wild Thing (Camatkarasana)", hold:"30 sec each", desc:"From downward dog, flip to side, let back leg sweep. Backbend with open chest. Joyful heart opener.", demo:"https://www.youtube.com/results?search_query=wild+thing+pose+yoga" },
+            { name:"Supported Fish", hold:"3 min", desc:"Block under thoracic spine. Chest opens passively. Full surrender into heart opening.", demo:"https://www.youtube.com/results?search_query=supported+fish+pose+yoga" },
+            { name:"Child's Pose", hold:"3 min", desc:"Rest after intense backbend session. 30 days in — incredible progress.", demo:"https://www.youtube.com/results?search_query=child's+pose+yoga" },
+          ]
+        },
+
+        // ══════════════════════════════════════════════════════
+        // PHASE 3 — DEEPENING (Days 46–65)
+        // ══════════════════════════════════════════════════════
+        "Day 46": {
+          focus: "Phase 3 — Headstand Introduction",
+          poses: [
+            { name:"Dolphin Pose × 10 holds", hold:"45 sec × 5", desc:"Build the shoulder and upper back strength for headstand. Push strongly through forearms.", demo:"https://www.youtube.com/results?search_query=dolphin+pose+yoga" },
+            { name:"Headstand Prep (Sirsasana prep)", hold:"5 attempts", desc:"Forearms on mat in triangle shape with head. Lift hips high. Walk feet toward face. Practice tucking knees. Use wall for safety.", demo:"https://www.youtube.com/results?search_query=headstand+preparation+yoga" },
+            { name:"Dolphin Push-Ups", hold:"10 reps × 3", desc:"Lower from dolphin to forearms on floor and back up. Direct headstand strength builder.", demo:"https://www.youtube.com/results?search_query=dolphin+push+ups+yoga" },
+            { name:"Savasana", hold:"8 min", desc:"Inversions are intense for the nervous system. Rest fully.", demo:"https://www.youtube.com/results?search_query=savasana+yoga" },
+          ]
+        },
+        "Day 47": {
+          focus: "Splits Progress",
+          poses: [
+            { name:"Hanumanasana (Splits) — both sides", hold:"3 min each", desc:"Full splits or as far as your body allows. Blocks under hands and front thigh. Your hamstrings and hip flexors have been preparing for weeks.", demo:"https://www.youtube.com/results?search_query=hanumanasana+splits+yoga" },
+            { name:"Pigeon Pose", hold:"3 min each", desc:"Preparation for the splits requires open hips.", demo:"https://www.youtube.com/results?search_query=pigeon+pose+yoga" },
+            { name:"Reclining Hero", hold:"2 min", desc:"Quad and hip flexor counter stretch.", demo:"https://www.youtube.com/results?search_query=reclining+hero+pose+yoga" },
+            { name:"Savasana", hold:"6 min", desc:"Major hip work — rest is essential.", demo:"https://www.youtube.com/results?search_query=savasana+yoga" },
+          ]
+        },
+        "Day 48": {
+          focus: "Side Crow & Arm Balances",
+          poses: [
+            { name:"Crow Pose (Bakasana) — 5 min practice", hold:"5 min", desc:"By now you should be holding crow. Work on extending hold time and lifting with control.", demo:"https://www.youtube.com/results?search_query=crow+pose+yoga" },
+            { name:"Side Crow (Parsva Bakasana)", hold:"5 attempts each side", desc:"From squat, twist, stack knees on one upper arm. Lean forward to take flight. Requires rotation strength and concentration.", demo:"https://www.youtube.com/results?search_query=side+crow+pose+yoga" },
+            { name:"Scale Pose (Tolasana)", hold:"10 sec × 5", desc:"In lotus or cross-legged, press hands down, lift entire body off ground. Extreme core and arm strength.", demo:"https://www.youtube.com/results?search_query=scale+pose+yoga+tolasana" },
+            { name:"Child's Pose", hold:"3 min", desc:"Wrist and shoulder rest after arm balance work.", demo:"https://www.youtube.com/results?search_query=child's+pose+yoga" },
+          ]
+        },
+        "Day 50": {
+          focus: "Full Primary Series Intro",
+          poses: [
+            { name:"Ashtanga Primary Series — Standing Sequence", hold:"Full sequence", desc:"Surya Namaskar A × 5 + B × 3, then all standing poses of Primary series. Padangusthasana, Padahastasana, Utthita Trikonasana, Parivrtta Trikonasana, Utthita Parsvakonasana, and more.", demo:"https://www.youtube.com/results?search_query=ashtanga+primary+series+standing+sequence" },
+            { name:"Seated sequence — first 5 poses", hold:"Full sequence", desc:"Dandasana, Paschimottanasana, Purvottanasana, Ardha Baddha Padma Paschimottanasana, Triang Mukhaikapada Paschimottanasana.", demo:"https://www.youtube.com/results?search_query=ashtanga+primary+series+seated+sequence+beginner" },
+            { name:"Savasana", hold:"10 min", desc:"Day 50 — Halfway to professional. Celebrate.", demo:"https://www.youtube.com/results?search_query=savasana+yoga" },
+          ]
+        },
+        "Day 55": {
+          focus: "Forearm Stand Preparation",
+          poses: [
+            { name:"Dolphin Pose — Extended holds", hold:"90 sec × 5", desc:"Building the base strength for Pincha Mayurasana.", demo:"https://www.youtube.com/results?search_query=dolphin+pose+yoga" },
+            { name:"Forearm Stand Prep (Pincha Mayurasana prep)", hold:"10 attempts", desc:"Forearms on mat parallel, kick one leg up then bring other. Use wall for support. Upper back and shoulder endurance required.", demo:"https://www.youtube.com/results?search_query=forearm+stand+yoga+preparation" },
+            { name:"Wheel Pose × 5", hold:"45 sec × 5", desc:"Strengthening for full backbend inversions.", demo:"https://www.youtube.com/results?search_query=wheel+pose+yoga" },
+            { name:"Savasana", hold:"8 min", desc:"Inversions and backbends together — deep rest needed.", demo:"https://www.youtube.com/results?search_query=savasana+yoga" },
+          ]
+        },
+        "Day 60": {
+          focus: "Headstand (Sirsasana) — Full",
+          poses: [
+            { name:"Headstand (Sirsasana) — Full practice", hold:"3 min", desc:"The king of all poses. Forearms on mat, head lightly placed. Lift both legs to ceiling. Use wall if needed. Build duration slowly. Transforms the practice.", demo:"https://www.youtube.com/results?search_query=headstand+yoga+full+tutorial" },
+            { name:"Shoulder Stand Sequence", hold:"5 min", desc:"Shoulder stand → plow → ear pressure pose. Classic finishing sequence.", demo:"https://www.youtube.com/results?search_query=shoulder+stand+plow+pose+yoga" },
+            { name:"Fish Pose", hold:"2 min", desc:"Mandatory counter pose.", demo:"https://www.youtube.com/results?search_query=fish+pose+yoga" },
+            { name:"Savasana", hold:"10 min", desc:"60 days. You've reached a level most people never achieve.", demo:"https://www.youtube.com/results?search_query=savasana+yoga" },
+          ]
+        },
+        "Day 65": {
+          focus: "Phase 3 Complete — Advanced Assessment",
+          poses: [
+            { name:"Full Vinyasa Practice — 45 min", hold:"45 min", desc:"Complete practice: Sun Sals, standing sequence, backbends, inversions, seated sequence. This is now your level.", demo:"https://www.youtube.com/results?search_query=45+minute+advanced+yoga+flow" },
+            { name:"Crow → Headstand transition", hold:"5 attempts", desc:"Advanced transition — from crow, extend into headstand tripod.", demo:"https://www.youtube.com/results?search_query=crow+to+headstand+yoga" },
+            { name:"Splits (Hanumanasana)", hold:"3 min each", desc:"Your flexibility has transformed completely.", demo:"https://www.youtube.com/results?search_query=hanumanasana+splits+yoga" },
+            { name:"Savasana", hold:"12 min", desc:"Three phases complete. Advanced practitioner level achieved.", demo:"https://www.youtube.com/results?search_query=savasana+yoga" },
+          ]
+        },
+
+        // ══════════════════════════════════════════════════════
+        // PHASE 4 — STRENGTH & INVERSIONS (Days 66–80)
+        // ══════════════════════════════════════════════════════
+        "Day 66": {
+          focus: "Phase 4 — Handstand Foundation",
+          poses: [
+            { name:"Handstand Kick-ups at Wall", hold:"10 attempts", desc:"Place hands 6 inches from wall. Kick one leg, then other, to wall. Hold. Build confidence being inverted on hands. The ultimate goal of Phase 4.", demo:"https://www.youtube.com/results?search_query=handstand+yoga+against+wall+beginner" },
+            { name:"Plank Hold — Extended", hold:"90 sec × 5", desc:"Build the wrist and shoulder endurance handstand demands.", demo:"https://www.youtube.com/results?search_query=plank+hold+yoga" },
+            { name:"Handstand Shape Practice", hold:"10 reps", desc:"Stand facing wall, place hands, jump both feet up simultaneously. Don't kick — jump. Find the balance.", demo:"https://www.youtube.com/results?search_query=handstand+practice+yoga" },
+            { name:"Wrist Recovery + Child's Pose", hold:"4 min", desc:"Always recover wrists after handstand practice.", demo:"https://www.youtube.com/results?search_query=wrist+recovery+yoga" },
+          ]
+        },
+        "Day 70": {
+          focus: "Eight-Angle Pose (Astavakrasana)",
+          poses: [
+            { name:"Preparation — Leg Threading", hold:"5 min", desc:"Learn to thread leg behind upper arm. The setup for this complex arm balance.", demo:"https://www.youtube.com/results?search_query=eight+angle+pose+preparation+yoga" },
+            { name:"Eight-Angle Pose (Astavakrasana)", hold:"10 attempts each", desc:"Thread right leg over right arm. Hook left ankle over right. Extend legs to the right. Lean forward, lower to chaturanga. Advanced arm balance requiring full arm and core integration.", demo:"https://www.youtube.com/results?search_query=eight+angle+pose+yoga+astavakrasana" },
+            { name:"Crow → Chaturanga transition", hold:"10 reps", desc:"Flow arm balances together. Jump back to plank from crow.", demo:"https://www.youtube.com/results?search_query=crow+to+chaturanga+yoga" },
+            { name:"Savasana", hold:"8 min", desc:"Advanced arm balance day — full rest.", demo:"https://www.youtube.com/results?search_query=savasana+yoga" },
+          ]
+        },
+        "Day 75": {
+          focus: "Forearm Stand (Pincha Mayurasana)",
+          poses: [
+            { name:"Forearm Stand (Pincha Mayurasana) — Full", hold:"2 min", desc:"Forearms parallel on mat. Kick both legs up. Hold at wall or freestanding. More shoulder flexibility than handstand. Elegant inversion.", demo:"https://www.youtube.com/results?search_query=forearm+stand+yoga+pincha+mayurasana" },
+            { name:"Scorpion Pose Prep (Vrschikasana)", hold:"5 attempts", desc:"From forearm stand, bend knees and try to reach feet toward head. Ultimate backbend-inversion combination.", demo:"https://www.youtube.com/results?search_query=scorpion+pose+yoga+preparation" },
+            { name:"Wheel × 5 deep holds", hold:"60 sec × 5", desc:"Building the backbend flexibility scorpion demands.", demo:"https://www.youtube.com/results?search_query=wheel+pose+yoga" },
+            { name:"Savasana", hold:"10 min", desc:"Phase 4 is intense. Rest completely.", demo:"https://www.youtube.com/results?search_query=savasana+yoga" },
+          ]
+        },
+        "Day 80": {
+          focus: "Phase 4 Complete — Handstand Freestanding",
+          poses: [
+            { name:"Freestanding Handstand Practice", hold:"20 min dedicated practice", desc:"Away from wall. Kick up, find balance, work the hollow body position. This takes months — be patient but persistent. Even 1 second freestanding is a major victory.", demo:"https://www.youtube.com/results?search_query=freestanding+handstand+yoga+tips" },
+            { name:"Full Inversion Sequence", hold:"Full sequence", desc:"Headstand 3 min → Shoulder Stand 3 min → Plow 2 min → Fish 2 min. Complete inversion sequence of a professional practitioner.", demo:"https://www.youtube.com/results?search_query=yoga+inversion+sequence" },
+            { name:"Splits both sides", hold:"3 min each", desc:"Flexibility maintenance — essential alongside strength work.", demo:"https://www.youtube.com/results?search_query=splits+yoga" },
+            { name:"Long Savasana", hold:"12 min", desc:"Phase 4 complete. You are an advanced yogi. 10 days remain to professional.", demo:"https://www.youtube.com/results?search_query=savasana+yoga" },
+          ]
+        },
+
+        // ══════════════════════════════════════════════════════
+        // PHASE 5 — PROFESSIONAL FLOW (Days 81–90)
+        // ══════════════════════════════════════════════════════
+        "Day 81": {
+          focus: "Phase 5 — Professional Practice Begins",
+          poses: [
+            { name:"Ashtanga Primary Series — Full", hold:"75 min", desc:"Complete Ashtanga Primary Series: Surya Namaskar A+B, full standing sequence, full seated sequence with all vinyasas, finishing sequence. This is the benchmark of a professional yoga practitioner.", demo:"https://www.youtube.com/results?search_query=ashtanga+yoga+primary+series+full+led+class" },
+            { name:"Savasana", hold:"15 min", desc:"Full primary series demands complete rest. Allow 15 minutes minimum.", demo:"https://www.youtube.com/results?search_query=savasana+yoga" },
+          ]
+        },
+        "Day 82": {
+          focus: "Advanced Backbends",
+          poses: [
+            { name:"Kapotasana (King Pigeon)", hold:"60 sec × 3", desc:"From kneeling, backbend deeply, hands reach for feet. Deepest backbend in primary series. Requires wheel as prerequisite.", demo:"https://www.youtube.com/results?search_query=kapotasana+yoga+king+pigeon" },
+            { name:"Eka Pada Raja Kapotasana", hold:"60 sec each", desc:"One-legged king pigeon. Front leg in pigeon, back leg bends, same-side hand holds foot. Combines hip opening and backbend.", demo:"https://www.youtube.com/results?search_query=eka+pada+raja+kapotasana+yoga" },
+            { name:"Wheel → Drop Back practice", hold:"5 attempts", desc:"Stand and drop back to wheel from standing. The professional transition. Requires courage and strength.", demo:"https://www.youtube.com/results?search_query=wheel+pose+drop+back+yoga" },
+            { name:"Child's Pose + Savasana", hold:"10 min", desc:"Full rest after intense backbend session.", demo:"https://www.youtube.com/results?search_query=savasana+yoga" },
+          ]
+        },
+        "Day 84": {
+          focus: "Lotus & Seated Mastery",
+          poses: [
+            { name:"Full Lotus (Padmasana)", hold:"10 min meditation", desc:"Both feet on opposite thighs. The seat of the Buddha. Requires months of hip opening. If not accessible, use half lotus. Meditate in this pose.", demo:"https://www.youtube.com/results?search_query=full+lotus+pose+yoga+padmasana" },
+            { name:"Tolasana — Scale Pose", hold:"20 sec × 5", desc:"In lotus, press hands down and lift entirely off ground. Extreme abdominal and arm strength.", demo:"https://www.youtube.com/results?search_query=tolasana+scale+pose+yoga" },
+            { name:"Bound Lotus (Baddha Padmasana)", hold:"2 min", desc:"In full lotus, reach arms behind back to hold opposite feet. Deep shoulder opening combined with lotus.", demo:"https://www.youtube.com/results?search_query=bound+lotus+yoga+baddha+padmasana" },
+            { name:"Savasana", hold:"10 min", desc:"Lotus practice is meditative. Close eyes in savasana and observe the stillness.", demo:"https://www.youtube.com/results?search_query=savasana+yoga" },
+          ]
+        },
+        "Day 86": {
+          focus: "Teaching-Level Flow",
+          poses: [
+            { name:"Create Your Own 60-Minute Flow", hold:"60 min", desc:"Design and practice your own sequence using all poses learned over 86 days. Include: warm-up, standing, balancing, backbends, twists, inversions, and savasana. This is what it means to have your own practice.", demo:"https://www.youtube.com/results?search_query=yoga+sequence+design+advanced" },
+            { name:"Headstand — Extended", hold:"5 min", desc:"Hold headstand for 5 continuous minutes. Breathe naturally. The mind becomes still in inversions.", demo:"https://www.youtube.com/results?search_query=headstand+yoga+5+minutes" },
+            { name:"Savasana", hold:"15 min", desc:"You are nearly professional. This rest is earned.", demo:"https://www.youtube.com/results?search_query=savasana+yoga" },
+          ]
+        },
+        "Day 88": {
+          focus: "Nadi Shodhana + Advanced Pranayama",
+          poses: [
+            { name:"Kapalabhati (Skull Shining Breath)", hold:"10 min", desc:"Short sharp exhales through nose, passive inhale. 120 rounds/minute. Clears sinuses, energises mind, heats the core. Advanced pranayama technique.", demo:"https://www.youtube.com/results?search_query=kapalabhati+pranayama+yoga" },
+            { name:"Bhramari (Humming Bee Breath)", hold:"10 min", desc:"Inhale deeply, exhale with long humming sound. Index fingers on ears. Profoundly calming. Used before meditation.", demo:"https://www.youtube.com/results?search_query=bhramari+pranayama+yoga" },
+            { name:"Silent Meditation in Lotus", hold:"20 min", desc:"No guidance. Sit in full or half lotus. Breathe naturally. Observe thoughts without following them. This is the ultimate purpose of all yoga.", demo:"https://www.youtube.com/results?search_query=silent+meditation+yoga" },
+          ]
+        },
+        "Day 89": {
+          focus: "Full Advanced Practice",
+          poses: [
+            { name:"Full Advanced Yoga Practice", hold:"90 min", desc:"Sun Sals × 10 → Full standing → Arm balances (Crow, Side Crow, Eight-Angle) → Backbends (Wheel, Kapotasana) → Inversions (Headstand, Forearm Stand, Shoulder Stand) → Splits → Lotus → Savasana. The complete journey.", demo:"https://www.youtube.com/results?search_query=advanced+yoga+practice+90+minutes" },
+            { name:"Savasana", hold:"20 min", desc:"You have one day left. Absorb everything you've built.", demo:"https://www.youtube.com/results?search_query=savasana+yoga" },
+          ]
+        },
+        "Day 90": {
+          focus: "🏆 Professional Yoga — Journey Complete",
+          poses: [
+            { name:"Morning Pranayama", hold:"15 min", desc:"Nadi Shodhana 5 min → Kapalabhati 5 min → Meditation 5 min. Begin your final day as a professional practitioner begins their day — with breath.", demo:"https://www.youtube.com/results?search_query=morning+pranayama+yoga" },
+            { name:"Your Full Yoga Practice", hold:"60-90 min", desc:"No guidance needed today. You know your practice. Flow through poses that feel right. This is your body, your breath, your practice. You've earned this.", demo:"https://www.youtube.com/results?search_query=advanced+yoga+practice" },
+            { name:"Final Savasana", hold:"20 min", desc:"90 days. You began as a beginner and end as a professional. The practice never ends — but you have the tools now. Namaste. 🙏", demo:"https://www.youtube.com/results?search_query=savasana+yoga+final+relaxation" },
+          ]
+        },
+
       }
     },
 
