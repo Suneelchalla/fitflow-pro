@@ -55,6 +55,7 @@ function switchAdminTab(tab, btn) {
   if (tab === 'feedback')  renderFeedbackList();
   if (tab === 'announce')  renderAdminAnnounce();
   if (tab === 'content')   renderContentHome();
+  if (tab === 'notify')    renderAdminNotify();
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -101,11 +102,26 @@ function renderUsersList(users) {
     return;
   }
   console.log('[FitFlow] Rendering ' + _cachedAdminUsers.length + ' users with search bar');
-  // Render search bar + filter chips + list
+  // Render search bar + filter chips + sort dropdown + CSV export + list
   container.innerHTML = `
     <div class="admin-user-controls">
-      <input id="admin-user-search" type="text" placeholder="🔍 Search by name or email…"
-        oninput="_filterAdminUsers()" class="admin-search-input">
+      <div class="admin-controls-row">
+        <input id="admin-user-search" type="text" placeholder="🔍 Search by name or email…"
+          oninput="_filterAdminUsers()" class="admin-search-input">
+        <div class="admin-controls-actions">
+          <select id="admin-user-sort" class="admin-sort-select" onchange="_setAdminUserSort(this.value)">
+            <option value="name-asc">Name (A→Z)</option>
+            <option value="name-desc">Name (Z→A)</option>
+            <option value="created-desc" selected>Newest signup</option>
+            <option value="created-asc">Oldest signup</option>
+            <option value="active-desc">Most active</option>
+            <option value="active-asc">Least active</option>
+            <option value="last-desc">Recently active</option>
+            <option value="last-asc">Inactive longest</option>
+          </select>
+          <button class="admin-pill-btn" onclick="_exportUsersCSV()" title="Export users to CSV">📥 CSV</button>
+        </div>
+      </div>
       <div class="admin-filter-chips">
         <button class="admin-chip active" data-filter="all"      onclick="_setAdminUserFilter('all',this)">All</button>
         <button class="admin-chip"        data-filter="active"   onclick="_setAdminUserFilter('active',this)">Active</button>
@@ -116,6 +132,104 @@ function renderUsersList(users) {
     </div>
     <div id="admin-users-rows"></div>`;
   _renderAdminUsersFiltered();
+}
+
+// Sort state
+let _adminUserSort = 'created-desc';
+
+function _setAdminUserSort(sortKey) {
+  _adminUserSort = sortKey;
+  _renderAdminUsersFiltered();
+}
+
+// Helper: get logs count for a user (cached for the session)
+function _userLogsCount(userId) {
+  const logs = (_adminDashboardData?.allLogs) || Store.getLogs() || [];
+  return logs.filter(l => l.userId === userId).length;
+}
+
+function _userLastActivity(userId) {
+  const logs = (_adminDashboardData?.allLogs) || Store.getLogs() || [];
+  const userLogs = logs.filter(l => l.userId === userId);
+  if (!userLogs.length) return '';
+  return userLogs.map(l => l.date || '').sort().reverse()[0];
+}
+
+// Apply sort to users array
+function _sortUsers(users) {
+  const sorted = [...users];
+  sorted.sort((a, b) => {
+    const aName = (a.name || '').toLowerCase();
+    const bName = (b.name || '').toLowerCase();
+    const aCreated = a.createdDate || '';
+    const bCreated = b.createdDate || '';
+    const aCount = _userLogsCount(a.id);
+    const bCount = _userLogsCount(b.id);
+    const aLast = _userLastActivity(a.id);
+    const bLast = _userLastActivity(b.id);
+    switch (_adminUserSort) {
+      case 'name-asc':     return aName.localeCompare(bName);
+      case 'name-desc':    return bName.localeCompare(aName);
+      case 'created-desc': return bCreated.localeCompare(aCreated);
+      case 'created-asc':  return aCreated.localeCompare(bCreated);
+      case 'active-desc':  return bCount - aCount;
+      case 'active-asc':   return aCount - bCount;
+      case 'last-desc':    return bLast.localeCompare(aLast);
+      case 'last-asc':     return aLast.localeCompare(bLast);
+      default: return 0;
+    }
+  });
+  return sorted;
+}
+
+// CSV export
+function _exportUsersCSV() {
+  if (!_cachedAdminUsers || !_cachedAdminUsers.length) {
+    showToast('No users to export', 'info');
+    return;
+  }
+  const rows = [
+    ['Name', 'Email', 'Role', 'Status', 'CreatedDate', 'CreatedBy', 'LastLogin', 'Workouts', 'LastActivity', 'IsGoogle']
+  ];
+  _cachedAdminUsers.forEach(u => {
+    const isGoogleUser = (u.id||'').startsWith('u_g_') || (u.createdBy||'').toLowerCase() === 'google';
+    rows.push([
+      u.name || '',
+      u.email || '',
+      (u.role || 'USER').toUpperCase(),
+      (u.status || 'ACTIVE').toUpperCase(),
+      u.createdDate || '',
+      u.createdBy || '',
+      u.lastLogin || '',
+      _userLogsCount(u.id),
+      _userLastActivity(u.id),
+      isGoogleUser ? 'YES' : 'NO',
+    ]);
+  });
+  _downloadCSV('fitflow-users-' + todayStr() + '.csv', rows);
+  showToast('CSV downloaded ✓', 'success');
+}
+
+// Generic CSV downloader (reusable for any data array)
+function _downloadCSV(filename, rows) {
+  const escape = (val) => {
+    const s = String(val == null ? '' : val);
+    if (s.includes(',') || s.includes('"') || s.includes('\n') || s.includes('\r')) {
+      return '"' + s.replace(/"/g, '""') + '"';
+    }
+    return s;
+  };
+  const csv = rows.map(r => r.map(escape).join(',')).join('\n');
+  // Add BOM for Excel UTF-8 compatibility
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 let _adminUserFilter = 'all';
@@ -160,6 +274,12 @@ function _renderAdminUsersFiltered() {
       <p>No users match this filter.</p></div>`;
     return;
   }
+
+  // Apply current sort
+  const sortedMatches = _sortUsers(matches);
+  // Use sortedMatches for rendering below
+  matches.length = 0;
+  matches.push(...sortedMatches);
 
   rows.innerHTML = `<div class="admin-user-count">${matches.length} ${matches.length === 1 ? 'user' : 'users'}</div>` + matches.map(u => {
     const role     = (u.role   || 'USER').toUpperCase().trim();
@@ -2664,6 +2784,70 @@ function _setUserDrillRange(range, btn) {
   _renderUserAnalytics();
 }
 
+
+// ── Activity Heatmap (admin version, uses _adminDashboardData) ────
+function _adminUserHeatmap(userId, weeks) {
+  weeks = weeks || 26;
+  const { allLogs, allRuns } = _adminDashboardData || { allLogs: [], allRuns: [] };
+  const userLogs = (allLogs||[]).filter(l => l.userId === userId);
+  const userRuns = (allRuns||[]).filter(r => r.userId === userId);
+  const dayCount = {};
+  [...userLogs, ...userRuns].forEach(l => {
+    if (l.date) dayCount[l.date] = (dayCount[l.date]||0) + 1;
+  });
+  const max = Math.max(1, ...Object.values(dayCount));
+
+  const today = new Date();
+  const totalDays = weeks * 7;
+  const cols = [];
+  let cursor = new Date(today);
+  cursor.setDate(today.getDate() - (totalDays - 1));
+  cursor.setDate(cursor.getDate() - cursor.getDay());
+
+  for (let w = 0; w < weeks + 2; w++) {
+    const week = [];
+    for (let d = 0; d < 7; d++) {
+      const dateStr = cursor.getFullYear() + '-' + String(cursor.getMonth()+1).padStart(2,'0') + '-' + String(cursor.getDate()).padStart(2,'0');
+      const future = cursor > today;
+      const count = dayCount[dateStr] || 0;
+      const intensity = future ? -1 : (count === 0 ? 0 : Math.min(4, Math.ceil(count / max * 4)));
+      week.push({ date: dateStr, count, intensity, future });
+      cursor.setDate(cursor.getDate() + 1);
+    }
+    cols.push(week);
+  }
+
+  const monthLabels = [];
+  let lastMonth = -1;
+  cols.forEach((col, i) => {
+    const firstDay = new Date(col[0].date);
+    if (!isNaN(firstDay.getTime())) {
+      const m = firstDay.getMonth();
+      if (m !== lastMonth) {
+        monthLabels.push({ idx: i, label: ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m] });
+        lastMonth = m;
+      }
+    }
+  });
+
+  const dayLabels = ['', 'Mon', '', 'Wed', '', 'Fri', ''];
+
+  return `
+    <div class="hm-wrapper">
+      <div class="hm-months">
+        ${monthLabels.map(m => `<div class="hm-month-label" style="left:${m.idx * 14}px">${m.label}</div>`).join('')}
+      </div>
+      <div class="hm-body">
+        <div class="hm-day-labels">
+          ${dayLabels.map(d => `<div class="hm-day-label">${d}</div>`).join('')}
+        </div>
+        <div class="hm-grid">
+          ${cols.map(col => `<div class="hm-col">${col.map(day => `<div class="hm-cell hm-cell-${day.future ? 'future' : day.intensity}" title="${day.future ? day.date + ' (future)' : day.date + ': ' + day.count + ' session' + (day.count === 1 ? '' : 's')}"></div>`).join('')}</div>`).join('')}
+        </div>
+      </div>
+    </div>`;
+}
+
 function _renderUserAnalytics() {
   if (!_adminDashboardData || !_userDrillId) return;
   const { users, allLogs, allRuns } = _adminDashboardData;
@@ -2888,6 +3072,15 @@ function _renderUserAnalytics() {
       </div>
     </div>
 
+    <!-- Activity heatmap (6-month view) -->
+    <div class="dash-card" style="margin-bottom:14px">
+      <div class="dash-card-head" style="margin-bottom:10px">
+        <h3 class="dash-card-title">🟩 Activity Heatmap</h3>
+        <span class="dash-card-sub">Last 6 months</span>
+      </div>
+      ${_adminUserHeatmap(u.id, 26)}
+    </div>
+
     <!-- 2-column: Module breakdown + Day-of-week -->
     <div class="dash-grid dash-grid-2" style="margin-bottom:14px">
       <div class="dash-card">
@@ -3013,4 +3206,196 @@ function _modName(mod) {
 function _modIcon(mod) {
   const map = { calisthenics:'💪', cardio:'❤️', yoga:'🧘', stretch:'🤸', stretching:'🤸', custom:'⭐', running:'🏃', run:'🏃' };
   return map[mod] || '🏋️';
+}
+
+
+// ════════════════════════════════════════════════════════════════
+// PUSH NOTIFICATIONS — ADMIN COMPOSE & SEND
+// ════════════════════════════════════════════════════════════════
+
+async function renderAdminNotify() {
+  const container = document.getElementById('admin-notify-content');
+  if (!container) return;
+
+  // Render compose form
+  container.innerHTML = `
+    <div class="notify-grid">
+      <!-- LEFT: Compose form -->
+      <div class="notify-compose">
+        <div class="notify-section-head">
+          <h3>✏️ Compose Notification</h3>
+          <span class="notify-help">Sends to all subscribed users instantly</span>
+        </div>
+
+        <label class="notify-label">Title <span class="notify-counter" id="notify-title-counter">0/80</span></label>
+        <input id="notify-title" class="notify-input" maxlength="80" placeholder="e.g. New workout plan available! 🎉" oninput="_updateNotifyPreview()">
+
+        <label class="notify-label">Message <span class="notify-counter" id="notify-msg-counter">0/240</span></label>
+        <textarea id="notify-message" class="notify-textarea" maxlength="240" rows="4" placeholder="Write a short, motivating message…" oninput="_updateNotifyPreview()"></textarea>
+
+        <div class="notify-templates">
+          <div class="notify-templates-label">Quick templates:</div>
+          <div class="notify-template-chips">
+            <button class="admin-chip" onclick="_applyNotifyTemplate('motivation')">💪 Motivation</button>
+            <button class="admin-chip" onclick="_applyNotifyTemplate('reminder')">⏰ Reminder</button>
+            <button class="admin-chip" onclick="_applyNotifyTemplate('feature')">✨ New Feature</button>
+            <button class="admin-chip" onclick="_applyNotifyTemplate('challenge')">🎯 Challenge</button>
+          </div>
+        </div>
+
+        <div class="notify-actions">
+          <button class="btn btn-primary" onclick="_sendAdminNotification()" id="notify-send-btn">
+            🚀 Send to All Users
+          </button>
+          <button class="btn btn-ghost" onclick="_clearNotifyForm()">Clear</button>
+        </div>
+      </div>
+
+      <!-- RIGHT: Live preview -->
+      <div class="notify-preview-col">
+        <div class="notify-section-head">
+          <h3>👁️ Preview</h3>
+          <span class="notify-help">How it appears on a phone</span>
+        </div>
+        <div class="notify-phone">
+          <div class="notify-phone-bar">
+            <span style="font-size:10px;font-weight:600">10:30 AM</span>
+            <span style="font-size:10px">📶 ●●● 84%</span>
+          </div>
+          <div class="notify-phone-content">
+            <div class="notify-card">
+              <div class="notify-card-head">
+                <div class="notify-app-icon">💪</div>
+                <div style="flex:1">
+                  <div style="font-size:11px;color:#999;font-weight:500">FITFLOW PRO · now</div>
+                </div>
+              </div>
+              <div class="notify-card-title" id="notify-prev-title">Title appears here</div>
+              <div class="notify-card-body" id="notify-prev-body">Your message body will appear here as you type…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Recent send history -->
+    <div class="notify-history" id="notify-history">
+      <div class="notify-section-head" style="padding:0 0 14px">
+        <h3>📜 Recent Sends</h3>
+        <span class="notify-help">Audit trail of admin-sent notifications</span>
+      </div>
+      <div id="notify-history-list">
+        <div style="color:var(--text3);font-size:13px;padding:14px;text-align:center">Loading history…</div>
+      </div>
+    </div>
+  `;
+
+  // Load send history
+  _loadNotifyHistory();
+}
+
+const _NOTIFY_TEMPLATES = {
+  motivation: {
+    title: 'You got this! 💪',
+    message: 'Every workout counts. Take 15 minutes for yourself today and feel amazing afterwards.',
+  },
+  reminder: {
+    title: 'Time to move! ⏰',
+    message: "Haven't logged a session today? A short workout is better than none. Open FitFlow now.",
+  },
+  feature: {
+    title: 'New feature unlocked! ✨',
+    message: 'Check out the latest update in FitFlow Pro. Open the app to explore.',
+  },
+  challenge: {
+    title: 'Weekly challenge starts now 🎯',
+    message: 'Complete 5 workouts this week to earn a special badge. Are you in?',
+  },
+};
+
+function _applyNotifyTemplate(key) {
+  const t = _NOTIFY_TEMPLATES[key];
+  if (!t) return;
+  const titleEl = document.getElementById('notify-title');
+  const msgEl   = document.getElementById('notify-message');
+  if (titleEl) titleEl.value = t.title;
+  if (msgEl)   msgEl.value   = t.message;
+  _updateNotifyPreview();
+}
+
+function _updateNotifyPreview() {
+  const title = (document.getElementById('notify-title')?.value || '').trim();
+  const msg   = (document.getElementById('notify-message')?.value || '').trim();
+  document.getElementById('notify-prev-title').textContent = title || 'Title appears here';
+  document.getElementById('notify-prev-body').textContent  = msg || 'Your message body will appear here as you type…';
+  document.getElementById('notify-title-counter').textContent = title.length + '/80';
+  document.getElementById('notify-msg-counter').textContent   = msg.length + '/240';
+}
+
+function _clearNotifyForm() {
+  document.getElementById('notify-title').value = '';
+  document.getElementById('notify-message').value = '';
+  _updateNotifyPreview();
+}
+
+async function _sendAdminNotification() {
+  const title = (document.getElementById('notify-title')?.value || '').trim();
+  const msg   = (document.getElementById('notify-message')?.value || '').trim();
+
+  if (!title) { showToast('Title is required', 'error'); return; }
+  if (!msg)   { showToast('Message is required', 'error'); return; }
+
+  const btn = document.getElementById('notify-send-btn');
+  if (!confirm(`Send this push to ALL subscribed users now?\n\nTitle: ${title}\n\nMessage: ${msg}`)) return;
+
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+
+  try {
+    const res = await Sheets.post('sendAdminPush', {
+      title,
+      message: msg,
+      sentBy: APP.currentUser?.email || 'admin',
+    });
+    if (res?.success) {
+      showToast(`✅ Sent to ${res.recipients || 0} subscribers!`, 'success');
+      _clearNotifyForm();
+      _loadNotifyHistory();
+    } else {
+      showToast('Failed: ' + (res?.error || 'unknown'), 'error');
+    }
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '🚀 Send to All Users';
+  }
+}
+
+async function _loadNotifyHistory() {
+  const list = document.getElementById('notify-history-list');
+  if (!list) return;
+  try {
+    const res = await Sheets.get('getAdminPushLog');
+    const history = res?.history || [];
+    if (!history.length) {
+      list.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:14px;text-align:center">No notifications sent yet</div>';
+      return;
+    }
+    list.innerHTML = history.map(h => {
+      const dt = h.sentAt ? new Date(h.sentAt).toLocaleString('en-IN', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit', hour12:true }) : '';
+      return `
+        <div class="notify-history-item">
+          <div class="notify-history-meta">
+            <span class="notify-history-date">${dt}</span>
+            <span class="notify-history-recipients">📤 ${h.recipients} recipients</span>
+            ${h.sentBy ? `<span class="notify-history-sender">by ${h.sentBy}</span>` : ''}
+          </div>
+          <div class="notify-history-title">${h.title}</div>
+          <div class="notify-history-body">${h.message}</div>
+        </div>`;
+    }).join('');
+  } catch (e) {
+    list.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:14px;text-align:center">Could not load history</div>';
+  }
 }
