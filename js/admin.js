@@ -430,26 +430,18 @@ async function _collectAndSave() {
   const { module: moduleId, section } = AdminEdit;
 
   if (section === 'exercises') {
-    // Yoga: separate save handler
-    if (moduleId === 'yoga') { await _collectAndSaveYoga(); return; }
-
     const days   = getWeekDays();
-    const gymDayLabels = {
-      Monday:    'Monday — Chest 🫁',    Tuesday:   'Tuesday — Shoulders 🏋️',
-      Wednesday: 'Wednesday — Lats / Back 🦾', Thursday: 'Thursday — Biceps 💪',
-      Friday:    'Friday — Triceps 🔱',  Saturday:  'Saturday — Legs / Squats 🦵',
-    };
     const result = { days: {} };
-    if (moduleId === 'gym') result.dayLabels = gymDayLabels;
     days.forEach(day => {
       const dayEl = document.querySelector(`[data-day="${day}"]`);
       if (!dayEl) {
+        // Day not in DOM — always use APP_DATA_DEFAULT as the ground truth
         const _D = window.APP_DATA_DEFAULT || window.APP_DATA;
         result.days[day] = _D.modules?.[moduleId]?.days?.[day] || [];
         return;
       }
       result.days[day] = Array.from(dayEl.querySelectorAll('.ex-row')).map(row => {
-        const isHoldBased = moduleId === 'stretching';
+        const isHoldBased = moduleId === 'yoga' || moduleId === 'stretching';
         if (isHoldBased) {
           const monthVal = _text(row, 'month');
           return {
@@ -463,13 +455,12 @@ async function _collectAndSave() {
           };
         }
         return {
-          name:     _text(row, 'name'),
-          sets:     parseInt(_text(row, 'sets')) || 3,
-          reps:     _text(row, 'reps'),
-          desc:     _text(row, 'desc'),
-          demo:     _text(row, 'demo'),
-          image:    _text(row, 'image'),
-          _section: 'main',
+          name:  _text(row, 'name'),
+          sets:  parseInt(_text(row, 'sets')) || 3,
+          reps:  _text(row, 'reps'),
+          desc:  _text(row, 'desc'),
+          demo:  _text(row, 'demo'),
+          image: _text(row, 'image'),
         };
       });
     });
@@ -532,127 +523,6 @@ async function _collectAndSave() {
 
 function _text(el, field)   { return (el.querySelector(`[data-field="${field}"]`)?.innerText || '').trim(); }
 function _innerText(id)     { return (document.getElementById(id)?.innerText || '').trim(); }
-// ── YOGA PROGRESSIVE EDITOR ───────────────────────────────────────
-function renderYogaProgressiveEditor(body) {
-  const yogaData = (window.APP_DATA_DEFAULT || window.APP_DATA).modules?.yoga;
-  const saved    = Store.getContent('exercises_yoga') || {};
-  const schedule = saved.schedule || yogaData?.schedule || {};
-  const phases   = yogaData?.phases || [];
-  const allDays  = Object.keys(schedule).sort((a,b) => parseInt(a.replace('Day ','')) - parseInt(b.replace('Day ','')));
-
-  body.innerHTML = `
-    <div style="font-size:13px;color:var(--text2);padding:0 16px 12px;line-height:1.5">
-      ✏️ <strong>Tap any field</strong> to edit yoga poses. Changes sync to all users after saving.<br>
-      📅 <strong>${allDays.length} progressive days</strong> — beginner to professional.
-    </div>
-    ${phases.map(phase => {
-      const phaseDays = allDays.filter(d => { const n=parseInt(d.replace('Day ','')); return n>=phase.from && n<=phase.to; });
-      return `
-        <div style="margin-bottom:16px;">
-          <div style="padding:12px 16px;background:${phase.color}22;border:1px solid ${phase.color}44;border-radius:10px;margin:0 16px 8px;display:flex;align-items:center;gap:10px">
-            <span style="width:10px;height:10px;border-radius:50%;background:${phase.color};flex-shrink:0"></span>
-            <span style="font-weight:700;font-size:14px;color:${phase.color}">${phase.label}</span>
-            <span style="font-size:12px;color:var(--text3);margin-left:auto">Days ${phase.from}–${phase.to}</span>
-          </div>
-          <div style="padding:0 16px">
-          ${phaseDays.map(dayKey => {
-            const dayData = schedule[dayKey] || {};
-            const poses   = dayData.poses || [];
-            return `
-              <div style="margin-bottom:6px;border:1px solid var(--border);border-radius:10px;overflow:hidden">
-                <div style="padding:10px 16px;background:rgba(103,58,183,0.15);display:flex;justify-content:space-between;align-items:center;cursor:pointer" onclick="toggleYogaDayEditor('${dayKey.replace(' ','')}')">
-                  <div>
-                    <span style="font-weight:700;font-size:13px;color:#ce93d8">${dayKey}</span>
-                    <span style="font-size:11px;color:var(--text3);margin-left:8px">${dayData.focus || ''}</span>
-                  </div>
-                  <span style="font-size:12px;color:var(--text3)">${poses.length} poses ▾</span>
-                </div>
-                <div id="yoga-day-editor-${dayKey.replace(' ','')}" style="display:none;padding:0 12px 8px">
-                  <div style="margin:8px 0 4px;">
-                    <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;margin-bottom:3px">Day Focus</div>
-                    <div class="editable" data-yoga-day="${dayKey}" data-field="focus" contenteditable="true" style="font-size:13px;font-weight:600;color:#ce93d8">${dayData.focus || ''}</div>
-                  </div>
-                  <div data-yoga-poses="${dayKey}">
-                    ${poses.map((pose,i) => _yogaPoseCard(pose,i,dayKey)).join('')}
-                  </div>
-                  <button class="add-exercise-btn" onclick="addYogaPose('${dayKey}')" style="border-color:rgba(103,58,183,0.4);color:#ce93d8">+ Add Pose to ${dayKey}</button>
-                </div>
-              </div>`;
-          }).join('')}
-          </div>
-        </div>`;
-    }).join('')}`;
-  activateEditing(body);
-}
-
-function toggleYogaDayEditor(dayKeyNoSpace) {
-  const el = document.getElementById('yoga-day-editor-' + dayKeyNoSpace);
-  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
-}
-
-function _yogaPoseCard(pose, idx, dayKey) {
-  return `
-    <div class="exercise-card ex-row" data-idx="${idx}" style="margin:8px 0;position:relative;border-color:rgba(103,58,183,0.3)">
-      <button class="delete-ex-btn" onclick="this.closest('.ex-row').remove();markDirty()" title="Delete">✕</button>
-      <div class="exercise-body" style="padding:12px">
-        <div style="margin-bottom:8px">
-          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;margin-bottom:3px">Pose Name</div>
-          <div class="exercise-name editable" data-field="name" contenteditable="true">${pose.name || ''}</div>
-        </div>
-        <div style="margin-bottom:8px">
-          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;margin-bottom:3px">Hold / Duration</div>
-          <div class="editable" data-field="hold" contenteditable="true" style="font-weight:600;color:#ce93d8">${pose.hold || ''}</div>
-        </div>
-        <div style="margin-bottom:8px">
-          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;margin-bottom:3px">Description</div>
-          <div class="editable-block editable" data-field="desc" contenteditable="true" style="font-size:13px;color:var(--text2);line-height:1.6">${pose.desc || ''}</div>
-        </div>
-        <div>
-          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;margin-bottom:3px">Demo Link</div>
-          <div class="editable" data-field="demo" contenteditable="true" style="font-size:12px;color:var(--g5);word-break:break-all">${pose.demo || ''}</div>
-        </div>
-      </div>
-    </div>`;
-}
-
-function addYogaPose(dayKey) {
-  const container = document.querySelector(`[data-yoga-poses="${dayKey}"]`);
-  if (!container) return;
-  const div = document.createElement('div');
-  div.innerHTML = _yogaPoseCard({ name:'New Pose', hold:'60 sec', desc:'Enter description.', demo:'' }, 999, dayKey);
-  const card = div.firstElementChild;
-  activateEditing(card);
-  container.appendChild(card);
-  markDirty();
-  card.querySelector('[data-field="name"]')?.focus();
-}
-
-async function _collectAndSaveYoga() {
-  const yogaData = (window.APP_DATA_DEFAULT || window.APP_DATA).modules?.yoga;
-  const result   = { schedule: {}, phases: yogaData?.phases || [] };
-
-  document.querySelectorAll('[data-yoga-poses]').forEach(container => {
-    const dayKey  = container.getAttribute('data-yoga-poses');
-    if (!dayKey) return;
-    const focusEl = document.querySelector(`[data-yoga-day="${dayKey}"][data-field="focus"]`);
-    const focus   = (focusEl?.innerText || '').trim();
-    const poses   = Array.from(container.querySelectorAll('.ex-row')).map(row => ({
-      name: _text(row, 'name'), hold: _text(row, 'hold'),
-      desc: _text(row, 'desc'), demo: _text(row, 'demo'),
-    }));
-    result.schedule[dayKey] = { focus, poses };
-  });
-
-  const origSchedule = yogaData?.schedule || {};
-  Object.keys(origSchedule).forEach(dayKey => {
-    if (!result.schedule[dayKey]) result.schedule[dayKey] = origSchedule[dayKey];
-  });
-
-  Store.setContent('exercises_yoga', result);
-  if (window.APP_DATA?.modules?.yoga) window.APP_DATA.modules.yoga.schedule = result.schedule;
-  if (window.APP_DATA_DEFAULT?.modules?.yoga) window.APP_DATA_DEFAULT.modules.yoga.schedule = result.schedule;
-  await Sheets.post('saveContent', { key: 'exercises_yoga', value: result });
-}
 
 // ── ACTIVATE INLINE EDITING ───────────────────────────────────────
 function activateEditing(container) {
@@ -670,38 +540,25 @@ function activateEditing(container) {
 // EXERCISE EDITOR
 // ════════════════════════════════════════════════════════════════
 function renderExerciseEditor(moduleId, body) {
-  // Yoga uses progressive Day 1-90 — special renderer
-  if (moduleId === 'yoga') { renderYogaProgressiveEditor(body); return; }
-
   const days = getWeekDays();
-  const gymDayLabels = {
-    Monday:    'Monday — Chest 🫁',
-    Tuesday:   'Tuesday — Shoulders 🏋️',
-    Wednesday: 'Wednesday — Lats / Back 🦾',
-    Thursday:  'Thursday — Biceps 💪',
-    Friday:    'Friday — Triceps 🔱',
-    Saturday:  'Saturday — Legs / Squats 🦵',
-  };
   body.innerHTML = `
     <div style="font-size:13px;color:var(--text2);padding:0 16px 12px;line-height:1.5">
       ✏️ <strong>Tap any field</strong> to edit. Applies to all users after saving.
     </div>
     ${days.map(day => {
+      // Use APP_DATA_DEFAULT (immutable backup from data.js) as ground truth
+      // so Sheets sync can never wipe the default exercises
       const defaults   = window.APP_DATA_DEFAULT || window.APP_DATA;
       const appDefault = defaults.modules?.[moduleId]?.days?.[day] || [];
       const saved      = Store.getContent('exercises_' + moduleId);
       const savedDay   = saved?.days?.[day] || [];
+      // Only use Sheets saved version if admin explicitly added MORE exercises
       const exercises  = savedDay.length > appDefault.length ? savedDay : appDefault;
-      const isGym      = moduleId === 'gym';
-      const dayTitle   = isGym ? (gymDayLabels[day] || day) : ('📅 ' + day);
-      const dayBg      = isGym
-        ? 'linear-gradient(135deg,rgba(46,125,70,0.3),rgba(30,100,50,0.2))'
-        : 'rgba(46,125,70,0.15)';
       return `
         <div style="margin-bottom:8px">
-          <div style="padding:10px 16px;background:${dayBg};font-weight:700;font-size:14px;
-            display:flex;justify-content:space-between;align-items:center;border-radius:10px 10px 0 0">
-            <span>${dayTitle}</span>
+          <div style="padding:10px 16px;background:rgba(46,125,70,0.15);font-weight:700;font-size:14px;
+            display:flex;justify-content:space-between;align-items:center">
+            <span>📅 ${day}</span>
             <span style="font-size:12px;color:var(--text3)">${exercises.length} exercises</span>
           </div>
           <div data-day="${day}" style="padding:0 16px">
@@ -781,10 +638,10 @@ function addExercise(day) {
   if (!container) return;
   const addBtn = container.querySelector('.add-exercise-btn');
   const div    = document.createElement('div');
-  const isHoldBased = AdminEdit.module === 'stretching';
+  const isHoldBased = AdminEdit.module === 'yoga' || AdminEdit.module === 'stretching';
   const newEx  = isHoldBased
-    ? { name: 'New Stretch', hold: '30 sec', rounds: 1, desc: 'Enter description.', demo: '', image: '🤸' }
-    : { name: 'New Exercise', sets: 3, reps: '10 reps', desc: 'Enter description.', demo: '', image: '', _section: 'main' };
+    ? { name: 'New Pose', hold: '30 sec', rounds: 1, desc: 'Enter description.', demo: '', image: AdminEdit.module === 'yoga' ? '🧘' : '🤸' }
+    : { name: 'New Exercise', sets: 3, reps: '10 reps', desc: 'Enter description.', demo: '', image: '' };
   div.innerHTML = _exerciseCard(newEx, 999, day);
   const card = div.firstElementChild;
   activateEditing(card);
@@ -1309,34 +1166,124 @@ async function renderAdminCustomWorkouts() {
   const byUser = {};
   allWorkouts.forEach(w => {
     const key = w.userId || 'unknown';
-    if (!byUser[key]) byUser[key] = { email: w.email || w.userId, workouts: [] };
+    if (!byUser[key]) byUser[key] = { email: w.email || w.userId, name: w.name || '', workouts: [] };
     byUser[key].workouts.push(w);
   });
+  // Try to get user names from cached users list
+  try {
+    const allUsers = Store.get('ff_admin_users', []);
+    allUsers.forEach(u => { if (byUser[u.id]) byUser[u.id].name = u.name || u.email; });
+  } catch {}
 
-  container.innerHTML = Object.entries(byUser).map(([userId, group]) => {
-    const userHeader = `<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin:12px 0 6px">${group.email}</div>`;
-    const workoutCards = group.workouts.map(w => {
-      const completions = allLogs.filter(l => l.userId === w.userId && l.module === 'custom_' + w.id).length;
+  const DIFF_COLORS_A = { Beginner:'#43a05a', Intermediate:'#f0c040', Advanced:'#e53935' };
+  const CAT_EMOJIS_A  = { Strength:'🏋️', Cardio:'🏃', HIIT:'⚡', 'Yoga/Mobility':'🧘', Sports:'⚽', Circuit:'🔄', Custom:'✨' };
+
+  // Summary stats
+  const totalWorkouts    = allWorkouts.length;
+  const totalCompletions = allWorkouts.reduce((a,w) => a + allLogs.filter(l => l.userId===w.userId && l.module==='custom_'+w.id).length, 0);
+  const uniqueUsers      = Object.keys(byUser).length;
+  const catBreakdown     = {};
+  allWorkouts.forEach(w => { const c=w.category||'Custom'; catBreakdown[c]=(catBreakdown[c]||0)+1; });
+
+  container.innerHTML = `
+    <!-- Summary stats -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:16px">
+      <div class="stat-card"><div class="stat-val">${uniqueUsers}</div><div class="stat-label">Users</div></div>
+      <div class="stat-card"><div class="stat-val">${totalWorkouts}</div><div class="stat-label">Workouts</div></div>
+      <div class="stat-card"><div class="stat-val">${totalCompletions}</div><div class="stat-label">Sessions</div></div>
+    </div>
+
+    <!-- Category breakdown -->
+    <div class="card card-sm" style="margin-bottom:16px">
+      <div class="section-title" style="margin-bottom:8px">By Category</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px">
+        ${Object.entries(catBreakdown).map(([cat,count]) => `
+          <span style="font-size:12px;padding:4px 12px;border-radius:50px;background:var(--bg3);color:var(--text2)">
+            ${CAT_EMOJIS_A[cat]||'💪'} ${cat} <strong style="color:var(--g5)">${count}</strong>
+          </span>`).join('')}
+      </div>
+    </div>
+
+    <!-- Per user workouts -->
+    ${Object.entries(byUser).map(([userId, group]) => {
+      const userLogs = allLogs.filter(l => l.userId === userId);
       return `
-        <div class="card card-sm" style="margin-bottom:8px">
-          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
-            <div>
-              <div style="font-weight:700;font-size:15px">${w.name}</div>
-              <div style="font-size:12px;color:var(--text3)">${w.exercises?.length || 0} exercises · Created: ${w.createdDate||'—'}</div>
+        <div style="margin-bottom:20px">
+          <!-- User header -->
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:linear-gradient(135deg,rgba(46,125,70,0.15),rgba(30,100,50,0.08));border:1px solid rgba(46,125,70,0.25);border-radius:10px;margin-bottom:8px">
+            <div style="width:34px;height:34px;border-radius:50%;background:linear-gradient(135deg,var(--g2),var(--g4));display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;flex-shrink:0">
+              ${(group.email||'?').charAt(0).toUpperCase()}
             </div>
-            <div style="text-align:right">
-              <div style="font-family:var(--font-display);font-size:24px;color:var(--g5)">${completions}</div>
-              <div style="font-size:11px;color:var(--text3)">sessions</div>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:13px;font-weight:700;color:var(--text)">${group.name||group.email}</div>
+              <div style="font-size:11px;color:var(--text3)">${group.email} · ${group.workouts.length} workout${group.workouts.length!==1?'s':''} · ${userLogs.length} total sessions</div>
             </div>
+            <span class="badge badge-green">${group.workouts.length}</span>
           </div>
-          <div style="display:flex;flex-wrap:wrap;gap:6px">
-            ${(w.exercises||[]).slice(0,6).map(e => `<span style="font-size:12px;background:var(--bg3);color:var(--text2);padding:2px 10px;border-radius:50px">${e.name}</span>`).join('')}
-            ${(w.exercises||[]).length > 6 ? `<span style="font-size:12px;color:var(--text3);padding:2px 6px">+${w.exercises.length - 6} more</span>` : ''}
-          </div>
+
+          <!-- Workout cards for this user -->
+          ${group.workouts.map(w => {
+            const completions = allLogs.filter(l => l.userId===w.userId && l.module==='custom_'+w.id).length;
+            const lastLog     = allLogs.filter(l => l.userId===w.userId && l.module==='custom_'+w.id).sort((a,b)=>(b.date||'').localeCompare(a.date||''))[0];
+            const diff        = w.difficulty || '';
+            const diffColor   = DIFF_COLORS_A[diff] || 'var(--text3)';
+            const catEmoji    = CAT_EMOJIS_A[w.category] || '💪';
+            const hasDays     = w.days && w.days.length > 0;
+
+            return `
+              <div class="card card-sm" style="margin-bottom:8px;margin-left:8px;border-left:3px solid var(--g3)">
+                <!-- Card header -->
+                <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:8px">
+                  <div style="flex:1;min-width:0">
+                    <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+                      <span style="font-size:15px">${catEmoji}</span>
+                      <span style="font-weight:700;font-size:15px">${w.name}</span>
+                    </div>
+                    <div style="display:flex;gap:5px;flex-wrap:wrap">
+                      ${diff?`<span style="font-size:10px;font-weight:600;padding:2px 8px;border-radius:50px;background:${diffColor}22;color:${diffColor};border:1px solid ${diffColor}44">${diff}</span>`:''}
+                      ${w.category?`<span style="font-size:10px;padding:2px 8px;border-radius:50px;background:var(--bg3);color:var(--text3)">${w.category}</span>`:''}
+                      ${w.goal?`<span style="font-size:10px;padding:2px 8px;border-radius:50px;background:var(--bg3);color:var(--text3)">🎯 ${w.goal}</span>`:''}
+                    </div>
+                  </div>
+                  <div style="text-align:right;flex-shrink:0">
+                    <div style="font-family:var(--font-display);font-size:26px;color:var(--g5);line-height:1">${completions}</div>
+                    <div style="font-size:10px;color:var(--text3)">sessions</div>
+                  </div>
+                </div>
+
+                <!-- Scheduled days -->
+                ${hasDays?`<div style="display:flex;gap:4px;margin-bottom:8px">
+                  ${['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].map(d=>`
+                    <span style="font-size:10px;font-weight:600;padding:2px 6px;border-radius:5px;
+                      background:${w.days.includes(d)?'rgba(46,125,70,0.25)':'var(--bg3)'};
+                      color:${w.days.includes(d)?'var(--g5)':'var(--text3)'}">${d}</span>`).join('')}
+                </div>`:''}
+
+                <!-- Exercise list -->
+                <div style="margin-bottom:8px">
+                  <div style="font-size:10px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px">${w.exercises?.length||0} Exercises</div>
+                  <div style="display:flex;flex-wrap:wrap;gap:5px">
+                    ${(w.exercises||[]).map(e=>`
+                      <span style="font-size:11px;background:var(--bg3);color:var(--text2);padding:2px 9px;border-radius:50px">
+                        ${e.name}${e.sets?` · ${e.sets}×${e.reps||''}`: ''}
+                      </span>`).join('')}
+                  </div>
+                </div>
+
+                <!-- Notes -->
+                ${w.notes?`<div style="font-size:12px;color:var(--text3);padding:8px 10px;background:var(--bg3);border-radius:8px;margin-bottom:8px;line-height:1.5">📝 ${w.notes}</div>`:''}
+
+                <!-- Footer -->
+                <div style="display:flex;gap:12px;font-size:11px;color:var(--text3)">
+                  <span>📅 Created: ${w.createdDate||'—'}</span>
+                  ${lastLog?`<span>🏆 Last done: ${lastLog.date||'—'}</span>`:'<span>🏆 Never done</span>'}
+                  ${w.updatedDate && w.updatedDate!==w.createdDate?`<span>✏️ Updated: ${w.updatedDate}</span>`:''}
+                </div>
+              </div>`;
+          }).join('')}
         </div>`;
-    }).join('');
-    return userHeader + workoutCards;
-  }).join('');
+    }).join('')}
+  `;
 }
 
 // ════════════════════════════════════════════════════════════════
