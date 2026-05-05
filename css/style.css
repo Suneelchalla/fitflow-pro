@@ -757,3 +757,16 @@ textarea.form-input { resize: vertical; min-height: 90px; line-height: 1.5; }
   padding: 4px 0 8px;
   letter-spacing: 0.03em;
 }
+
+/* ── CUSTOM WORKOUT CHIPS ───────────────────────────────────────── */
+.cw-chip {
+  padding: 6px 14px; border-radius: 50px; font-size: 12px; font-weight: 600;
+  background: var(--surface); color: var(--text3);
+  border: 1.5px solid var(--border); cursor: pointer; transition: all 0.2s;
+  white-space: nowrap;
+}
+.cw-chip-active {
+  background: rgba(46,125,70,0.2); color: var(--g5);
+  border-color: var(--g4);
+}
+.cw-chip:active { transform: scale(0.95); }
