@@ -3,21 +3,21 @@
 // Updated for PWABuilder / Play Store compatibility
 // ════════════════════════════════════════════════════════════════
 
-const CACHE = 'fitflow-v50';
+const CACHE = 'fitflow-v51';
 const ASSETS = [
   './',
   './index.html',
   './css/style.css',
-  './js/data.js?v=50',
-  './js/data-cali.js?v=50',
-  './js/app.js?v=50',
-  './js/auth.js?v=50',
-  './js/dashboard.js?v=50',
-  './js/running.js?v=50',
-  './js/admin.js?v=50',
-  './push.js?v=50',
-  './js/custom-workouts.js?v=50',
-  './js/weekly-report.js?v=50',
+  './js/data.js',
+  './js/data-cali.js',
+  './js/app.js',
+  './js/auth.js',
+  './js/dashboard.js',
+  './js/running.js',
+  './js/admin.js',
+  './push.js',
+  './js/custom-workouts.js',
+  './js/weekly-report.js',
   './manifest.json',
   './privacy.html',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
