@@ -1096,6 +1096,124 @@ window.addEventListener('DOMContentLoaded', function() {
   .dash-total-val { font-size: 22px; }
 }
 
+
+
+/* Interactive dashboard additions */
+.dash-clickable {
+  cursor: pointer;
+  transition: background .15s, transform .1s, border-color .15s;
+}
+.dash-clickable:hover {
+  border-color: rgba(67,160,90,0.3) !important;
+  background: rgba(67,160,90,0.04) !important;
+}
+.dash-clickable:active {
+  transform: scale(0.99);
+}
+
+/* Range tabs (7d / 30d / 90d / 1y) */
+
+
+/* Segmented control style — cleaner like iOS/macOS */
+.dash-range-tabs {
+  display: inline-flex;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 4px;
+  gap: 0;
+  position: relative;
+}
+.dash-range-tab {
+  background: transparent;
+  border: none;
+  color: var(--text3);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 16px;
+  border-radius: 7px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .2s cubic-bezier(0.4,0,0.2,1);
+  letter-spacing: 0;
+  min-width: 44px;
+  text-align: center;
+  position: relative;
+  z-index: 1;
+}
+.dash-range-tab:hover:not(.active) {
+  color: var(--text2);
+  background: rgba(255,255,255,0.03);
+}
+.dash-range-tab.active {
+  background: var(--g4);
+  color: white;
+  box-shadow: 0 2px 8px rgba(67,160,90,0.25);
+  transform: translateY(-0.5px);
+}
+.dash-range-tab.active:hover {
+  background: var(--g4);
+  color: white;
+}
+
+/* Range bar containing label + tabs */
+.dash-range-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 12px 16px;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  flex-wrap: wrap;
+}
+.dash-range-label {
+  font-size: 13px;
+  color: var(--text2);
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+/* Sparkline info row */
+.dash-spark-info {
+  font-size: 12px;
+  color: var(--text2);
+  margin-bottom: 6px;
+}
+.dash-spark-info strong { color: var(--text); font-weight: 600; }
+
+/* Sparkline x-axis */
+.dash-spark-axis {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: var(--text3);
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+/* Sparkline bars now hover-able */
+.dash-spark-bar-wrap {
+  cursor: pointer;
+  transition: opacity .15s;
+}
+.dash-spark-bar-wrap:hover { opacity: 0.7; }
+.dash-spark-bar-wrap:hover .dash-spark-bar { background: var(--g5); }
+.dash-spark-bar-wrap:hover .dash-spark-today { background: var(--accent); opacity: 1; }
+
+/* Drill modal — wider on desktop */
+@media (min-width: 700px) {
+  #modal-dash-drill .modal-sheet {
+    border-radius: 16px;
+    max-width: 720px !important;
+    margin: 5vh auto;
+    max-height: 90vh !important;
+  }
+}
+
 </style>
 
     <button id="google-signin-btn" onclick="signInWithGoogle()" type="button">
@@ -2166,16 +2284,16 @@ window.addEventListener('DOMContentLoaded', function() {
     });
   }
 </script>
-<script src="js/data.js?v=53"></script>
-<script src="js/data-cali.js?v=53"></script>
-<script src="js/app.js?v=53"></script>
-<script src="js/auth.js?v=53"></script>
-<script src="js/dashboard.js?v=53"></script>
-<script src="js/running.js?v=53"></script>
-<script src="js/admin.js?v=53"></script>
+<script src="js/data.js?v=54"></script>
+<script src="js/data-cali.js?v=54"></script>
+<script src="js/app.js?v=54"></script>
+<script src="js/auth.js?v=54"></script>
+<script src="js/dashboard.js?v=54"></script>
+<script src="js/running.js?v=54"></script>
+<script src="js/admin.js?v=54"></script>
 <script src="push.js"></script>
-<script src="js/custom-workouts.js?v=53"></script>
-<script src="js/weekly-report.js?v=53"></script>
+<script src="js/custom-workouts.js?v=54"></script>
+<script src="js/weekly-report.js?v=54"></script>
 <script>
 
 // ── PROFILE DROPDOWN ──────────────────────────────────────────
