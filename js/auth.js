@@ -27,7 +27,14 @@ function initLogin() {
     btn.textContent = 'Sign In';
 
     if (!result.success) {
-      errEl.textContent = '⚠️ ' + result.error;
+      // Map cryptic server errors to user-friendly messages
+      let msg = result.error || 'Login failed. Please try again.';
+      if (msg.toLowerCase().includes('invalid time') ||
+          msg.toLowerCase().includes('typeerror') ||
+          msg.toLowerCase().includes('cannot read')) {
+        msg = 'Server error. Please try again in a moment.';
+      }
+      errEl.textContent = '⚠️ ' + msg;
       passIn.value = '';
       return;
     }
