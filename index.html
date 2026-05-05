@@ -1528,18 +1528,27 @@ async function toggleNotificationSetting() {
 }
 
 async function updateReminderBtn() {
-  const btn = document.getElementById('notif-toggle-btn');
-  if (!btn) return;
+  // Updates the toggle switch visuals (does NOT replace innerHTML — that would destroy the toggle)
+  const sw   = document.getElementById('notif-toggle-switch');
+  const knob = document.getElementById('notif-toggle-knob');
+  if (!sw || !knob) return;
   try {
     if (typeof PUSH === 'undefined' || !PUSH.isSupported()) {
-      btn.textContent = '🔔 Daily Reminders';
+      sw.style.background = 'rgba(255,255,255,0.08)';
+      sw.style.opacity    = '0.4';
+      knob.style.left     = '3px';
+      sw.setAttribute('data-on', 'false');
       return;
     }
+    sw.style.opacity = '1';
     const isSubscribed = await PUSH.isSubscribed();
-    btn.textContent = isSubscribed ? '🔕 Reminders: ON (tap to disable)' : '🔔 Daily Reminders: OFF';
-    btn.style.color  = isSubscribed ? 'var(--g5)' : 'var(--text2)';
+    sw.setAttribute('data-on', isSubscribed ? 'true' : 'false');
+    sw.style.background = isSubscribed ? 'var(--g4)' : 'rgba(255,255,255,0.15)';
+    knob.style.left     = isSubscribed ? '21px' : '3px';
   } catch {
-    btn.textContent = '🔔 Daily Reminders';
+    sw.setAttribute('data-on', 'false');
+    sw.style.background = 'rgba(255,255,255,0.15)';
+    knob.style.left     = '3px';
   }
 }
 // Set admin name in header after login
