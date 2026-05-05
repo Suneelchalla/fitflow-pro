@@ -1,3 +1,9 @@
+// LOCAL date helper (replaces UTC-based toISOString().split('T')[0])
+function _ymdLocal(d) {
+  if (!d || isNaN(d.getTime())) return '';
+  return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+}
+
 // ── APP STATE ────────────────────────────────────────────────────
 // DATA_VERSION is defined in data.js
 
@@ -31,7 +37,8 @@ function _normalizeDate(v) {
     if (v.length >= 10 && /^\d{4}-\d{2}-\d{2}/.test(v)) return v.substring(0, 10);
     const d = new Date(v);
     if (isNaN(d.getTime())) return '';
-    return d.toISOString().split('T')[0];
+    // Use LOCAL date components, not UTC (fixes timezone bug)
+    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
   }
   if (v instanceof Date) {
     if (isNaN(v.getTime())) return '';
@@ -43,7 +50,9 @@ function _normalizeDate(v) {
   // object with date-like values? try parse
   try {
     const d = new Date(v);
-    if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+    if (!isNaN(d.getTime())) {
+      return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    }
   } catch(e) {}
   return '';
 }
@@ -542,7 +551,7 @@ function calcStreak(uid, asOfDate) {
     // Number or other — try to parse, fall back to empty
     const dt = new Date(v);
     if (isNaN(dt.getTime())) return '';
-    return dt.toISOString().split('T')[0];
+    return _ymdLocal(dt);
   };
 
   // Merge workout dates AND run dates — a run day counts toward streak
@@ -552,7 +561,7 @@ function calcStreak(uid, asOfDate) {
   if (!dates.length) return 0;
 
   // Start from asOfDate if given (for weekly report), else today
-  const ref = toDateStr(asOfDate) || new Date().toISOString().split('T')[0];
+  const ref = toDateStr(asOfDate) || _ymdLocal(new Date());
 
   // Find most recent active date on or before ref
   const startDate = dates.find(d => d <= ref);
@@ -564,7 +573,7 @@ function calcStreak(uid, asOfDate) {
 
   let streak = 0;
   for (let i = 0; i < 366; i++) {
-    const d = cur.toISOString().split('T')[0];
+    const d = _ymdLocal(cur);
     if (dates.includes(d)) { streak++; cur.setDate(cur.getDate() - 1); }
     else break;
   }
