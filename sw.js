@@ -1,37 +1,60 @@
-const CACHE = 'fitflow-v42';
+// ════════════════════════════════════════════════════════════════
+// FITFLOW PRO — Service Worker v43
+// Updated for PWABuilder / Play Store compatibility
+// ════════════════════════════════════════════════════════════════
+
+const CACHE = 'fitflow-v43';
 const ASSETS = [
   './',
   './index.html',
   './css/style.css',
-  './js/data.js?v=42',
-  './js/data-cali.js?v=42',
-  './js/app.js?v=42',
-  './js/auth.js?v=42',
-  './js/dashboard.js?v=42',
-  './js/running.js?v=42',
-  './js/admin.js?v=42',
-  './push.js?v=42',
-  './js/custom-workouts.js?v=42',
-  './js/weekly-report.js?v=42',
+  './js/data.js?v=43',
+  './js/data-cali.js?v=43',
+  './js/app.js?v=43',
+  './js/auth.js?v=43',
+  './js/dashboard.js?v=43',
+  './js/running.js?v=43',
+  './js/admin.js?v=43',
+  './push.js?v=43',
+  './js/custom-workouts.js?v=43',
+  './js/weekly-report.js?v=43',
   './manifest.json',
+  './privacy.html',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
   'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap'
 ];
 
+// ── INSTALL ───────────────────────────────────────────────────────
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS).catch(() => {})));
+  e.waitUntil(
+    caches.open(CACHE).then(c => c.addAll(ASSETS).catch(() => {}))
+  );
   self.skipWaiting();
 });
 
+// ── ACTIVATE ──────────────────────────────────────────────────────
 self.addEventListener('activate', e => {
-  e.waitUntil(caches.keys().then(keys =>
-    Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-  ));
+  e.waitUntil(
+    caches.keys().then(keys =>
+      Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
+    )
+  );
   self.clients.claim();
 });
 
+// ── FETCH ─────────────────────────────────────────────────────────
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
+
+  // Don't cache Google Apps Script API calls — always fetch fresh
+  if (e.request.url.includes('script.google.com')) {
+    e.respondWith(fetch(e.request).catch(() => new Response(
+      JSON.stringify({ success: false, error: 'You are offline.' }),
+      { headers: { 'Content-Type': 'application/json' } }
+    )));
+    return;
+  }
+
   e.respondWith(
     caches.match(e.request).then(cached => {
       const fresh = fetch(e.request).then(res => {
