@@ -2227,12 +2227,11 @@ async function toggleNotificationSetting() {
 }
 
 // Update the notification toggle switch's visual state based on current subscription
-function _updateNotifToggleVisual() {
+async function _updateNotifToggleVisual() {
   const sw   = document.getElementById('notif-toggle-switch');
   const knob = document.getElementById('notif-toggle-knob');
   if (!sw || !knob) return;
   if (typeof PUSH === 'undefined' || !PUSH.isSupported()) {
-    // Not supported — show off and disabled-looking
     sw.style.background = 'rgba(255,255,255,0.08)';
     sw.style.opacity    = '0.4';
     knob.style.left     = '3px';
@@ -2240,15 +2239,21 @@ function _updateNotifToggleVisual() {
     return;
   }
   sw.style.opacity = '1';
-  PUSH.isSubscribed().then(on => {
+  try {
+    // Make sure OneSignal SDK has initialized before reading subscription state
+    if (PUSH._ensureInit) await PUSH._ensureInit();
+    // Give SDK an extra moment to hydrate state from cache
+    await new Promise(r => setTimeout(r, 300));
+    const on = await PUSH.isSubscribed();
     sw.setAttribute('data-on', on ? 'true' : 'false');
     sw.style.background = on ? 'var(--g4)' : 'rgba(255,255,255,0.15)';
     knob.style.left     = on ? '21px' : '3px';
-  }).catch(() => {
+  } catch (e) {
+    console.warn('Toggle visual update failed:', e?.message);
     sw.setAttribute('data-on', 'false');
     sw.style.background = 'rgba(255,255,255,0.15)';
     knob.style.left     = '3px';
-  });
+  }
 }
 
 // ── CUSTOM WORKOUTS & WEEKLY REPORT RELAY ────────────────────────
