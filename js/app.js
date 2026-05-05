@@ -105,8 +105,14 @@ const Sheets = {
     try {
       const qs = new URLSearchParams({ action, ...params }).toString();
       const r  = await fetch(`${cfg.webAppUrl}?${qs}`);
-      return await r.json();
-    } catch { return null; }
+      // Guard against HTML error pages from Apps Script
+      const text = await r.text();
+      try { return JSON.parse(text); }
+      catch { console.warn('[Sheets.get '+action+'] non-JSON:', text.substring(0,150)); return null; }
+    } catch (e) {
+      console.warn('[Sheets.get '+action+'] network:', e.message);
+      return null;
+    }
   },
   async post(action, data = {}) {
     const cfg = Store.getSheetsConfig();
@@ -115,10 +121,15 @@ const Sheets = {
       const r = await fetch(cfg.webAppUrl, {
         method:  'POST',
         body:    JSON.stringify({ action, ...data }),
-        headers: { 'Content-Type': 'text/plain' },
+        headers: { 'Content-Type': 'text/plain' }, // text/plain avoids CORS preflight
       });
-      return await r.json();
-    } catch { return null; }
+      const text = await r.text();
+      try { return JSON.parse(text); }
+      catch { console.warn('[Sheets.post '+action+'] non-JSON:', text.substring(0,150)); return null; }
+    } catch (e) {
+      console.warn('[Sheets.post '+action+'] network:', e.message);
+      return null;
+    }
   },
 };
 // Alias used across files
