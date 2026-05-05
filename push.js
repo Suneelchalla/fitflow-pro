@@ -37,11 +37,13 @@ const PUSH = {
           try {
             await OneSignal.init({
               appId: this.ONESIGNAL_APP_ID,
-              serviceWorkerPath: '/fitflow-pro/OneSignalSDKWorker.js',
+              // Reuse our existing sw.js — it imports OneSignal SDK via importScripts.
+              // This prevents two SW registrations fighting over the same scope.
+              serviceWorkerPath: '/fitflow-pro/sw.js',
               serviceWorkerParam: { scope: '/fitflow-pro/' },
               allowLocalhostAsSecureOrigin: true,
-              notifyButton: { enable: false },        // we use our own toggle
-              autoRegister: false,                     // we control prompting
+              notifyButton: { enable: false },
+              autoRegister: false,
               autoResubscribe: true,
             });
           } catch (e) {
