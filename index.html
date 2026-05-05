@@ -1611,6 +1611,168 @@ window.addEventListener('DOMContentLoaded', function() {
   }
 }
 
+
+
+/* Audience bar at top of notify tab */
+.notify-audience-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(67,160,90,0.06);
+  border: 1px solid rgba(67,160,90,0.2);
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--text2);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+
+
+/* Audience selector */
+.notify-audience-selector {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.notify-audience-label {
+  font-size: 12px;
+  color: var(--text3);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.notify-audience-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.notify-audience-btn {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border);
+  color: var(--text2);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 14px;
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: all .15s;
+  flex-shrink: 0;
+}
+.notify-audience-btn:hover {
+  background: rgba(255,255,255,0.06);
+  color: var(--text);
+  border-color: var(--text3);
+}
+.notify-audience-btn.active {
+  background: rgba(67,160,90,0.15);
+  border-color: var(--g4);
+  color: var(--g5);
+  font-weight: 600;
+}
+
+/* User picker */
+.notify-user-picker {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.notify-picker-controls {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.notify-picker-controls .admin-search-input {
+  flex: 1;
+  min-width: 180px;
+}
+.notify-picker-actions {
+  display: flex;
+  gap: 6px;
+}
+.notify-user-list {
+  max-height: 280px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 4px;
+}
+.notify-user-list::-webkit-scrollbar { width: 4px; }
+.notify-user-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.notify-user-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid transparent;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+.notify-user-row:hover {
+  background: rgba(67,160,90,0.05);
+  border-color: rgba(67,160,90,0.2);
+}
+.notify-user-row input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--g4);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.notify-user-row.notify-user-unsub {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.notify-user-row.notify-user-unsub:hover {
+  background: var(--bg);
+  border-color: transparent;
+}
+.notify-user-info {
+  flex: 1;
+  min-width: 0;
+}
+.notify-user-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.notify-user-email {
+  font-size: 11px;
+  color: var(--text3);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.notify-sub-badge {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 540px) {
+  .notify-picker-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
 </style>
 
     <button id="google-signin-btn" onclick="signInWithGoogle()" type="button">
@@ -2692,16 +2854,16 @@ window.addEventListener('DOMContentLoaded', function() {
     });
   }
 </script>
-<script src="js/data.js?v=57"></script>
-<script src="js/data-cali.js?v=57"></script>
-<script src="js/app.js?v=57"></script>
-<script src="js/auth.js?v=57"></script>
-<script src="js/dashboard.js?v=57"></script>
-<script src="js/running.js?v=57"></script>
-<script src="js/admin.js?v=57"></script>
+<script src="js/data.js?v=59"></script>
+<script src="js/data-cali.js?v=59"></script>
+<script src="js/app.js?v=59"></script>
+<script src="js/auth.js?v=59"></script>
+<script src="js/dashboard.js?v=59"></script>
+<script src="js/running.js?v=59"></script>
+<script src="js/admin.js?v=59"></script>
 <script src="push.js"></script>
-<script src="js/custom-workouts.js?v=57"></script>
-<script src="js/weekly-report.js?v=57"></script>
+<script src="js/custom-workouts.js?v=59"></script>
+<script src="js/weekly-report.js?v=59"></script>
 <script>
 
 // ── PROFILE DROPDOWN ──────────────────────────────────────────
