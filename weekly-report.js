@@ -1,32 +1,25 @@
 // ════════════════════════════════════════════════════════════════
 // FITFLOW PRO — Weekly Report Card v3
 // ════════════════════════════════════════════════════════════════
-// FIXES:
-//  1. Week navigation ‹ Prev / Next › — browse any past week
-//  2. Auto-shows LAST week on Monday & Tuesday
-//  3. Syncs logs from Sheets FIRST before rendering
-//  4. Activity Breakdown always shown (never hidden when empty)
-//  5. Never shows a blank screen
-// ════════════════════════════════════════════════════════════════
 
-// 0 = this week, -1 = last week, -2 = two weeks ago etc.
-let _weekOffset = 0;
+// Which week to display. 0 = this week, -1 = last week, etc.
+window._weekOffset = 0;
 
+// Entry point — called when user taps Weekly Report card
 function openWeeklyReport() {
-  // On Monday(1) or Tuesday(2) auto-show last week
-  // because this week barely started and last week is more relevant
-  const jsDay = new Date().getDay(); // 0=Sun,1=Mon,2=Tue...
-  _weekOffset = (jsDay === 1 || jsDay === 2) ? -1 : 0;
+  // On Mon(1) or Tue(2) auto-show last week — current week barely started
+  const jsDay = new Date().getDay();
+  window._weekOffset = (jsDay === 1 || jsDay === 2) ? -1 : 0;
   showPage('page-weekly-report');
   _loadAndRender();
 }
 
-// Fetch logs from Sheets first, THEN render — prevents blank screen
+// ── STEP 1: Sync logs from Sheets → localStorage, THEN render ────
 async function _loadAndRender() {
   const container = document.getElementById('weekly-report-content');
   if (!container) return;
 
-  // Show loading indicator — never leave blank
+  // Show loading — never leave blank screen
   container.innerHTML = `
     <div style="padding:60px 16px;text-align:center;color:var(--text3)">
       <div class="loader" style="margin:0 auto 16px"></div>
@@ -36,7 +29,7 @@ async function _loadAndRender() {
   try {
     const user = APP.currentUser;
     if (user) {
-      // Pull completion logs from Sheets into localStorage
+      // Fetch completion logs from Sheets
       const res = await Sheets.get('getUserLogs', { userId: user.id });
       if (res?.success && Array.isArray(res.logs) && res.logs.length) {
         const local = Store.getLogs();
@@ -53,37 +46,36 @@ async function _loadAndRender() {
         });
         if (changed) Store.set('ff_logs', local);
       }
-
-      // Pull run logs from Sheets into localStorage
+      // Fetch run logs from Sheets
       const rr = await Sheets.get('getUserRunLogs', { userId: user.id });
       if (rr?.success && Array.isArray(rr.logs) && rr.logs.length) {
-        const localR = Store.getRunLogs();
+        const lr = Store.getRunLogs();
         let ch = false;
         rr.logs.forEach(r => {
-          const dup = localR.find(l =>
-            l.id === r.id ||
+          const dup = lr.find(l => l.id === r.id ||
             (l.userId === r.userId && l.date === r.date &&
-             Math.abs((l.distance||0) - (r.distance||0)) < 0.01)
-          );
-          if (!dup) { localR.push(r); ch = true; }
+             Math.abs((l.distance||0) - (r.distance||0)) < 0.01));
+          if (!dup) { lr.push(r); ch = true; }
         });
-        if (ch) Store.set('ff_runlogs', localR);
+        if (ch) Store.set('ff_runlogs', lr);
       }
     }
   } catch(e) {
-    console.warn('[WeeklyReport] Sheets sync skipped:', e.message);
+    console.warn('[WeeklyReport] Sync skipped:', e.message);
   }
 
   renderWeeklyReport();
 }
 
+// ── STEP 2: Navigate week ─────────────────────────────────────────
 function wrNav(dir) {
-  const next = _weekOffset + dir;
+  const next = window._weekOffset + dir;
   if (next > 0) return; // no future weeks
-  _weekOffset = next;
+  window._weekOffset = next;
   renderWeeklyReport();
 }
 
+// ── STEP 3: Render ────────────────────────────────────────────────
 function renderWeeklyReport() {
   const container = document.getElementById('weekly-report-content');
   if (!container) return;
@@ -94,19 +86,19 @@ function renderWeeklyReport() {
   const cwLogs  = allLogs.filter(l =>  l.module.startsWith('custom_'));
   const stdLogs = allLogs.filter(l => !l.module.startsWith('custom_'));
 
-  // ── Compute week date range based on offset ────────────────────
-  const monday  = _monday(_weekOffset);
+  // ── Week dates ─────────────────────────────────────────────────
+  const offset  = window._weekOffset || 0;
+  const monday  = _monday(offset);
   const sunday  = _addDays(monday, 6);
-  const pMon    = _monday(_weekOffset - 1);
+  const pMon    = _monday(offset - 1);
   const pSun    = _addDays(pMon, 6);
   const today   = todayStr();
-
-  const isThisWeek = _weekOffset === 0;
-  const weekLabel  = _weekOffset === 0  ? 'This Week'
-                   : _weekOffset === -1 ? 'Last Week'
+  const isThisWeek = offset === 0;
+  const weekLabel  = offset === 0  ? 'This Week'
+                   : offset === -1 ? 'Last Week'
                    : 'Week of ' + _fmt(monday);
 
-  // ── Filter logs for this week & comparison week ────────────────
+  // ── Filter logs ────────────────────────────────────────────────
   const wLogs = stdLogs.filter(l => l.date >= monday && l.date <= sunday);
   const wRuns = runLogs.filter(r => r.date >= monday && r.date <= sunday);
   const wCW   = cwLogs.filter(l  => l.date >= monday && l.date <= sunday);
@@ -119,16 +111,14 @@ function renderWeeklyReport() {
   const totalKm       = wRuns.reduce((a,r) => a + (r.distance||0), 0);
   const totalTime     = wRuns.reduce((a,r) => a + (r.duration||0), 0);
   const streak        = calcStreak(user.id);
-
-  const modCounts = {};
+  const modCounts     = {};
   wLogs.forEach(l => { modCounts[l.module] = (modCounts[l.module]||0) + 1; });
-
   const wowW  = totalWorkouts - pLogs.length;
   const wowKm = totalKm - pRuns.reduce((a,r) => a + (r.distance||0), 0);
 
-  // ── 7-day activity grid ────────────────────────────────────────
-  const days7   = Array.from({length:7}, (_, i) => _addDays(monday, i));
-  const dayGrid = days7.map(d => {
+  // ── 7-day grid ─────────────────────────────────────────────────
+  const dayGrid = Array.from({length:7}, (_, i) => {
+    const d  = _addDays(monday, i);
     const dl = allLogs.filter(l => l.date === d);
     return {
       date:     d,
@@ -140,35 +130,35 @@ function renderWeeklyReport() {
   });
 
   // ── Grade ──────────────────────────────────────────────────────
-  const grade = activeDays >= 6 ? { letter:'A+', label:'Outstanding!',   color:'var(--g4)'     }
-              : activeDays >= 5 ? { letter:'A',  label:'Excellent!',     color:'var(--g4)'     }
-              : activeDays >= 4 ? { letter:'B',  label:'Great job!',     color:'#43a05a'        }
-              : activeDays >= 3 ? { letter:'C',  label:'Good effort',    color:'var(--accent)'  }
-              : activeDays >= 2 ? { letter:'D',  label:'Keep going!',    color:'#fb8c00'        }
-              :                   { letter:'F',  label:"Let's start!",   color:'var(--danger)'  };
+  const grade = activeDays >= 6 ? { letter:'A+', label:'Outstanding!', color:'var(--g4)'    }
+              : activeDays >= 5 ? { letter:'A',  label:'Excellent!',   color:'var(--g4)'    }
+              : activeDays >= 4 ? { letter:'B',  label:'Great job!',   color:'#43a05a'       }
+              : activeDays >= 3 ? { letter:'C',  label:'Good effort',  color:'var(--accent)' }
+              : activeDays >= 2 ? { letter:'D',  label:'Keep going!',  color:'#fb8c00'       }
+              :                   { letter:'F',  label:"Let's start!", color:'var(--danger)'  };
 
-  // ── Render ─────────────────────────────────────────────────────
+  // ── Build HTML ─────────────────────────────────────────────────
   container.innerHTML = `
 
     <!-- Week navigation -->
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px 4px">
+    <div style="display:flex;align-items:center;justify-content:space-between;
+      padding:12px 16px 4px;gap:8px">
       <button onclick="wrNav(-1)"
-        style="background:var(--surface);border:1px solid var(--border);border-radius:10px;
-        padding:8px 14px;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer;">
-        ‹ Prev
-      </button>
-      <div style="text-align:center">
+        style="flex-shrink:0;background:var(--surface);border:1px solid var(--border);
+        border-radius:10px;padding:8px 16px;color:var(--text2);font-size:13px;
+        font-weight:600;cursor:pointer;">‹ Prev</button>
+
+      <div style="text-align:center;flex:1">
         <div style="font-size:14px;font-weight:700;color:var(--g5)">${weekLabel}</div>
         <div style="font-size:11px;color:var(--text3)">${_fmt(monday)} – ${_fmt(sunday)}</div>
       </div>
-      <button onclick="wrNav(1)"
-        style="background:var(--surface);border:1px solid var(--border);border-radius:10px;
-        padding:8px 14px;font-size:13px;font-weight:600;
-        color:${isThisWeek?'var(--border)':'var(--text2)'};
-        opacity:${isThisWeek?'0.35':'1'};cursor:${isThisWeek?'default':'pointer'};"
-        ${isThisWeek?'disabled':''}>
-        Next ›
-      </button>
+
+      <button onclick="wrNav(1)" ${isThisWeek ? 'disabled' : ''}
+        style="flex-shrink:0;background:var(--surface);border:1px solid var(--border);
+        border-radius:10px;padding:8px 16px;font-size:13px;font-weight:600;
+        color:${isThisWeek ? 'var(--text3)' : 'var(--text2)'};
+        opacity:${isThisWeek ? '0.4' : '1'};cursor:${isThisWeek ? 'default' : 'pointer'};">
+        Next ›</button>
     </div>
 
     <!-- Grade card -->
@@ -180,19 +170,20 @@ function renderWeeklyReport() {
         color:${grade.color};line-height:1;margin:8px 0">${grade.letter}</div>
       <div style="font-size:20px;font-weight:700;margin-bottom:4px">${grade.label}</div>
       <div style="font-size:14px;color:var(--text2)">
-        ${activeDays} active day${activeDays!==1?'s':''} · ${streak} day streak 🔥
+        ${activeDays} active day${activeDays !== 1 ? 's' : ''} · ${streak} day streak 🔥
       </div>
     </div>
 
     <!-- Stats grid -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-      ${_sc(totalWorkouts,'Workouts',wowW,'💪')}
-      ${_sc(activeDays,'Active Days',activeDays-[...new Set(pLogs.map(l=>l.date))].length,'📅')}
-      ${_sc(totalKm.toFixed(1)+'km','Distance Run',null,'🏃',wowKm!==0?(wowKm>0?'+'+wowKm.toFixed(1)+'km':wowKm.toFixed(1)+'km'):null)}
-      ${_sc(fmtTime(totalTime),'Time Running',null,'⏱')}
+      ${_sc(totalWorkouts,'Workouts', wowW, '💪')}
+      ${_sc(activeDays, 'Active Days', activeDays - [...new Set(pLogs.map(l=>l.date))].length, '📅')}
+      ${_sc(totalKm.toFixed(1)+'km','Distance Run', null,'🏃',
+            wowKm !== 0 ? (wowKm > 0 ? '+'+wowKm.toFixed(1)+'km' : wowKm.toFixed(1)+'km') : null)}
+      ${_sc(fmtTime(totalTime),'Time Running', null, '⏱')}
     </div>
 
-    <!-- 7-day grid -->
+    <!-- 7-day activity grid -->
     <div class="card card-sm" style="margin-bottom:16px">
       <div class="section-title" style="margin-bottom:12px">Daily Activity — ${weekLabel}</div>
       <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">
@@ -200,12 +191,11 @@ function renderWeeklyReport() {
           `<div style="text-align:center;font-size:11px;color:var(--text3);font-weight:600">${x}</div>`
         ).join('')}
         ${dayGrid.map(d => `
-          <div style="aspect-ratio:1;border-radius:8px;display:flex;flex-direction:column;
-            align-items:center;justify-content:center;
-            background:${d.isFuture?'transparent':d.count>0?'var(--g3)':'rgba(229,57,53,0.2)'};
-            border:${d.isToday?'2px solid var(--accent)':d.isFuture?'1px dashed var(--border)':'none'};
-            color:${d.isFuture?'var(--text3)':d.count>0?'white':'#ef9a9a'};"
-            title="${d.date}">
+          <div title="${d.date}" style="aspect-ratio:1;border-radius:8px;
+            display:flex;flex-direction:column;align-items:center;justify-content:center;
+            background:${d.isFuture ? 'transparent' : d.count > 0 ? 'var(--g3)' : 'rgba(229,57,53,0.2)'};
+            border:${d.isToday ? '2px solid var(--accent)' : d.isFuture ? '1px dashed var(--border)' : 'none'};
+            color:${d.isFuture ? 'var(--text3)' : d.count > 0 ? 'white' : '#ef9a9a'};">
             ${d.isFuture ? ''
               : d.count > 0
                 ? `<span style="font-size:14px">${d.emojis[0]||'💪'}</span>${d.count>1?`<span style="font-size:9px">+${d.count-1}</span>`:''}`
@@ -222,32 +212,39 @@ function renderWeeklyReport() {
       </div>
     </div>
 
-    <!-- Activity breakdown — ALWAYS shown -->
+    <!-- Activity breakdown — ALWAYS shown, never hidden -->
     <div class="card card-sm" style="margin-bottom:16px">
       <div class="section-title" style="margin-bottom:12px">Activity Breakdown</div>
       ${Object.keys(modCounts).length > 0
         ? Object.entries(modCounts).map(([mod, cnt]) => `
-            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
-              <span style="font-size:20px;width:28px;text-align:center">${getModuleEmoji(mod)}</span>
-              <div style="flex:1">
-                <div style="display:flex;justify-content:space-between;margin-bottom:4px">
-                  <span style="font-size:13px;font-weight:600">${getModuleName(mod)}</span>
-                  <span style="font-size:13px;color:var(--text3)">${cnt} session${cnt>1?'s':''}</span>
-                </div>
-                <div class="progress-bar">
-                  <div class="progress-fill" style="width:${Math.min(100,cnt/7*100)}%"></div>
-                </div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+            <span style="font-size:20px;width:28px;text-align:center">${getModuleEmoji(mod)}</span>
+            <div style="flex:1">
+              <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+                <span style="font-size:13px;font-weight:600">${getModuleName(mod)}</span>
+                <span style="font-size:13px;color:var(--text3)">${cnt} session${cnt>1?'s':''}</span>
               </div>
-            </div>`).join('')
+              <div class="progress-bar">
+                <div class="progress-fill" style="width:${Math.min(100,cnt/7*100)}%"></div>
+              </div>
+            </div>
+          </div>`).join('')
         : `<div style="text-align:center;padding:20px 0;color:var(--text3)">
-              <div style="font-size:36px;margin-bottom:8px">📋</div>
-              <div style="font-size:13px;font-weight:600">No workouts logged ${isThisWeek?'this week yet':'this week'}</div>
-              ${isThisWeek?'<div style="font-size:12px;margin-top:6px">Complete a workout — it will appear here!</div>':''}
-              <button onclick="wrNav(-1)" style="margin-top:12px;background:none;border:1px solid var(--border);
-                border-radius:8px;padding:6px 14px;color:var(--text2);font-size:12px;cursor:pointer">
-                ‹ Check previous week
-              </button>
-           </div>`
+            <div style="font-size:36px;margin-bottom:8px">📋</div>
+            <div style="font-size:13px;font-weight:600;margin-bottom:4px">
+              No workouts logged ${isThisWeek ? 'this week yet' : 'this week'}
+            </div>
+            <div style="font-size:12px">
+              ${isThisWeek
+                ? 'Complete a workout — it will appear here!'
+                : 'Try checking a different week below'}
+            </div>
+            ${!isThisWeek ? '' : `<button onclick="wrNav(-1)"
+              style="margin-top:12px;background:none;border:1px solid var(--border);
+              border-radius:8px;padding:6px 16px;color:var(--text2);font-size:12px;cursor:pointer">
+              ‹ View last week
+            </button>`}
+          </div>`
       }
     </div>
 
@@ -257,12 +254,18 @@ function renderWeeklyReport() {
       background:linear-gradient(135deg,rgba(67,160,90,0.1),rgba(30,136,229,0.1))">
       <div class="section-title" style="margin-bottom:12px">🏃 Running — ${weekLabel}</div>
       <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;text-align:center">
-        <div><div style="font-family:var(--font-display);font-size:28px;color:var(--g5)">${wRuns.length}</div>
-             <div style="font-size:11px;color:var(--text3)">Runs</div></div>
-        <div><div style="font-family:var(--font-display);font-size:28px;color:var(--g5)">${totalKm.toFixed(1)}</div>
-             <div style="font-size:11px;color:var(--text3)">km</div></div>
-        <div><div style="font-family:var(--font-display);font-size:28px;color:var(--g5)">${fmtTime(totalTime)}</div>
-             <div style="font-size:11px;color:var(--text3)">Time</div></div>
+        <div>
+          <div style="font-family:var(--font-display);font-size:28px;color:var(--g5)">${wRuns.length}</div>
+          <div style="font-size:11px;color:var(--text3)">Runs</div>
+        </div>
+        <div>
+          <div style="font-family:var(--font-display);font-size:28px;color:var(--g5)">${totalKm.toFixed(1)}</div>
+          <div style="font-size:11px;color:var(--text3)">km</div>
+        </div>
+        <div>
+          <div style="font-family:var(--font-display);font-size:28px;color:var(--g5)">${fmtTime(totalTime)}</div>
+          <div style="font-size:11px;color:var(--text3)">Time</div>
+        </div>
       </div>
     </div>` : ''}
 
@@ -279,17 +282,18 @@ function renderWeeklyReport() {
 
 // ── DATE HELPERS ──────────────────────────────────────────────────
 
-// Returns YYYY-MM-DD of Monday for the given week offset
 function _monday(offset) {
   const d   = new Date();
   const day = d.getDay(); // 0=Sun
-  d.setDate(d.getDate() - (day === 0 ? 6 : day - 1)); // this week's Monday
-  d.setDate(d.getDate() + (offset * 7));
+  // Move to this week's Monday
+  d.setDate(d.getDate() - (day === 0 ? 6 : day - 1));
+  // Apply week offset
+  d.setDate(d.getDate() + offset * 7);
   return d.toISOString().split('T')[0];
 }
 
 function _addDays(dateStr, n) {
-  const d = new Date(dateStr + 'T12:00:00'); // noon avoids DST issues
+  const d = new Date(dateStr + 'T12:00:00'); // noon prevents DST bugs
   d.setDate(d.getDate() + n);
   return d.toISOString().split('T')[0];
 }
@@ -299,14 +303,12 @@ function _fmt(dateStr) {
   return d.toLocaleDateString('en-IN', { month:'short', day:'numeric', year:'numeric' });
 }
 
-// Keep these for backward compat (used by app.js/calcStreak)
-function getMonday()    { return _monday(0); }
-function getSunday()    { return _addDays(getMonday(), 6); }
-function getPrevMonday(){ return _monday(-1); }
-function getPrevSunday(){ return _addDays(getPrevMonday(), 6); }
-function getLast7Days() {
-  return Array.from({length:7}, (_, i) => _addDays(getMonday(), i));
-}
+// ── BACKWARD COMPAT (used by app.js calcStreak etc.) ──────────────
+function getMonday()     { return _monday(0); }
+function getSunday()     { return _addDays(getMonday(), 6); }
+function getPrevMonday() { return _monday(-1); }
+function getPrevSunday() { return _addDays(getPrevMonday(), 6); }
+function getLast7Days()  { return Array.from({length:7}, (_,i) => _addDays(getMonday(), i)); }
 function formatDate(dateStr) { return _fmt(dateStr); }
 
 // ── STAT CARD ─────────────────────────────────────────────────────
@@ -323,8 +325,7 @@ function _sc(val, label, diff, emoji, diffLabel) {
     ${ds ? `<div style="font-size:11px;color:${dc};margin-top:3px">${ds}</div>` : ''}
   </div>`;
 }
-// Keep old name used by any other code
-function statCard(val, label, diff, emoji, diffLabel) { return _sc(val, label, diff, emoji, diffLabel); }
+function statCard(v,l,d,e,dl) { return _sc(v,l,d,e,dl); }
 
 // ── MOTIVATIONAL ──────────────────────────────────────────────────
 function _emoji(days) {
@@ -340,7 +341,7 @@ function _msg(days) {
     1: "One session is better than zero. The hardest part is starting. See you tomorrow?",
     0: "New week, fresh start. Your body is ready. Let's make this week count! 🚀",
   };
-  return m[Math.min(days,6)] || m[0];
+  return m[Math.min(days, 6)] || m[0];
 }
 function getMotivationalEmoji(d)   { return _emoji(d); }
 function getMotivationalMessage(d) { return _msg(d); }
