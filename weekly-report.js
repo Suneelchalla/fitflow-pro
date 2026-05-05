@@ -127,7 +127,9 @@ function renderWeeklyReport() {
   const totalWorkouts = wLogs.length + wCW.length;
   const totalKm       = wRuns.reduce((a, r) => a + (r.distance || 0), 0);
   const totalTime     = wRuns.reduce((a, r) => a + (r.duration  || 0), 0);
-  const streak        = calcStreak(user.id);
+  // Pass the last day of the viewed week so streak is correct for that period
+  const streakAsOf = sunday > todayStr() ? todayStr() : sunday;
+  const streak     = calcStreak(user.id, streakAsOf);
 
   const modCounts = {};
   wLogs.forEach(l => {
