@@ -1918,7 +1918,7 @@ function renderRunHistory() {
   const container = document.getElementById('run-history-list');
   const statsEl   = document.getElementById('run-stats-row');
 
-  // ── Summary stats ─────────────────────────────────────────────
+  // Summary stats
   const totalKm   = allLogs.reduce((a, r) => a + (r.distance || 0), 0);
   const totalRuns = allLogs.length;
   const totalTime = allLogs.reduce((a, r) => a + (r.duration || 0), 0);
@@ -1941,7 +1941,7 @@ function renderRunHistory() {
     return;
   }
 
-  // ── Group by date ─────────────────────────────────────────────
+  // Group runs by date
   const byDate = {};
   allLogs.forEach((r, globalIdx) => {
     const d = r.date || 'Unknown';
@@ -1955,20 +1955,20 @@ function renderRunHistory() {
     const dayRuns = byDate[date];
     const dayKm   = dayRuns.reduce((a, r) => a + (r.distance || 0), 0);
     const dateObj = new Date(date + 'T12:00:00');
-    const dateStr = dateObj.toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short', year:'numeric' });
+    const dateStr = isNaN(dateObj.getTime())
+      ? date
+      : dateObj.toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short', year:'numeric' });
     const isToday = date === todayStr();
-    const safeDate = date.replace(/-/g, '_');
 
-    const runsHtml = dayRuns.map((r, dayIdx) => {
-      const type     = r.activityType || 'run';
-      const meta     = ACTIVITY_META[type] || ACTIVITY_META.run;
-      const kcal     = Math.round((r.distance || 0) * meta.kcalPerKm);
-      const timeStr  = r.timestamp
+    const runsHtml = dayRuns.map(r => {
+      const type = r.activityType || 'run';
+      const meta = ACTIVITY_META[type] || ACTIVITY_META.run;
+      const kcal = Math.round((r.distance || 0) * meta.kcalPerKm);
+      const timeStr = r.timestamp
         ? new Date(r.timestamp).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true })
         : '';
-      const hasMap   = r.coords && r.coords.length >= 2;
-      const idx      = r._globalIdx;
-
+      const hasMap = r.coords && r.coords.length >= 2;
+      const idx = r._globalIdx;
       return `
         <div class="card run-history-card" style="margin-bottom:8px;cursor:pointer"
           onclick="_showRunDetail(${idx})">
@@ -1997,7 +1997,7 @@ function renderRunHistory() {
               <div style="font-size:10px;color:var(--text3)">time</div>
             </div>
             <div>
-              <div style="font-family:var(--font-display);font-size:18px;color:var(--g5)">${typeof r.pace === 'number' ? fmtPace(r.distance,r.duration) : (r.pace||'--')}</div>
+              <div style="font-family:var(--font-display);font-size:18px;color:var(--g5)">${fmtPace(r.distance, r.duration)}</div>
               <div style="font-size:10px;color:var(--text3)">pace</div>
             </div>
             <div>
@@ -2009,7 +2009,6 @@ function renderRunHistory() {
     }).join('');
 
     return `
-      <!-- Date group: ${date} -->
       <div style="margin-bottom:16px">
         <div style="display:flex;align-items:center;justify-content:space-between;
           margin-bottom:8px;padding:0 2px">
