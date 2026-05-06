@@ -2055,6 +2055,18 @@ async function renderAdminDashboard() {
     if (logsRes?.success)  allLogs       = logsRes.logs   || allLogs;
     if (runsRes?.success)  allRuns       = runsRes.logs   || allRuns;
     if (onbRes?.success)   _adminOnboardings = onbRes.onboardings || [];
+
+    // If users list is empty (fetch failed or returned nothing), build a minimal
+    // user list from the log entries so names show instead of raw user IDs
+    if (!users.length && allLogs.length) {
+      const seen = {};
+      allLogs.forEach(l => {
+        if (l.userId && !seen[l.userId]) {
+          seen[l.userId] = true;
+          users.push({ id: l.userId, name: l.name || '', email: l.email || '', role: 'USER' });
+        }
+      });
+    }
   } catch(e) { console.warn('Dashboard fetch:', e.message); }
 
   _adminDashboardData = { users, allLogs, allRuns, fetchedAt: new Date() };
@@ -2508,10 +2520,16 @@ function _drillKpi(which) {
       <div class="dash-user-list">
         ${sortedUsers.map(([uid, n]) => {
           const u = realUsers.find(u => u.id === uid);
+          // Also try to find a name from the logs themselves (email field)
+          const logEntry = list.find(l => l.userId === uid);
+          const displayName = u?.name || logEntry?.name || '';
+          const displayEmail = u?.email || logEntry?.email || '';
+          // Last resort: shorten the uid to something readable if no name found
+          const label = displayName || displayEmail || (uid.startsWith('u_') ? 'User #' + uid.replace('u_','').slice(-6) : uid);
           return `<div class="dash-user-row">
             <div class="dash-user-info">
-              <div class="dash-user-name">${u?.name||uid}</div>
-              <div class="dash-user-email">${u?.email||''}</div>
+              <div class="dash-user-name">${label}</div>
+              <div class="dash-user-email">${displayEmail}</div>
             </div>
             <div class="dash-user-count">${n}</div>
           </div>`;
