@@ -2559,12 +2559,29 @@ async function toggleNotificationSetting() {
     return;
   }
   try {
-    const subscribed = await PUSH.isSubscribed();
-    if (subscribed) {
+    // Check the *intent* — what state does the user think they're in?
+    // The visual toggle reflects this. Use it as the action signal.
+    const sw = document.getElementById('notif-toggle-switch');
+    const visuallyOn = sw && sw.getAttribute('data-on') === 'true';
+
+    // Check the *actual* subscription state
+    const actuallySubscribed = await PUSH.isSubscribed();
+
+    // CASE 1: Toggle is visually ON and we ARE subscribed → unsubscribe
+    // CASE 2: Toggle is visually OFF (user wants to turn ON) → subscribe
+    // CASE 3: Toggle is visually ON but we are NOT actually subscribed → broken state, fix by re-subscribing
+    // CASE 4: Toggle is visually OFF and we are subscribed (rare) → just update visual
+
+    if (visuallyOn && actuallySubscribed) {
+      // Normal unsubscribe
       await PUSH.unsubscribe();
       await _updateNotifToggleVisual();
       showToast('Daily reminders disabled', 'info');
-    } else {
+      return;
+    }
+
+    // All other cases: try to subscribe (fresh)
+    {
       // Show pending state on the toggle
       const sw = document.getElementById('notif-toggle-switch');
       if (sw) sw.style.opacity = '0.6';
