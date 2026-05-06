@@ -23,6 +23,15 @@ function applyAdminTheme() {
     html.classList.remove('theme-light');
     if (themeMeta) themeMeta.setAttribute('content', '#071510');
   }
+
+  // Belt-and-suspenders: force-hide the admin Dark Mode toggle for non-admins.
+  // This guards against any stale inline `display:flex` left over from a prior
+  // admin session in the same browser (e.g. admin logs out, user logs in
+  // without a hard refresh).
+  const themeToggleBtn = document.getElementById('admin-theme-toggle-btn');
+  if (themeToggleBtn) {
+    themeToggleBtn.style.display = (user && user.role === 'ADMIN') ? 'flex' : 'none';
+  }
 }
 
 function toggleAdminTheme() {
