@@ -2641,7 +2641,6 @@ function _renderDashboardHTML(container, users, allLogs, allRuns) {
     </div>
   `;
 }
-}
 function _shortDate(ymd) {
   if (!ymd) return '';
   // For 1y view, ymd is YYYY-MM
