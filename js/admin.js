@@ -1447,12 +1447,15 @@ function renderAllHistory() {
     ? combined.map(l => {
         const isRun    = l._type === 'run';
         const isCustom = l._type === 'custom';
-        const emoji    = isCustom ? '✏️' : getModuleEmoji(l.module);
-        const name     = isCustom
-          ? 'Custom: ' + (l.module.replace('custom_','').substring(0,12))
-          : getModuleName(l.module);
+        const actType  = l.activityType || 'run'; // for GPS sessions only
+        const emoji    = isCustom ? '✏️'
+                       : isRun   ? _activityIcon(actType)
+                       :           getModuleEmoji(l.module);
+        const name     = isCustom ? 'Custom: ' + (l.module.replace('custom_','').substring(0,12))
+                       : isRun   ? (l.title || _activityName(actType))
+                       :           getModuleName(l.module);
         const badge    = isRun ? 'badge-blue' : isCustom ? 'badge-yellow' : 'badge-green';
-        const label    = isRun ? '🏃 Run' : isCustom ? '✏️ Custom' : '✓ Done';
+        const label    = isRun ? _activityLabel(actType) : isCustom ? '✏️ Custom' : '✓ Done';
         const sub      = isRun ? `${(l.distance||0).toFixed(2)}km · ${fmtTime(l.duration||0)}` : (l.day || '—');
         const userLabel = l.email || l.userId || '—';
         return `
@@ -2388,12 +2391,13 @@ function _renderDashboardContent() {
           const u = realUsers.find(u => u.id === a.userId);
           const time = a.timestamp ? new Date(a.timestamp).toLocaleString('en-IN', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit', hour12:true }) : '';
           const isRun = a.module === 'run' || (a.distance !== undefined);
+          const actType = a.activityType || 'run';
           const safeId = (a.userId||'').replace(/'/g, "\\'");
           return `
             <div class="dash-feed-item dash-clickable" onclick="_drillUser('${safeId}')">
-              <div class="dash-feed-icon">${isRun?'🏃':_modIcon(a.module)}</div>
+              <div class="dash-feed-icon">${isRun ? _activityIcon(actType) : _modIcon(a.module)}</div>
               <div class="dash-feed-info">
-                <div class="dash-feed-text"><strong>${u?.name||a.userId||'Unknown'}</strong> completed <strong>${isRun?(a.distance||0).toFixed(2)+' km '+(a.activityType||'run'):_modName(a.module)}</strong></div>
+                <div class="dash-feed-text"><strong>${u?.name||a.userId||'Unknown'}</strong> completed <strong>${isRun?(a.distance||0).toFixed(2)+' km '+_activityName(actType):_modName(a.module)}</strong></div>
                 <div class="dash-feed-time">${time}</div>
               </div>
             </div>`;
@@ -2598,10 +2602,11 @@ function _drillDay(dateStr, range) {
         const u = realUsers.find(u => u.id === l.userId);
         const time = l.timestamp ? new Date(l.timestamp).toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true }) : '';
         const isRun = l.module === 'run';
+        const actType = l.activityType || 'run';
         return `<div class="dash-feed-item">
-          <div class="dash-feed-icon">${isRun?'🏃':_modIcon(l.module)}</div>
+          <div class="dash-feed-icon">${isRun ? _activityIcon(actType) : _modIcon(l.module)}</div>
           <div class="dash-feed-info">
-            <div class="dash-feed-text"><strong>${u?.name||l.userId}</strong> · ${isRun?(l.distance||0).toFixed(2)+' km':_modName(l.module)}</div>
+            <div class="dash-feed-text"><strong>${u?.name||l.userId}</strong> · ${isRun?(l.distance||0).toFixed(2)+' km '+_activityName(actType):_modName(l.module)}</div>
             <div class="dash-feed-time">${time}</div>
           </div>
         </div>`;
@@ -3212,6 +3217,17 @@ function _modName(mod) {
 function _modIcon(mod) {
   const map = { calisthenics:'💪', cardio:'❤️', yoga:'🧘', stretch:'🤸', stretching:'🤸', custom:'⭐', running:'🏃', run:'🏃' };
   return map[mod] || '🏋️';
+}
+
+// Activity-aware emoji + label for GPS sessions (run / walk / cycle)
+function _activityIcon(activityType) {
+  return ({ run:'🏃', walk:'🚶', cycle:'🚴' })[activityType] || '🏃';
+}
+function _activityName(activityType) {
+  return ({ run:'Running', walk:'Walking', cycle:'Cycling' })[activityType] || 'Running';
+}
+function _activityLabel(activityType) {
+  return ({ run:'🏃 Run', walk:'🚶 Walk', cycle:'🚴 Cycle' })[activityType] || '🏃 Run';
 }
 
 
