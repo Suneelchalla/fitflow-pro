@@ -199,9 +199,68 @@ const PUSH = {
   },
 };
 
+// ── HEALTH CHECK — detects invalid/expired subscriptions ──────────
+// If the local "subscribed" flag is true but OneSignal can't get a subId,
+// it means the FCM token expired. Re-subscribe to get a fresh one.
+async function _healthCheckAndRecover() {
+  if (!PUSH.isSupported()) return;
+  try {
+    const localFlag = Store.get('ff_push_subscribed') === true;
+    if (!localFlag) return; // not subscribed locally, nothing to recover
+    
+    // Wait a moment for OneSignal to be ready
+    const subId = await PUSH.getSubscriptionId();
+    const permission = PUSH.getPermission();
+    
+    if (permission !== 'granted') {
+      // Permission was revoked — clear local flag
+      Store.set('ff_push_subscribed', false);
+      console.log('Push: permission was revoked, marked as unsubscribed');
+      return;
+    }
+    
+    if (!subId) {
+      // We think we're subscribed but OneSignal has no subscription ID
+      // → token expired or invalidated. Force fresh subscribe.
+      console.log('Push: subscription ID missing, attempting to recover...');
+      const ok = await PUSH.subscribe();
+      if (ok) {
+        console.log('Push: re-subscription successful ✓');
+      } else {
+        console.warn('Push: re-subscription failed — user may need to manually toggle in profile');
+        Store.set('ff_push_subscribed', false);
+      }
+    } else {
+      // Has subscription ID — refresh the user link/tags in case external_user_id was lost
+      try {
+        const OneSignal = await PUSH._ensureInit();
+        const user = APP.currentUser;
+        if (OneSignal && user) {
+          await OneSignal.login(user.id);
+          await OneSignal.User.addTags({
+            email: user.email || '',
+            name:  user.name  || '',
+            role:  user.role  || 'USER',
+            lastSeen: new Date().toISOString().slice(0, 10),
+          });
+        }
+      } catch (e) {
+        console.warn('Push: tag refresh failed:', e?.message);
+      }
+    }
+  } catch (e) {
+    console.warn('Push health check failed:', e?.message);
+  }
+}
+
 // ── AUTO-INIT AFTER LOGIN ─────────────────────────────────────────
 async function initPushNotifications() {
   if (!PUSH.isSupported()) return;
+  
+  // FIRST: Run health check — if FCM token expired, this re-subscribes silently
+  // (runs in background, doesn't block UI)
+  _healthCheckAndRecover().catch(e => console.warn('Push recovery failed:', e?.message));
+  
   // Initialize OneSignal SDK so it can register the service worker
   await PUSH._ensureInit();
 
