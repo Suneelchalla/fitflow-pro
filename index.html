@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
     <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/style.css?v=65">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
   <!-- Google Identity Services (One Tap + Sign In With Google) -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -1854,6 +1854,16 @@ window.addEventListener('DOMContentLoaded', function() {
           <!-- 3. Change Password -->
           <button onclick="openChangePasswordModal()" style="width:100%;text-align:left;padding:10px 12px;background:none;border:none;color:var(--text2);font-size:14px;cursor:pointer;border-radius:8px;font-family:var(--font-body)">🔑 Change Password</button>
 
+          <!-- 3b. Theme toggle (admin only) -->
+          <div id="admin-theme-toggle-btn" onclick="toggleAdminTheme()" style="display:none;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;cursor:pointer;border-radius:8px;font-family:var(--font-body)">
+            <span id="admin-theme-toggle-label" style="color:var(--text2);font-size:14px">☀️ Light Mode</span>
+            <div id="admin-theme-toggle-switch" data-on="true"
+              style="width:42px;height:24px;border-radius:12px;background:var(--g4);position:relative;transition:background 0.2s;flex-shrink:0">
+              <div id="admin-theme-toggle-knob"
+                style="position:absolute;top:3px;left:21px;width:18px;height:18px;border-radius:50%;background:white;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.3)"></div>
+            </div>
+          </div>
+
           <!-- 4. Send Feedback (above sign out) -->
           <button onclick="openFeedbackModal()" style="width:100%;text-align:left;padding:10px 12px;background:none;border:none;color:var(--text2);font-size:14px;cursor:pointer;border-radius:8px;font-family:var(--font-body)">💬 Send Feedback</button>
 
@@ -2854,16 +2864,16 @@ window.addEventListener('DOMContentLoaded', function() {
     });
   }
 </script>
-<script src="js/data.js?v=64"></script>
-<script src="js/data-cali.js?v=64"></script>
-<script src="js/app.js?v=64"></script>
-<script src="js/auth.js?v=64"></script>
-<script src="js/dashboard.js?v=64"></script>
-<script src="js/running.js?v=64"></script>
-<script src="js/admin.js?v=64"></script>
+<script src="js/data.js?v=65"></script>
+<script src="js/data-cali.js?v=65"></script>
+<script src="js/app.js?v=65"></script>
+<script src="js/auth.js?v=65"></script>
+<script src="js/dashboard.js?v=65"></script>
+<script src="js/running.js?v=65"></script>
+<script src="js/admin.js?v=65"></script>
 <script src="push.js"></script>
-<script src="js/custom-workouts.js?v=64"></script>
-<script src="js/weekly-report.js?v=64"></script>
+<script src="js/custom-workouts.js?v=65"></script>
+<script src="js/weekly-report.js?v=65"></script>
 <script>
 
 // ── PROFILE DROPDOWN ──────────────────────────────────────────
