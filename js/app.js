@@ -722,6 +722,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (APP.currentPage === 'page-module' && APP.currentModule) {
         if (typeof renderExercises === 'function') renderExercises(APP.currentModule, APP.currentDay || (new Date()).toLocaleDateString('en-US',{weekday:'long'}));
       }
+      // Re-render admin panel after sync so header stats and dashboard use real data
+      if (APP.currentUser?.role === 'ADMIN' && APP.currentPage === 'page-admin') {
+        if (typeof renderAdminPanel === 'function') renderAdminPanel();
+      }
     });
 
     // Init push for non-admin on session restore (page reload)
