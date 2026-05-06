@@ -109,6 +109,7 @@ function doGet(e) {
       case 'getContent':           result = { success:true, content:getContent(p.key) };                break;
       case 'getAllContent':         result = getAllContent();                                             break;
       case 'getFeedback':          result = getFeedback();                                               break;
+      case 'getFeedbackUnread':    result = getFeedbackUnread();                                          break;
       case 'getCustomWorkouts':    result = getCustomWorkouts(p.userId);                                 break;
       case 'getAllCustomWorkouts':  result = getAllCustomWorkouts();                                      break;
       case 'getHydrationLogs':     result = getHydrationLogs(p.userId);                                 break;
@@ -147,6 +148,8 @@ function doPost(e) {
       case 'clearActivePlan':        result = clearActivePlan(body);                      break;
       case 'saveContent':            result = saveContent(body);                          break;
       case 'submitFeedback':         result = submitFeedback(body);                       break;
+      case 'replyFeedback':          result = replyFeedback(body);                         break;
+      case 'markFeedbackRead':       result = markFeedbackRead(body);                      break;
       case 'saveCustomWorkout':      result = saveCustomWorkout(body);                    break;
       case 'deleteCustomWorkout':    result = deleteCustomWorkout(body);                  break;
       case 'savePushSubscription':   result = savePushSubscription(body);                 break;
@@ -941,20 +944,84 @@ function saveAnnouncement(body) {
 // ════════════════════════════════════════════════════════════════
 // FEEDBACK
 // ════════════════════════════════════════════════════════════════
+function _ensureFeedbackCols(sh) {
+  ensureHeaders(sh, ['FeedbackID','UserID','Name','Email','Category','Rating','Message','Date','Timestamp','AdminReply','AdminReplyAt','AdminRead']);
+}
+
 function getFeedback() {
-  const sh   = getSheet(SHEETS.FEEDBACK);
-  const data = sh.getDataRange().getValues();
-  if (data.length<2) return { success:true, feedback:[] };
-  return { success:true, feedback:data.slice(1).reverse()
-    .map(r => ({ id:r[0], userId:r[1], name:r[2], email:r[3], category:r[4], rating:r[5], message:r[6], date:r[7] })) };
+  var sh   = getSheet(SHEETS.FEEDBACK);
+  _ensureFeedbackCols(sh);
+  var data = sh.getDataRange().getValues();
+  if (data.length < 2) return { success:true, feedback:[] };
+  return { success:true, feedback:data.slice(1).reverse().map(function(r) {
+    return {
+      id:           (r[0]||'').toString(),
+      userId:       (r[1]||'').toString(),
+      name:         (r[2]||'').toString(),
+      email:        (r[3]||'').toString(),
+      category:     (r[4]||'').toString(),
+      rating:       r[5] || 0,
+      message:      (r[6]||'').toString(),
+      date:         (r[7]||'').toString(),
+      adminReply:   (r[9]||'').toString(),
+      adminReplyAt: (r[10]||'').toString(),
+      adminRead:    r[11] === true || r[11] === 'TRUE' || r[11] === 'true',
+    };
+  })};
+}
+
+function getFeedbackUnread() {
+  var sh   = getSheet(SHEETS.FEEDBACK);
+  _ensureFeedbackCols(sh);
+  var data = sh.getDataRange().getValues();
+  if (data.length < 2) return { success:true, count:0 };
+  var count = 0;
+  data.slice(1).forEach(function(r) {
+    var read    = r[11] === true || r[11] === 'TRUE' || r[11] === 'true';
+    var replied = (r[9]||'').toString().trim().length > 0;
+    if (!read && !replied) count++;
+  });
+  return { success:true, count:count };
+}
+
+function replyFeedback(body) {
+  if (!body.feedbackId || !body.reply) return { success:false, error:'feedbackId and reply required.' };
+  var sh   = getSheet(SHEETS.FEEDBACK);
+  _ensureFeedbackCols(sh);
+  var data = sh.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if ((data[i][0]||'').toString() === body.feedbackId.toString()) {
+      sh.getRange(i+1, 10).setValue(body.reply);
+      sh.getRange(i+1, 11).setValue(new Date().toISOString());
+      sh.getRange(i+1, 12).setValue(true);
+      SpreadsheetApp.flush();
+      return { success:true };
+    }
+  }
+  return { success:false, error:'Feedback not found.' };
+}
+
+function markFeedbackRead(body) {
+  if (!body.feedbackId) return { success:false, error:'feedbackId required.' };
+  var sh   = getSheet(SHEETS.FEEDBACK);
+  _ensureFeedbackCols(sh);
+  var data = sh.getDataRange().getValues();
+  for (var i = 1; i < data.length; i++) {
+    if ((data[i][0]||'').toString() === body.feedbackId.toString()) {
+      sh.getRange(i+1, 12).setValue(true);
+      SpreadsheetApp.flush();
+      return { success:true };
+    }
+  }
+  return { success:false, error:'Feedback not found.' };
 }
 
 function submitFeedback(body) {
-  const sh = getSheet(SHEETS.FEEDBACK);
-  ensureHeaders(sh,['FeedbackID','UserID','Name','Email','Category','Rating','Message','Date','Timestamp']);
+  var sh = getSheet(SHEETS.FEEDBACK);
+  _ensureFeedbackCols(sh);
   sh.appendRow(['fb_'+Date.now(), body.userId||'', body.name||'Anonymous', body.email||'',
     body.category||'General', body.rating||0, body.message||'',
-    body.date||'', new Date().toISOString()]);
+    body.date||'', new Date().toISOString(), '', '', false]);
   SpreadsheetApp.flush();
   return { success:true };
 }
@@ -1249,12 +1316,7 @@ function _onboardingRow(r) {
 //   ONESIGNAL_APP_ID       = 5dfd18d7-bde4-4f26-a478-0f522b2f299f
 //   ONESIGNAL_REST_API_KEY = <your REST API key from OneSignal Settings>
 // ════════════════════════════════════════════════════════════════
-// ════════════════════════════════════════════════════════════════
-// MORNING MESSAGES — sent at 6 AM daily (107 messages, ~3.5 months unique)
-// Tone: hype, fun, cheeky, motivating — like Swiggy/Zomato but for fitness
-// ════════════════════════════════════════════════════════════════
 var MORNING_MESSAGES = [
-  // CLASSIC HYPE
   { title: '🌅 Rise & Grind!',            body: "Your muscles called — they're bored. Time to fix that! 💪" },
   { title: '🏆 Good Morning Champion!',   body: "The only workout you'll regret is the one you skipped! 🔥" },
   { title: '⏰ Wakey Wakey!',             body: "Your future self is at the gym waiting. Don't keep them waiting! 🏃" },
@@ -1274,7 +1336,6 @@ var MORNING_MESSAGES = [
   { title: '🚫 No Excuses Today!',       body: "Too tired? Start with 5 minutes. Too busy? You're reading this! 😉" },
   { title: '💥 Midweek Push!',           body: "Halfway through the week. Don't slow down now! 🏁" },
   { title: '🏕️ Weekend Warrior!',        body: "No work today? Perfect — more energy for your workout! 💪" },
-  // SWIGGY/ZOMATO STYLE — cheeky & conversational
   { title: '🍳 Skip the paratha today?', body: "Your body has a better offer — 20 mins of cardio + actual energy all day! 🔥" },
   { title: '📦 Your workout is ready!',  body: "Estimated delivery time: right now. No waiting, no traffic. Just open FitFlow! 🏃" },
   { title: '🛵 Out for delivery: Gains', body: "Your daily fitness goals are waiting. Tap to accept! 💪" },
@@ -1283,86 +1344,28 @@ var MORNING_MESSAGES = [
   { title: '🎯 Today\'s special offer!', body: "Buy 1 workout, get: better sleep, more energy & a longer life. Free! 🏃" },
   { title: '📲 New notification!',       body: "From: Your Future Self. Message: Thank you for working out today. Do it! 🙏" },
   { title: '🚨 Flash sale ends at 7AM!', body: "Morning metabolism boost — burns 2x more. Available only NOW. Go! ⚡" },
-  { title: '🥘 Today\'s combo deal:',    body: "10 mins yoga + 10 mins cardio = zero stress + full energy. Better than chai! ☕" },
-  { title: '📍 Your location: Bed',      body: "Suggested destination: FitFlow workout. ETA: 2 mins. Start now? 🏃" },
-  // DESI FLAVOUR
   { title: '🇮🇳 Subah ho gayi!',         body: "Chai peene se pehle ek workout toh banta hai boss! 💪🔥" },
   { title: '💪 Kal kal karte karte...',  body: "Kal phir kal ho gaya. Aaj nahi toh kab? Open FitFlow NOW! 🏃" },
   { title: '🔥 Bhai sun!',               body: "Jo log 6 AM uthke workout karte hain — unhe duniya alag nazar aati hai. Be that person! 🌅" },
-  { title: '😤 Uthh bhai uthh!',         body: "Neend toh raat ko bhi aayegi. Abhi FitFlow khol aur ek set maar! 💪" },
-  { title: '🏃 Chal beta chal!',         body: "Body ne subah request ki hai — thoda movement chahiye. Open karo! 🔥" },
-  // FUNNY & RELATABLE
   { title: '🛌 Still in bed?',           body: "Your blanket is lying to you. The gym won't. Let's go! 💪" },
-  { title: '🐌 Slow start?',             body: "Even a 10-min walk counts. Start small, finish strong! 🚶" },
   { title: '🧠 Your brain just said:',   body: "\"I don't wanna workout.\" Your future self said: \"DO IT ANYWAY.\" Listen to them! 😤" },
   { title: '📺 Netflix can wait.',       body: "Your body cannot. 20 mins now = guilt-free binge later. Deal? 🤝" },
-  { title: '🍕 Fun fact:',               body: "You burn 0 calories lying in bed reading this. FitFlow burns the rest. Open it! 🔥" },
   { title: '🦥 Sloth mode: OFF',         body: "Beast mode: loading… Open FitFlow to complete installation! ⚡" },
-  { title: '😴 5 more minutes?',         body: "You said that 3 times already. The workout is still waiting. Come on! 💪" },
-  { title: '🤔 Hot take:',               body: "People who work out in the morning don't cancel plans. They ARE the plan. 🔥" },
-  { title: '🎵 Today\'s vibe check:',    body: "Sweaty > Lazy. Sore > Sorry. Strong > Struggling. Open FitFlow! 💪" },
-  { title: '🧊 Cold water challenge:',   body: "Splash cold water on your face. Now you're awake. Now you have no excuse! 😂💪" },
-  // STREAK & GOAL FOCUSED
   { title: '🔥 Keep your streak alive!', body: "Don't let today be the day you break it. Open FitFlow — it takes 2 mins! 🏃" },
-  { title: '📅 Day is yours!',           body: "Make it count. One workout today = one step closer to the body you want. 💪" },
   { title: '🎯 Focus!',                  body: "Goals don't care about your mood. Open FitFlow and do the work! ⚡" },
   { title: '📈 Progress update:',        body: "The you from last month is watching. Don't disappoint them! 💪" },
-  { title: '🏅 You\'re this close!',     body: "One workout away from a new personal best. Go get it! 🔥" },
   { title: '⏳ 30 days from now...',     body: "You'll either wish you started today, or be glad you did. Choose wisely! 💪" },
-  { title: '🧱 Building blocks:',        body: "Day 1 is easy. Day 30 is where legends are made. Which one are you on? 🏆" },
-  { title: '🌱 Small wins today =',      body: "Big results in 30 days. Open FitFlow and stack those wins! 📈" },
-  { title: '💡 Reminder:',               body: "The best investment you'll ever make is in your own health. Spend 20 mins now! 💪" },
-  { title: '🔑 Secret to success:',      body: "Show up. Even on days you don't feel like it. Especially those days. 💪" },
-  // MODULE SPECIFIC
   { title: '🧘 Yoga time!',              body: "10 mins of morning yoga and your whole day changes. Try it — FitFlow has it ready! 🌿" },
   { title: '🏃 Running calling!',        body: "Morning air is free, GPS is ready, FitFlow is waiting. What's the excuse? 🌅" },
   { title: '🏋️ Gym day!',               body: "The weights are waiting. Your muscles are rested. Perfect combo. GO! 💪" },
-  { title: '🤸 Stretch it out!',         body: "5 mins of stretching = no back pain all day. Cheap insurance! 🧘" },
-  { title: '🔥 Cardio o\'clock!',        body: "Heart rate up, fat down, mood through the roof. That's morning cardio! ⚡" },
-  { title: '💪 Calisthenics time!',      body: "No gym? No problem. Your bodyweight is the best equipment. Let's go! 🤸" },
-  { title: '🎯 Core activated!',         body: "Strong core = strong life. 10 mins abs this morning. You won't regret it! 🔥" },
-  // SCIENCE & FACTS
   { title: '🔬 Science says:',           body: "Morning workouts boost metabolism for 14 hours. That's the whole day. Go! 💪" },
   { title: '🧬 Fun body fact:',          body: "Exercise releases dopamine, serotonin AND endorphins. That's 3 happy chemicals. FREE. 😁" },
-  { title: '💤 Sleep better tonight:',   body: "People who exercise in the morning sleep 65% deeper. Open FitFlow now! 🌙" },
   { title: '🧠 Brain boost incoming!',   body: "20 mins of cardio = better focus for 6 hours. Your most productive hack! ⚡" },
-  { title: '❤️ Heart check:',            body: "15 mins of exercise today reduces heart disease risk by 14%. Worth it! 💪" },
-  // COMPETITIVE
-  { title: '👀 While you slept...',      body: "Someone in your city already finished their workout. Still napping? 😤" },
-  { title: '🏆 Leaderboard check:',      body: "Top FitFlow users are already active. Don't let the gap grow. Go! 🔥" },
-  { title: '⚡ They\'re ahead of you!',  body: "The disciplined ones started 30 mins ago. You can still catch up. Open FitFlow! 💪" },
-  { title: '😤 Prove them wrong!',       body: "Everyone who said you can't — imagine their face when you do. Let's GO! 🏆" },
-  // SEASONAL / SITUATIONAL
-  { title: '🌦️ Rainy morning?',          body: "Perfect excuse to do home cardio. FitFlow's indoor workouts are right here! 🏠💪" },
-  { title: '🌞 Sunny morning!',          body: "Nature's pre-workout is free today. Go for a run before it gets hot! 🏃" },
-  { title: '📅 Monday morning!',         body: "Set the tone for the whole week. One workout now = winning mindset all week! 💪" },
-  { title: '🎉 It\'s Friday!',           body: "End the week strong. One last workout before the weekend. You deserve it! 🔥" },
-  { title: '🌙 Slept well?',             body: "Your body is fully recharged. Your muscles are recovered. PERFECT timing. GO! ⚡" },
-  // FOOD MOTIVATION (Indian-specific)
-  { title: '🍚 Had idli for breakfast?', body: "That carb energy needs somewhere to go! FitFlow workout — perfect match! 💪" },
-  { title: '☕ Chai is brewing...',       body: "While it cools, squeeze in 10 mins of stretching. Productive AND healthy! 🧘" },
-  { title: '🥗 Eating clean today?',     body: "Pair it with a workout and watch the magic happen! Open FitFlow 🔥" },
-  { title: '🍌 Had a banana?',           body: "That's 27g of carbs ready to fuel your workout. Don't waste the energy! 💪" },
-  // PHILOSOPHICAL
-  { title: '🌍 One life.',               body: "One body. One chance to make it strong. Today is part of that chance. 💪" },
-  { title: '⏰ Time check:',             body: "In 30 mins you could finish a full workout. Or scroll Instagram. Choose! 📱🏃" },
-  { title: '🤷 What\'s the worst?',      body: "Worst case: you sweat a little. Best case: you transform your life. Worth it! 💪" },
-  { title: '🎭 Two versions of you:',    body: "One hits snooze. One hits the workout. Which one wins today? 💪" },
-  { title: '🔮 Future you is watching.', body: "They're either proud or disappointed. Your choice, right now, today. GO! 🏆" },
-  { title: '📖 Chapter today:',          body: "\"The day they showed up even when they didn't feel like it.\" Write it! ✍️💪" },
-  // SHORT & PUNCHY
   { title: '💥 DO IT.',                  body: "Not tomorrow. Not after chai. NOW. Open FitFlow! 🔥" },
   { title: '🏃 GO.',                     body: "You already know you should. So just go. FitFlow is ready! ⚡" },
   { title: '🔥 TODAY.',                  body: "Not a perfect day. Not a free day. Just a workout day. Let's go! 💪" },
-  { title: '⚡ NOW.',                    body: "The best time to work out is now. Second best is also now. GO! 🏃" },
-  { title: '💪 MOVE.',                   body: "Your body was built to move. Give it what it wants. FitFlow → open! 🔥" },
-  // SELF CARE ANGLE
   { title: '🫀 Love yourself?',          body: "Then move your body today. 20 mins is self-care, not sacrifice. 💪" },
   { title: '🧘 Mental health tip:',      body: "Exercise is the most underused antidepressant. Dose: 20 mins daily. Take it! 🌿" },
-  { title: '✨ Glow up season:',         body: "It starts with one workout. Open FitFlow and begin yours today! 💪" },
-  { title: '🌸 You deserve to feel good', body: "And 20 mins of movement will do exactly that. FitFlow has your back! 🌟" },
-  { title: '🧡 Self care Sunday!',       body: "Rest is great. But an active rest = stretching + yoga. FitFlow has both! 🧘" },
-  // DAY OF WEEK
   { title: '💥 Monday Momentum!',        body: "Win Monday and the whole week follows. Workout first, everything else after! 🔥" },
   { title: '🔥 Tuesday Power!',          body: "Tuesday is the most underrated day to have the best workout. Prove it! 💪" },
   { title: '⚡ Wednesday Warrior!',      body: "Hump day? More like PUMP day. Let's go! 🏋️" },
@@ -1372,121 +1375,49 @@ var MORNING_MESSAGES = [
   { title: '🌅 Sunday Reset!',           body: "Stretch, breathe, move. Set the tone for an incredible week ahead! 🧘" },
 ];
 
-// ════════════════════════════════════════════════════════════════
-// EVENING MESSAGES — sent at 7 PM daily (105 messages, ~3.5 months unique)
-// Tone: after-work relief, stress-busting, wind-down motivation
-// ════════════════════════════════════════════════════════════════
 var EVENING_MESSAGES = [
-  // WORK-STRESS RELIEF
   { title: '😮‍💨 Tired from work?',        body: "10 mins of stretching and you'll feel like a different person. Promise! 🧘" },
   { title: '💆 Stress leaving the body:', body: "Destination: FitFlow workout. Duration: 20 mins. Guaranteed relief! 🔥" },
   { title: '🏢 Office didn\'t kill you!', body: "You survived the meetings. Now reward yourself with endorphins. GO! 💪" },
   { title: '😤 Rough day?',               body: "Don't eat your feelings. SWEAT them out. FitFlow evening workout — now! 🔥" },
-  { title: '🖥️ Screen time: 8 hrs',       body: "Body movement time: 0 hrs. That\'s not a balance. Fix it now! 💪" },
-  { title: '📧 Inbox cleared?',           body: "Now clear out that stress with a quick workout. You\'ll sleep like a baby! 🌙" },
+  { title: '🖥️ Screen time: 8 hrs',       body: "Body movement time: 0 hrs. That's not a balance. Fix it now! 💪" },
   { title: '🤯 Brain is fried?',          body: "Switch off the mind, switch on the body. 20 mins = full reset! ⚡" },
-  { title: '😩 Long day, huh?',           body: "The quickest way to feel better isn't Netflix — it\'s movement. Try it! 🏃" },
-  { title: '🕐 End of shift!',            body: "Work is done. The REAL you — the strong, healthy one — needs attention now! 💪" },
-  { title: '🏃 Work-to-workout mode:',    body: "One mode switch is all it takes. Lace up, open FitFlow, feel amazing! ⚡" },
-  // STRETCHING FOCUS (since that's the theme)
+  { title: '😩 Long day, huh?',           body: "The quickest way to feel better isn't Netflix — it's movement. Try it! 🏃" },
   { title: '🤸 Your back called!',        body: "It says 8 hours at a desk was enough. 10 mins stretching — do it now! 🧘" },
   { title: '🪑 Sat all day?',             body: "Your spine deserves better. 10 mins evening stretch = no pain tomorrow! 🌿" },
-  { title: '😫 Stiff neck & shoulders?', body: "That\'s your body screaming for movement. FitFlow stretching routine — NOW! 🧘" },
-  { title: '🦵 Legs feeling heavy?',      body: "3 mins of leg stretches and you'll feel like you're floating. Try it! 🌟" },
+  { title: '😫 Stiff neck & shoulders?', body: "That's your body screaming for movement. FitFlow stretching routine — NOW! 🧘" },
   { title: '🧘 Evening yoga calling!',    body: "Tired body + yoga = the best combo ever invented. 15 mins. Life-changing! 🌿" },
-  { title: '🌿 Flexibility check!',       body: "Can you touch your toes? By next month you will — if you stretch today! 🤸" },
-  { title: '💆 Neck pain?',               body: "Don't sleep on it. Stretch it out first. FitFlow has the exact routine! 🧘" },
-  { title: '🏋️ Lower back talking?',      body: "It wants 5 mins of core + stretching. Give it what it needs! 🔥" },
-  { title: '🤲 Wrists and fingers stiff?',body: "Typing all day does that. FitFlow desk-worker stretch routine fixes this! 🧘" },
-  { title: '🧍 Posture check!',           body: "Sit up straight while reading this. Now imagine that ALL day. Do yoga! 🌿" },
-  // SWIGGY/ZOMATO STYLE
   { title: '🛵 Evening delivery!',        body: "What's being delivered: stress relief, better sleep, good mood. Open FitFlow! 😁" },
-  { title: '⭐ Rate your day!',           body: "Bad day? Workout = 5 stars tomorrow. Good day? Workout = even better! 💪" },
-  { title: '🛒 Your cart:',               body: "1x Evening workout added. Complete checkout to unlock: amazing sleep tonight! 🌙" },
-  { title: '📦 Package waiting!',         body: "Contents: 20 mins of movement, endorphins, good mood. Collect now! ⚡" },
-  { title: '🍽️ Dinner in 1 hour?',        body: "Perfect time for a 20-min workout first. Earn that meal! 🔥" },
-  { title: '🎁 Free with every workout:', body: "Better sleep, less stress, more energy tomorrow. No coupon needed! 😁" },
-  { title: '⏰ Limited time offer!',      body: "Evening workout window closing in 2 hours. Don't miss it! Open FitFlow! 💪" },
-  { title: '🔔 Reminder from your body:', body: "\"Hey, we haven't moved since this morning. Can we please?\" 🏃" },
-  // AFTER-WORK ENERGY
-  { title: '⚡ Second wind incoming!',    body: "A 20-min workout gives you 3 hours of evening energy. Science. Facts! 🔬" },
-  { title: '🔋 Recharge mode:',          body: "Counterintuitive but true — exercise energises more than rest. Try it! ⚡" },
-  { title: '🌙 Sleep hack:',             body: "Evening workout = 2x deeper sleep tonight. That\'s tomorrow\'s superpower! 💤" },
-  { title: '😴 Want to sleep better?',   body: "20 mins of movement now = the best night's sleep you've had in weeks! 🌙" },
-  { title: '🎯 Evening routine:',        body: "Shower → workout → dinner → sleep. The formula for a GREAT tomorrow! 💪" },
-  { title: '🌆 Golden hour!',            body: "Between work and dinner is the perfect workout window. Use it! 🏃" },
-  // FOOD-LINKED
   { title: '🍛 Dinner smells good!',     body: "Earn it with a 20-min workout first. Everything tastes better after! 😋" },
-  { title: '🫕 Biryani tonight?',        body: "20 mins of cardio and you can have it guilt-free. Fair deal? Let\'s go! 🔥" },
-  { title: '🍦 Craving something sweet?',body: "Your body wants endorphins more. A workout gives them FREE. Open FitFlow! 💪" },
-  { title: '🥗 Eating healthy tonight?', body: "Pair it with a workout and you're basically a superhero. GO! ⚡" },
-  { title: '☕ Evening chai time?',       body: "Great! Have it after a 15-min yoga session. 10x more relaxing, trust us! 🧘" },
-  { title: '🍕 Friday night treat?',     body: "Earn it! A quick 20-min workout first makes the food taste better. Real! 😋" },
-  // MENTAL HEALTH ANGLE
+  { title: '🫕 Biryani tonight?',        body: "20 mins of cardio and you can have it guilt-free. Fair deal? Let's go! 🔥" },
   { title: '🧠 Anxiety check:',          body: "Feeling anxious about tomorrow? A workout will delete 80% of that. Go! 🌿" },
-  { title: '😔 Low mood?',               body: "Your body has a built-in antidepressant. It\'s called exercise. Activate it! 💪" },
-  { title: '🌊 Overwhelmed?',            body: "20 mins of movement resets your nervous system. It\'s science. Try it! 🧘" },
-  { title: '🧘 Clear your head!',        body: "Best therapy after a hard day: yoga + deep breathing. FitFlow has it! 🌿" },
-  { title: '😤 Frustration?',            body: "Channel it into a workout. Anger is just pre-workout you haven't used! 🔥" },
-  { title: '🕊️ Find your calm!',         body: "10 mins evening yoga = peace you can\'t buy. It\'s free in FitFlow! 🌿" },
-  { title: '💭 Can\'t stop thinking?',   body: "Move your body and quiet your mind. That\'s what exercise does. GO! 🧘" },
-  // STREAK & ACCOUNTABILITY
-  { title: '🔥 Streak check!',           body: "Don\'t let today be a zero day. Even 10 mins keeps the streak alive! 💪" },
-  { title: '📊 Daily goal status:',      body: "Still pending: today\'s workout. Close it out now! 10 mins is enough! ⚡" },
+  { title: '😔 Low mood?',               body: "Your body has a built-in antidepressant. It's called exercise. Activate it! 💪" },
+  { title: '🔥 Streak check!',           body: "Don't let today be a zero day. Even 10 mins keeps the streak alive! 💪" },
   { title: '✅ One thing left:',         body: "Everything else is done. Your workout is the only thing missing today! 💪" },
-  { title: '🏅 So close!',              body: "You\'re one workout away from another streak day. Don\'t stop now! 🔥" },
-  { title: '📅 Don\'t make it a rest day', body: "unless you planned it. If you didn\'t — 15 mins of yoga counts! 🧘" },
-  { title: '💯 100% today?',            body: "You\'ve done everything else. Finish strong with a quick evening session! 💪" },
-  // COMPETITIVE / SOCIAL PROOF
-  { title: '👀 Fun fact:',               body: "People who work out in the evening are 40% less stressed at night. Be one! 🌙" },
-  { title: '🏆 Top performers:',         body: "All have one thing in common — they didn\'t skip evening workouts. Join them! 💪" },
-  { title: '😤 Your friend worked out.', body: "Are you going to let them get ahead? Open FitFlow. NOW! 🔥" },
-  { title: '📈 While you relaxed...',    body: "Your healthier future self was built in moments like this. Create one! 💪" },
-  // DESI FLAVOUR
   { title: '😤 Bhai, din bhar kaam kiya!', body: "Ab body ko bhi thoda time do. 15 mins stretching — teri body khush ho jaayegi! 🧘" },
   { title: '🏃 Sham ho gayi yaar!',      body: "Office toh gaya. Ab FitFlow khol aur ek achi workout kar. Tu deserve karta hai! 💪" },
-  { title: '😩 Thak gaya?',              body: "Exercise se thakaan kam hoti hai — sound weird but it\'s true! Try karo aaj! ⚡" },
-  { title: '🌙 Raat ko neend chahiye?',  body: "Shaam ki 20 min workout se neend gazab aati hai. Aaj try karo! 💤" },
-  { title: '🍛 Khana khane se pehle!',   body: "Ek baar workout karo. Baad mein khana 10 guna zyada tasty lagega! 😋" },
-  // FUNNY
   { title: '🤔 Real talk:',              body: "The couch will be there after your workout. Your motivation might not. GO! 💪" },
-  { title: '📺 Netflix can wait!',       body: "Your show auto-saves. Your health doesn\'t. Workout first, binge after! 🔥" },
-  { title: '🛋️ Couch is tempting...',    body: "But your future abs are more tempting. 20 mins. Go! 💪" },
-  { title: '😂 Your muscles tomorrow:', body: "\"Why didn\'t you workout yesterday?\" Don\'t let them ask that. GO NOW! 🔥" },
-  { title: '🤡 Plot twist:',            body: "You feel MORE energetic AFTER a workout. Even evening ones. Wild, right? ⚡" },
-  { title: '🐢 10 mins slow yoga?',     body: "Counts. 10 mins brisk walk? Counts. Just move! FitFlow has options! 🌿" },
-  // ASPIRATIONAL
-  { title: '🌟 Dream body?',            body: "It\'s built in evenings like this one. When it\'s easy to say no. SAY YES! 💪" },
-  { title: '🚀 6 months from now:',     body: "You\'ll thank every evening you chose to move instead of scroll. GO! 📈" },
+  { title: '📺 Netflix can wait!',       body: "Your show auto-saves. Your health doesn't. Workout first, binge after! 🔥" },
+  { title: '🌟 Dream body?',            body: "It's built in evenings like this one. When it's easy to say no. SAY YES! 💪" },
+  { title: '🚀 6 months from now:',     body: "You'll thank every evening you chose to move instead of scroll. GO! 📈" },
   { title: '💎 Discipline > Motivation', body: "Motivation comes and goes. Discipline shows up at 7 PM anyway. Be disciplined! 💪" },
-  { title: '🌙 Evening routine matters!', body: "People with evening workout habits are 60% more consistent. Build yours now! 📊" },
-  { title: '✨ Version 2.0 of you:',    body: "Starts tonight. With this workout. With this choice. Open FitFlow! 🔥" },
-  { title: '🏗️ Building yourself:',     body: "Brick by brick. Workout by workout. Today\'s evening session is one brick. 💪" },
-  // WIND DOWN
   { title: '🌙 Wind down right!',       body: "Not with screens — with stretching. Your body and mind will thank you! 🧘" },
-  { title: '😌 Peaceful evening hack:', body: "15 mins yoga before dinner = the most relaxed you\'ve felt all week! 🌿" },
-  { title: '🌸 Evening ritual:',        body: "Move → shower → eat → sleep. In that order. Best formula ever. 💪" },
+  { title: '😌 Peaceful evening hack:', body: "15 mins yoga before dinner = the most relaxed you've felt all week! 🌿" },
   { title: '💤 Deep sleep tonight?',    body: "7 PM workout is the proven trigger. FitFlow has 15-min routines. Perfect! 🌙" },
-  { title: '🌟 End the day strong!',    body: "Don\'t just survive the day — finish it with intention. Workout = intention! 💪" },
-  // SHORT & PUNCHY
+  { title: '🌟 End the day strong!',    body: "Don't just survive the day — finish it with intention. Workout = intention! 💪" },
   { title: '💪 STRETCH.',              body: "Just 10 minutes. Your back has been waiting all day. Do it now! 🧘" },
   { title: '🔥 EVENING.',             body: "Workouts hit different when the day is done. Prove it tonight! ⚡" },
-  { title: '⚡ MOVE.',                 body: "You\'ve been sitting too long. FitFlow. Now. Go! 🏃" },
-  { title: '🎯 FINISH IT.',           body: "The day isn\'t complete without moving your body. 15 mins. GO! 💪" },
+  { title: '⚡ MOVE.',                 body: "You've been sitting too long. FitFlow. Now. Go! 🏃" },
+  { title: '🎯 FINISH IT.',           body: "The day isn't complete without moving your body. 15 mins. GO! 💪" },
   { title: '🌙 TONIGHT.',             body: "The version of you that works out tonight wins tomorrow. Choose them! 🏆" },
-  // DAY OF WEEK - EVENING
   { title: '💥 Monday done!',          body: "Celebrate by crushing an evening workout. Set the tone for the week! 🔥" },
-  { title: '🔥 Tuesday evening grind!', body: "Two-a-day? No. Just finishing what morning couldn\'t. Let\'s go! 💪" },
-  { title: '⚡ Wednesday check-in!',   body: "Midweek body check: did you move enough today? If not — now\'s the time! 🏃" },
+  { title: '🔥 Tuesday evening grind!', body: "Two-a-day? No. Just finishing what morning couldn't. Let's go! 💪" },
+  { title: '⚡ Wednesday check-in!',   body: "Midweek body check: did you move enough today? If not — now's the time! 🏃" },
   { title: '🎯 Thursday push!',        body: "One more evening grind before the weekend. Make it count! 💪" },
   { title: '🎉 TGIF workout!',         body: "Because the best way to start the weekend is sweaty and proud! 🔥" },
   { title: '🌟 Saturday evening!',     body: "Family? Friends? Check. But did you move YOUR body today? FitFlow! 💪" },
   { title: '🧘 Sunday evening ritual!', body: "Tomorrow is Monday. Prepare your body AND mind with evening yoga. 🌿" },
-  // BODY SPECIFIC
   { title: '🦵 Leg day recovery?',     body: "10 mins of light stretching now = no soreness tomorrow. Smart move! 🧘" },
-  { title: '💪 Arms tired?',           body: "That\'s the gains being made! Stretch them out and let them grow! 🏋️" },
-  { title: '🔥 Core strength:',        body: "10 mins of ab work before bed is the most efficient workout. DO IT! 💪" },
-  { title: '🏃 Didn\'t run today?',    body: "Even a 15-min walk after dinner counts as cardio. FitFlow tracks it! 🌙" },
   { title: '🤸 Flexibility matters!',  body: "Most injuries happen to inflexible people. 10 mins tonight prevents them! 🧘" },
 ];
 
@@ -1497,7 +1428,6 @@ function getTodaysMessage() {
 
 function getTonightsMessage() {
   var day = Math.floor((new Date() - new Date(new Date().getFullYear(),0,0)) / 86400000);
-  // Offset index so morning and evening never show same-numbered message
   return EVENING_MESSAGES[(day + 50) % EVENING_MESSAGES.length];
 }
 
@@ -2169,7 +2099,17 @@ function sendPushToUser(subscriptionId, title, body, url) {
   } catch(e) { return { success:false, error:e.message }; }
 }
 
-// Sends today's evening reminder to ALL OneSignal subscribers
+// Test from Apps Script editor: select this function and Run, then check Logs
+function testPushNotification() {
+  var result = sendDailyPushNotifications();
+  Logger.log('Test result: ' + JSON.stringify(result));
+}
+
+function testEveningPushNotification() {
+  var result = sendEveningPushNotifications();
+  Logger.log('Evening test result: ' + JSON.stringify(result));
+}
+
 function sendEveningPushNotifications() {
   var props  = PropertiesService.getScriptProperties();
   var appId  = props.getProperty('ONESIGNAL_APP_ID');
@@ -2179,13 +2119,11 @@ function sendEveningPushNotifications() {
     return { success:false, error:'Missing OneSignal credentials' };
   }
   var msg = getTonightsMessage();
-
   var deviceIds = _getSubscribedDeviceIds();
   if (!deviceIds.length) {
-    Logger.log('No subscribed devices found — cannot send push');
+    Logger.log('No subscribed devices found');
     return { success:false, error:'No subscribed devices' };
   }
-
   var payload = {
     app_id:             appId,
     include_player_ids: deviceIds,
@@ -2210,7 +2148,7 @@ function sendEveningPushNotifications() {
     var parsed = {}; try { parsed = JSON.parse(body); } catch(e) {}
     Logger.log('Evening push HTTP ' + code + ': ' + body);
     if (code >= 200 && code < 300 && parsed.id) {
-      Logger.log('✅ Evening push sent. Targeted: ' + deviceIds.length + ' devices. id: ' + parsed.id);
+      Logger.log('✅ Evening push sent. Targeted: ' + deviceIds.length + ' devices.');
       return { success:true, recipients:parsed.recipients, id:parsed.id, targeted:deviceIds.length };
     }
     return { success:false, error:'HTTP ' + code, body:body.substring(0, 500) };
@@ -2218,11 +2156,6 @@ function sendEveningPushNotifications() {
     Logger.log('Evening push error: ' + e.message);
     return { success:false, error:e.message };
   }
-}
-
-function testEveningPushNotification() {
-  var result = sendEveningPushNotifications();
-  Logger.log('Evening test result: ' + JSON.stringify(result));
 }
 
 function createDailyTrigger() {
@@ -2241,7 +2174,6 @@ function createEveningTrigger() {
   Logger.log('✅ Evening 7 PM trigger created!');
 }
 
-// Run this ONCE to set up BOTH triggers together
 function createAllTriggers() {
   createDailyTrigger();
   createEveningTrigger();
