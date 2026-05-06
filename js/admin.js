@@ -27,12 +27,15 @@ function renderAdminPanel() {
 }
 
 function renderAdminStats() {
-  const allLogs     = Store.getLogs();
-  const allRunLogs  = Store.getRunLogs();
-  const today       = todayStr();
+  // Use cached dashboard data (from Sheets) when available — falls back to localStorage
+  // This prevents the header always showing 0 for admin who has no personal logs
+  const data       = _adminDashboardData;
+  const allLogs    = data?.allLogs    || Store.getLogs();
+  const allRunLogs = data?.allRuns    || Store.getRunLogs();
+  const today      = todayStr();
   const todayActive = [...new Set(allLogs.filter(l => l.date === today).map(l => l.userId))].length;
-  const stdLogs     = allLogs.filter(l => !l.module.startsWith('custom_'));
-  const cwLogs      = allLogs.filter(l => l.module.startsWith('custom_'));
+  const stdLogs    = allLogs.filter(l => !l.module.startsWith('custom_'));
+  const cwLogs     = allLogs.filter(l =>  l.module.startsWith('custom_'));
   const el = id => document.getElementById(id);
   if (el('admin-stat-workouts')) el('admin-stat-workouts').textContent = stdLogs.length;
   if (el('admin-stat-runs'))     el('admin-stat-runs').textContent     = allRunLogs.length;
@@ -87,6 +90,28 @@ async function loadAdminUsers() {
     container.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div>
       <p>Failed to load users.<br>${res?.error || 'Check your Sheets URL.'}</p></div>`;
     return;
+  }
+
+  // Also ensure log data is available so workout counts show in user rows.
+  // If _adminDashboardData is null (Users tab opened before Dashboard tab),
+  // fetch logs now so _userLogsCount() / _userLastActivity() have real data.
+  if (!_adminDashboardData) {
+    try {
+      const [logsRes, runsRes] = await Promise.all([
+        Sheets.get('getAllLogs').catch(() => null),
+        Sheets.get('getAllRunLogs').catch(() => null),
+      ]);
+      _adminDashboardData = {
+        users:     res.users || [],
+        allLogs:   (logsRes?.success && logsRes.logs?.length)  ? logsRes.logs  : Store.getLogs(),
+        allRuns:   (runsRes?.success  && runsRes.logs?.length)  ? runsRes.logs  : Store.getRunLogs(),
+        fetchedAt: new Date(),
+      };
+      // Update header KPI cards with real data now that we have it
+      renderAdminStats();
+    } catch(e) {
+      console.warn('[Admin] Could not pre-fetch logs for user list:', e.message);
+    }
   }
 
   const users = res.users || [];
@@ -1431,9 +1456,35 @@ function addQuoteRow() {
 // ════════════════════════════════════════════════════════════════
 // HISTORY
 // ════════════════════════════════════════════════════════════════
-function renderAllHistory() {
-  const allLogs = Store.getLogs().sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
-  const allRuns = Store.getRunLogs().sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+async function renderAllHistory() {
+  const container = document.getElementById('all-history-list');
+  if (!container) return;
+
+  // Show loading state while we fetch
+  container.innerHTML = `<div style="text-align:center;padding:32px;color:var(--text3)">
+    <div class="loader" style="margin:0 auto 12px"></div>Loading history…</div>`;
+
+  // Use cached dashboard data if available; otherwise fetch from Sheets.
+  // Admin's localStorage is empty — must always pull from Sheets for cross-user data.
+  let allLogs = _adminDashboardData?.allLogs || null;
+  let allRuns = _adminDashboardData?.allRuns || null;
+
+  if (!allLogs || !allRuns) {
+    try {
+      const [logsRes, runsRes] = await Promise.all([
+        Sheets.get('getAllLogs').catch(() => null),
+        Sheets.get('getAllRunLogs').catch(() => null),
+      ]);
+      allLogs = (logsRes?.success && logsRes.logs?.length) ? logsRes.logs : Store.getLogs();
+      allRuns = (runsRes?.success  && runsRes.logs?.length) ? runsRes.logs : Store.getRunLogs();
+    } catch(e) {
+      allLogs = Store.getLogs();
+      allRuns = Store.getRunLogs();
+    }
+  }
+
+  allLogs = allLogs.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
+  allRuns = allRuns.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
   const combined = [
     ...allLogs.map(l => ({ ...l, _type: l.module.startsWith('custom_') ? 'custom' : 'workout' })),
@@ -2170,6 +2221,7 @@ async function renderAdminDashboard() {
   } catch(e) { console.warn('Dashboard fetch:', e.message); }
 
   _adminDashboardData = { users, allLogs, allRuns, fetchedAt: new Date() };
+  renderAdminStats(); // Update header KPI cards now that we have real cross-user data
   _renderDashboardContent();
 
   const lr = document.getElementById('dash-last-refresh');
