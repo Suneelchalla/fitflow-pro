@@ -66,47 +66,100 @@ const PUSH = {
 
   // ── Subscribe (asks for permission if needed) ───────────────────
   async subscribe() {
-    if (!this.isSupported()) return null;
+    if (!this.isSupported()) return { ok: false, reason: 'unsupported' };
     try {
       const OneSignal = await this._ensureInit();
-      if (!OneSignal) return null;
+      if (!OneSignal) return { ok: false, reason: 'init_failed' };
 
-      // Step 1: Browser permission
-      if (OneSignal.Notifications.permission !== true) {
-        await OneSignal.Notifications.requestPermission();
-      }
-      if (OneSignal.Notifications.permission !== true) {
-        // User denied or dismissed
-        return null;
+      // Step 1: Check browser permission first
+      const browserPerm = (typeof Notification !== 'undefined') ? Notification.permission : 'denied';
+
+      if (browserPerm === 'denied') {
+        // Browser permission was explicitly blocked — user must unblock manually
+        console.warn('Push: browser permission is BLOCKED — user must unblock in browser settings');
+        return { ok: false, reason: 'permission_blocked' };
       }
 
-      // Step 2: Explicitly opt the user in to OneSignal pushes
-      // (permission alone is not enough — must also set opted-in)
+      if (browserPerm === 'default') {
+        // Need to ask user
+        try {
+          await OneSignal.Notifications.requestPermission();
+        } catch (e) {
+          console.warn('requestPermission threw:', e?.message);
+        }
+        // Re-check
+        const newPerm = (typeof Notification !== 'undefined') ? Notification.permission : 'denied';
+        if (newPerm !== 'granted') {
+          return { ok: false, reason: 'permission_denied' };
+        }
+      }
+
+      // Step 2: Opt in to OneSignal
       try {
         await OneSignal.User.PushSubscription.optIn();
       } catch (e) {
         console.warn('OneSignal optIn warning:', e?.message);
       }
 
-      // Step 3: Wait for OneSignal to register the subscription
-      // Poll up to 8 seconds for subscription ID to appear
+      // Step 3: Poll for subscription ID (up to 15 seconds)
       let subId = null;
-      for (let i = 0; i < 16; i++) {
-        subId = OneSignal.User.PushSubscription.id;
-        if (subId) break;
+      for (let i = 0; i < 30; i++) {
+        try {
+          subId = OneSignal.User.PushSubscription.id;
+          if (subId) break;
+        } catch {}
         await new Promise(r => setTimeout(r, 500));
       }
+
+      // Step 4: If still no subId, attempt RECOVERY
       if (!subId) {
-        console.warn('OneSignal subscription ID never appeared');
-        return null;
+        console.warn('Push: subId did not appear — attempting recovery (clear SW + retry)');
+        const recovered = await this._forceRecovery();
+        if (recovered) {
+          subId = OneSignal.User.PushSubscription.id;
+        }
       }
 
-      // Step 4: Save the subscription to your sheet
+      if (!subId) {
+        return { ok: false, reason: 'no_subscription_id' };
+      }
+
+      // Step 5: Save to sheet
       await this._save();
-      return true;
+      return { ok: true, subId: subId };
     } catch (e) {
       console.error('Push subscribe failed:', e?.message || e);
-      return null;
+      return { ok: false, reason: 'exception', error: e?.message };
+    }
+  },
+
+  // ── Last-resort recovery: unregister SW + force fresh re-init ───────
+  async _forceRecovery() {
+    try {
+      const OneSignal = await this._ensureInit();
+      if (!OneSignal) return false;
+
+      console.log('Push: trying optOut → optIn cycle...');
+      try { await OneSignal.User.PushSubscription.optOut(); } catch {}
+      await new Promise(r => setTimeout(r, 1000));
+      try { await OneSignal.User.PushSubscription.optIn(); } catch {}
+
+      // Poll again
+      for (let i = 0; i < 20; i++) {
+        const id = OneSignal.User.PushSubscription.id;
+        if (id) {
+          console.log('Push: recovery succeeded after optOut/optIn cycle');
+          return true;
+        }
+        await new Promise(r => setTimeout(r, 500));
+      }
+
+      // Last resort: unregister all service workers and prompt page reload
+      console.warn('Push: recovery failed even after retry. User needs to reload page.');
+      return false;
+    } catch (e) {
+      console.warn('Recovery threw:', e?.message);
+      return false;
     }
   },
 
@@ -223,11 +276,11 @@ async function _healthCheckAndRecover() {
       // We think we're subscribed but OneSignal has no subscription ID
       // → token expired or invalidated. Force fresh subscribe.
       console.log('Push: subscription ID missing, attempting to recover...');
-      const ok = await PUSH.subscribe();
-      if (ok) {
+      const result = await PUSH.subscribe();
+      if (result?.ok) {
         console.log('Push: re-subscription successful ✓');
       } else {
-        console.warn('Push: re-subscription failed — user may need to manually toggle in profile');
+        console.warn('Push: re-subscription failed (' + (result?.reason || 'unknown') + ') — user may need to toggle in profile');
         Store.set('ff_push_subscribed', false);
       }
     } else {
