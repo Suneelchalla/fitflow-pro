@@ -177,13 +177,25 @@ const PUSH = {
   },
 
   // ── Check current subscription state ────────────────────────────
+  // True ONLY if all three are true:
+  //  1. OneSignal optedIn flag is true
+  //  2. OneSignal has a valid subscription ID
+  //  3. Browser permission is granted
   async isSubscribed() {
     if (!this.isSupported()) return false;
     try {
+      // Browser-level check first
+      if (typeof Notification !== 'undefined' && Notification.permission !== 'granted') {
+        return false;
+      }
       const OneSignal = await this._ensureInit();
       if (!OneSignal) return false;
-      // optedIn is the OneSignal v16 flag for "this user wants pushes"
-      return !!OneSignal.User.PushSubscription.optedIn;
+
+      const optedIn = !!OneSignal.User.PushSubscription.optedIn;
+      const subId   = OneSignal.User.PushSubscription.id;
+
+      // Both must be true to count as actually subscribed
+      return optedIn && !!subId;
     } catch {
       return false;
     }
