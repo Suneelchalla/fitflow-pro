@@ -28,21 +28,23 @@ const ASSETS = [
 ];
 
 // ── INSTALL ───────────────────────────────────────────────────────
+// NOTE: No skipWaiting() — combined with clients.claim() it was causing forced
+// reloads on every page load. SW now waits until all tabs are closed before taking over.
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE).then(c => c.addAll(ASSETS).catch(() => {}))
   );
-  self.skipWaiting();
 });
 
 // ── ACTIVATE ──────────────────────────────────────────────────────
+// NOTE: No clients.claim() — claiming immediately after SW update caused all
+// open tabs to reload, which is the unwanted refresh users were experiencing.
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
       Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
     )
   );
-  self.clients.claim();
 });
 
 // ── FETCH ─────────────────────────────────────────────────────────
