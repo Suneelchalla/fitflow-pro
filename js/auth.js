@@ -1,4 +1,45 @@
 // ── LOGIN ─────────────────────────────────────────────────────────
+
+// ════════════════════════════════════════════════════════════════
+// THEME — Light mode for admin only (with toggle preference)
+// ════════════════════════════════════════════════════════════════
+function applyAdminTheme() {
+  const user = APP.currentUser;
+  const html = document.documentElement;
+  const themeMeta = document.querySelector('meta[name="theme-color"]');
+
+  if (user && user.role === 'ADMIN') {
+    // Admin: check saved preference, default to LIGHT
+    const pref = localStorage.getItem('ff_admin_theme') || 'dark';
+    if (pref === 'light') {
+      html.classList.add('theme-light');
+      if (themeMeta) themeMeta.setAttribute('content', '#f4f7f5');
+    } else {
+      html.classList.remove('theme-light');
+      if (themeMeta) themeMeta.setAttribute('content', '#071510');
+    }
+  } else {
+    // Non-admin: always dark
+    html.classList.remove('theme-light');
+    if (themeMeta) themeMeta.setAttribute('content', '#071510');
+  }
+}
+
+function toggleAdminTheme() {
+  const user = APP.currentUser;
+  if (!user || user.role !== 'ADMIN') return;
+  const html = document.documentElement;
+  const isLight = html.classList.contains('theme-light');
+  const newPref = isLight ? 'dark' : 'light';
+  localStorage.setItem('ff_admin_theme', newPref);
+  applyAdminTheme();
+  if (typeof refreshAdminThemeToggle === 'function') refreshAdminThemeToggle();
+  if (typeof showToast === 'function') {
+    showToast(newPref === 'light' ? '☀️ Light mode' : '🌙 Dark mode', 'info');
+  }
+}
+
+
 function initLogin() {
   const form    = document.getElementById('login-form');
   const emailIn = document.getElementById('login-email');
@@ -742,6 +783,10 @@ async function submitChangePassword() {
 
 // ── LOGOUT ────────────────────────────────────────────────────────
 function logout() {
+  // Reset theme to dark on logout
+  document.documentElement.classList.remove('theme-light');
+  const tm = document.querySelector('meta[name="theme-color"]');
+  if (tm) tm.setAttribute('content', '#071510');
   Store.clearSession();
   APP.currentUser  = null;
   APP.pageHistory  = [];
