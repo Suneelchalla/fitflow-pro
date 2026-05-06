@@ -2676,27 +2676,33 @@ function _showUnblockInstructions() {
 }
 
 
-// Update admin theme toggle visibility + state in profile menu
+// Update admin theme toggle visibility + state in profile menu AND admin header
 function refreshAdminThemeToggle() {
+  const isAdmin = APP.currentUser?.role === 'ADMIN';
+  const isLight = document.documentElement.classList.contains('theme-light');
+
+  // === Admin profile menu toggle (dashboard.html / regular pages) ===
   const btn   = document.getElementById('admin-theme-toggle-btn');
   const sw    = document.getElementById('admin-theme-toggle-switch');
   const knob  = document.getElementById('admin-theme-toggle-knob');
   const label = document.getElementById('admin-theme-toggle-label');
-  if (!btn) return;
-
-  // Only admins see this
-  const isAdmin = APP.currentUser?.role === 'ADMIN';
-  btn.style.display = isAdmin ? 'flex' : 'none';
-  if (!isAdmin) return;
-
-  // Reflect current theme state
-  const isLight = document.documentElement.classList.contains('theme-light');
-  if (sw) {
-    sw.setAttribute('data-on', isLight ? 'true' : 'false');
-    sw.style.background = isLight ? 'var(--g4)' : 'rgba(255,255,255,0.15)';
+  if (btn) {
+    btn.style.display = isAdmin ? 'flex' : 'none';
+    if (isAdmin) {
+      if (sw) {
+        sw.setAttribute('data-on', isLight ? 'true' : 'false');
+        sw.style.background = isLight ? 'var(--g4)' : 'rgba(255,255,255,0.15)';
+      }
+      if (knob) knob.style.left = isLight ? '21px' : '3px';
+      if (label) label.textContent = isLight ? '☀️ Light Mode' : '🌙 Dark Mode';
+    }
   }
-  if (knob) knob.style.left = isLight ? '21px' : '3px';
-  if (label) label.textContent = isLight ? '☀️ Light Mode' : '🌙 Dark Mode';
+
+  // === Admin header pill button (admin panel page) ===
+  const pillBtn = document.getElementById('admin-theme-pill-btn');
+  if (pillBtn) {
+    pillBtn.textContent = isLight ? '☀️ Light' : '🌙 Dark';
+  }
 }
 
 // Update the notification toggle switch's visual state based on current subscription
