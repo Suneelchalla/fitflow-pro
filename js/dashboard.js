@@ -1465,10 +1465,14 @@ function _renderDayActivityLog(allLogs) {
               background:${isRun ? 'rgba(67,160,90,0.15)' : 'rgba(46,125,70,0.12)'};
               border:1.5px solid ${isRun ? 'rgba(67,160,90,0.4)' : 'rgba(46,125,70,0.3)'};
               display:flex;align-items:center;justify-content:center;font-size:22px">
-              ${getModuleEmoji(l.module)}
+              ${isRun ? _getActivityEmoji(l._activityType || runLog?.activityType || 'run') : getModuleEmoji(l.module)}
             </div>
             <div style="flex:1;min-width:0">
-              <div style="font-weight:700;font-size:15px">${isRun && runLog?.title ? runLog.title : getModuleName(l.module)}</div>
+              <div style="font-weight:700;font-size:15px">${
+                isRun
+                  ? (runLog?.title || _getActivityLabel(l._activityType || runLog?.activityType || 'run'))
+                  : getModuleName(l.module)
+              }</div>
               <div style="font-size:12px;color:var(--text3);margin-top:2px">
                 ${(() => {
                   const dt = new Date((l.date||'') + 'T12:00:00');
@@ -1921,6 +1925,13 @@ function _launchConfetti() {
 
 function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🙆', running: '🏃', calisthenics: '🤸‍♂️', core: '🔥' }[mod] || '💪'; }
 function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics', core: 'Core & Abs' }[mod] || mod; }
+// Activity-aware emoji/label for GPS activities (run / walk / cycle)
+function _getActivityEmoji(activityType) {
+  return ({ run: '🏃', walk: '🚶', cycle: '🚴' })[activityType] || '🏃';
+}
+function _getActivityLabel(activityType) {
+  return ({ run: 'Running', walk: 'Walking', cycle: 'Cycling' })[activityType] || 'Running';
+}
 
 // ════════════════════════════════════════════════════════════════
 // USER PROFILE PAGE
