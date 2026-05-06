@@ -133,6 +133,7 @@ function doPost(e) {
       case 'createUser':             result = createUser(body);                           break;
       case 'login':                  result = handleLogin(body.email, body.password);     break;
       case 'googleLogin':            result = googleLogin(body);                          break;
+      case 'completeGoogleSetup':    result = completeGoogleSetup(body);                  break;
       case 'changePassword':         result = changePassword(body);                       break;
       case 'setTempPassword':        result = setTempPassword(body);                      break;
       case 'updateUserStatus':       result = updateUserStatus(body);                     break;
@@ -409,7 +410,7 @@ function googleLogin(body) {
     }
     const userId    = (row[COL.ID]        ||'').toString();
     const createdBy = (row[COL.CREATED_BY] ||'').toString().toLowerCase();
-    return { success:true, user:{
+    return { success:true, isNew:false, user:{
       id:           userId,
       name:         (row[COL.NAME]||'').toString(),
       email:        rowEmail,
@@ -426,11 +427,33 @@ function googleLogin(body) {
   sh.appendRow([newId, displayName, email.toLowerCase().trim(), '', '', false,
     'USER', 'ACTIVE', _ymdLocal(), 'Google', new Date().toISOString()]);
   SpreadsheetApp.flush();
-  return { success:true, user:{
+  return { success:true, isNew:true, user:{
     id:newId, name:displayName, email:email.toLowerCase().trim(),
     role:'USER', status:'ACTIVE', isFirstLogin:false,
     isGoogleUser:true, authType:'google',
   }};
+}
+
+// Called from onboarding step 0 — saves new Google user's chosen name + app password
+function completeGoogleSetup(body) {
+  const { userId, name, password } = body;
+  if (!userId)       return { success:false, error:'userId required.' };
+  if (!name || name.trim().length < 2) return { success:false, error:'Name must be at least 2 characters.' };
+  if (!password || password.length < 6) return { success:false, error:'Password must be at least 6 characters.' };
+
+  const sh   = getSheet(SHEETS.USERS);
+  const data = sh.getDataRange().getValues();
+  for (let i = 1; i < data.length; i++) {
+    if ((data[i][COL.ID]||'').toString() !== userId.toString()) continue;
+    // Update name + password
+    sh.getRange(i+1, COL.NAME+1).setValue(name.trim());
+    sh.getRange(i+1, COL.PASSWORD+1).setValue(password);
+    // Mark as not first login (they've set up)
+    sh.getRange(i+1, COL.IS_FIRST_LOGIN+1).setValue(false);
+    SpreadsheetApp.flush();
+    return { success:true };
+  }
+  return { success:false, error:'User not found.' };
 }
 
 function changePassword(body) {
@@ -475,22 +498,26 @@ function getAllUsers() {
   const sh   = getSheet(SHEETS.USERS);
   const data = sh.getDataRange().getValues();
   if (data.length<2) return [];
-  return data.slice(1).map(r => ({
-    id:          (r[COL.ID]          ||'').toString(),
-    name:        (r[COL.NAME]        ||'').toString(),
-    email:       (r[COL.EMAIL]       ||'').toString(),
-    role:        (r[COL.ROLE]        ||'USER').toString().toUpperCase(),
-    status:      (r[COL.STATUS]      ||'ACTIVE').toString(),
-    isFirstLogin: r[COL.IS_FIRST_LOGIN]===true||r[COL.IS_FIRST_LOGIN]==='TRUE'||r[COL.IS_FIRST_LOGIN]==='true',
-    createdDate: (r[COL.CREATED_DATE]||'').toString(),
-    createdBy:   (r[COL.CREATED_BY]  ||'').toString(),
-    lastLogin:   (r[COL.LAST_LOGIN]  ||'').toString(),
-    isGoogleUser: (r[COL.ID]||'').toString().startsWith('u_g_') ||
-                  (r[COL.CREATED_BY]||'').toString().toLowerCase() === 'google',
-    authType:    ((r[COL.ID]||'').toString().startsWith('u_g_') ||
-                  (r[COL.CREATED_BY]||'').toString().toLowerCase() === 'google')
-                 ? 'google' : 'email',
-  }));
+  return data.slice(1).map(r => {
+    const idStr      = (r[COL.ID]||'').toString();
+    const createdBy  = (r[COL.CREATED_BY]||'').toString().toLowerCase();
+    const isGoogle   = idStr.startsWith('u_g_') || createdBy === 'google';
+    const hasPw      = !!(r[COL.PASSWORD] && r[COL.PASSWORD].toString().trim().length > 0);
+    return {
+      id:           idStr,
+      name:         (r[COL.NAME]||'').toString(),
+      email:        (r[COL.EMAIL]||'').toString(),
+      role:         (r[COL.ROLE]||'USER').toString().toUpperCase(),
+      status:       (r[COL.STATUS]||'ACTIVE').toString(),
+      isFirstLogin: r[COL.IS_FIRST_LOGIN]===true||r[COL.IS_FIRST_LOGIN]==='TRUE'||r[COL.IS_FIRST_LOGIN]==='true',
+      createdDate:  (r[COL.CREATED_DATE]||'').toString(),
+      createdBy:    (r[COL.CREATED_BY]||'').toString(),
+      lastLogin:    (r[COL.LAST_LOGIN]||'').toString(),
+      isGoogleUser: isGoogle,
+      authType:     isGoogle ? (hasPw ? 'google_with_password' : 'google') : 'email',
+      hasAppPassword: hasPw,
+    };
+  });
 }
 
 function createUser(body) {
@@ -1257,6 +1284,293 @@ function getTodaysMessage() {
 
 
 // DEBUG — dump raw player data so we can see what OneSignal actually returns
+
+
+
+
+// ════════════════════════════════════════════════════════════════
+// CLEANUP — Delete invalid/expired OneSignal device records
+// Run this once to clean up dead phone records
+// Returns: count of deleted devices
+// ════════════════════════════════════════════════════════════════
+function cleanupInvalidDevices() {
+  var props  = PropertiesService.getScriptProperties();
+  var appId  = props.getProperty('ONESIGNAL_APP_ID');
+  var apiKey = props.getProperty('ONESIGNAL_REST_API_KEY');
+  if (!appId || !apiKey) { Logger.log('❌ Missing creds'); return; }
+
+  try {
+    // Get all players
+    var url = 'https://api.onesignal.com/players?app_id=' + appId + '&limit=300';
+    var res = UrlFetchApp.fetch(url, {
+      method: 'get',
+      headers: { 'Authorization': 'Basic ' + apiKey },
+      muteHttpExceptions: true,
+    });
+    var players = (JSON.parse(res.getContentText()).players) || [];
+    
+    // Find invalid ones
+    var invalid = players.filter(function(p) {
+      return p.invalid_identifier === true || !p.identifier;
+    });
+    
+    Logger.log('Found ' + invalid.length + ' invalid devices to delete (out of ' + players.length + ' total)');
+    
+    var deleted = 0;
+    var failed = 0;
+    invalid.forEach(function(p) {
+      try {
+        var delUrl = 'https://api.onesignal.com/players/' + p.id + '?app_id=' + appId;
+        var delRes = UrlFetchApp.fetch(delUrl, {
+          method: 'delete',
+          headers: { 'Authorization': 'Basic ' + apiKey },
+          muteHttpExceptions: true,
+        });
+        if (delRes.getResponseCode() === 200) {
+          deleted++;
+          Logger.log('  ✅ Deleted ' + p.id.substring(0, 8) + '... (' + (p.device_model || 'unknown') + ', user: ' + (p.external_user_id || 'none') + ')');
+        } else {
+          failed++;
+          Logger.log('  ❌ Failed to delete ' + p.id.substring(0, 8) + ': HTTP ' + delRes.getResponseCode());
+        }
+      } catch (e) {
+        failed++;
+        Logger.log('  ❌ Error deleting ' + p.id.substring(0, 8) + ': ' + e.message);
+      }
+    });
+    
+    Logger.log('========== Cleanup complete ==========');
+    Logger.log('  Deleted: ' + deleted);
+    Logger.log('  Failed: ' + failed);
+    Logger.log('  Remaining valid devices: ' + (players.length - deleted));
+    
+    return { deleted: deleted, failed: failed, remaining: players.length - deleted };
+  } catch (e) {
+    Logger.log('Error: ' + e.message);
+    return { error: e.message };
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// CLEANUP — Delete only OLDER duplicate devices, keep newest valid one per user
+// Run this if you have multiple records for the same user/device
+// ════════════════════════════════════════════════════════════════
+function cleanupDuplicateDevices() {
+  var props  = PropertiesService.getScriptProperties();
+  var appId  = props.getProperty('ONESIGNAL_APP_ID');
+  var apiKey = props.getProperty('ONESIGNAL_REST_API_KEY');
+  if (!appId || !apiKey) { Logger.log('❌ Missing creds'); return; }
+
+  try {
+    var url = 'https://api.onesignal.com/players?app_id=' + appId + '&limit=300';
+    var res = UrlFetchApp.fetch(url, {
+      method: 'get',
+      headers: { 'Authorization': 'Basic ' + apiKey },
+      muteHttpExceptions: true,
+    });
+    var players = (JSON.parse(res.getContentText()).players) || [];
+    
+    // Group by external_user_id + device_model
+    var groups = {};
+    players.forEach(function(p) {
+      var key = (p.external_user_id || 'none') + '|' + (p.device_model || 'unknown');
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(p);
+    });
+    
+    var toDelete = [];
+    Object.keys(groups).forEach(function(key) {
+      var group = groups[key];
+      if (group.length <= 1) return; // No duplicates
+      
+      // Sort by: valid first, then by last_active descending (newest first)
+      group.sort(function(a, b) {
+        var aValid = a.invalid_identifier !== true && !!a.identifier;
+        var bValid = b.invalid_identifier !== true && !!b.identifier;
+        if (aValid !== bValid) return bValid - aValid; // valid first
+        return (b.last_active || 0) - (a.last_active || 0); // newest first
+      });
+      
+      // Keep first (best one), delete rest
+      Logger.log('Group [' + key + '] has ' + group.length + ' records — keeping ' + group[0].id.substring(0, 8) + '..., deleting rest');
+      for (var i = 1; i < group.length; i++) {
+        toDelete.push(group[i]);
+      }
+    });
+    
+    Logger.log('\n========== Will delete ' + toDelete.length + ' duplicate device(s) ==========');
+    
+    var deleted = 0;
+    toDelete.forEach(function(p) {
+      try {
+        var delUrl = 'https://api.onesignal.com/players/' + p.id + '?app_id=' + appId;
+        var delRes = UrlFetchApp.fetch(delUrl, {
+          method: 'delete',
+          headers: { 'Authorization': 'Basic ' + apiKey },
+          muteHttpExceptions: true,
+        });
+        if (delRes.getResponseCode() === 200) {
+          deleted++;
+          Logger.log('  ✅ Deleted ' + p.id.substring(0, 8) + '...');
+        } else {
+          Logger.log('  ❌ Failed ' + p.id.substring(0, 8) + ': HTTP ' + delRes.getResponseCode());
+        }
+      } catch (e) { Logger.log('  ❌ Error: ' + e.message); }
+    });
+    
+    Logger.log('Done. Deleted ' + deleted + ' duplicates.');
+    return { deleted: deleted };
+  } catch (e) {
+    Logger.log('Error: ' + e.message);
+    return { error: e.message };
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// DIAGNOSTIC — Check per-device delivery for the LAST notification sent
+// Run this AFTER sending a notification to see which devices received vs missed
+// ════════════════════════════════════════════════════════════════
+function checkLastPushDelivery() {
+  var props  = PropertiesService.getScriptProperties();
+  var appId  = props.getProperty('ONESIGNAL_APP_ID');
+  var apiKey = props.getProperty('ONESIGNAL_REST_API_KEY');
+  if (!appId || !apiKey) {
+    Logger.log('❌ Missing OneSignal credentials');
+    return;
+  }
+
+  // Step 1: Get list of all notifications (last 5)
+  try {
+    var url = 'https://api.onesignal.com/notifications?app_id=' + appId + '&limit=5';
+    var res = UrlFetchApp.fetch(url, {
+      method: 'get',
+      headers: { 'Authorization': 'Basic ' + apiKey },
+      muteHttpExceptions: true,
+    });
+    var data = JSON.parse(res.getContentText());
+    var notifs = data.notifications || [];
+    Logger.log('========== Last 5 notifications ==========');
+    notifs.forEach(function(n, i) {
+      var sent = new Date(n.queued_at * 1000);
+      Logger.log((i+1) + '. ID: ' + n.id);
+      Logger.log('   Title: ' + (n.headings && n.headings.en));
+      Logger.log('   Sent: ' + sent.toString());
+      Logger.log('   Successful: ' + n.successful + ' / Failed: ' + n.failed + ' / Errored: ' + n.errored);
+      Logger.log('   Converted (clicks): ' + n.converted);
+      Logger.log('   Received: ' + (n.received || 'N/A'));
+      Logger.log('   Remaining: ' + (n.remaining || 0));
+      Logger.log('---');
+    });
+    
+    // Step 2: For the most recent notification, get per-device breakdown
+    if (notifs.length > 0) {
+      var mostRecent = notifs[0];
+      Logger.log('\n========== Per-device breakdown for most recent ==========');
+      var detailUrl = 'https://api.onesignal.com/notifications/' + mostRecent.id + 
+                      '?app_id=' + appId;
+      var detailRes = UrlFetchApp.fetch(detailUrl, {
+        method: 'get',
+        headers: { 'Authorization': 'Basic ' + apiKey },
+        muteHttpExceptions: true,
+      });
+      var detail = JSON.parse(detailRes.getContentText());
+      Logger.log('Platform delivery:');
+      Logger.log('  Chrome web: ' + (detail.platform_delivery_stats && detail.platform_delivery_stats.chrome_web ? JSON.stringify(detail.platform_delivery_stats.chrome_web) : 'N/A'));
+      Logger.log('  Android: ' + (detail.platform_delivery_stats && detail.platform_delivery_stats.android ? JSON.stringify(detail.platform_delivery_stats.android) : 'N/A'));
+    }
+  } catch (e) {
+    Logger.log('Error: ' + e.message);
+  }
+}
+
+// ════════════════════════════════════════════════════════════════
+// DIAGNOSTIC — Send a TEST push to ONE specific device
+// Useful for testing if a device is alive without spamming everyone
+// Usage: testPushToDevice('YOUR_PLAYER_ID_HERE')
+// ════════════════════════════════════════════════════════════════
+function testPushToDevice(playerId) {
+  var props  = PropertiesService.getScriptProperties();
+  var appId  = props.getProperty('ONESIGNAL_APP_ID');
+  var apiKey = props.getProperty('ONESIGNAL_REST_API_KEY');
+  if (!appId || !apiKey) { Logger.log('❌ Missing creds'); return; }
+  
+  if (!playerId) {
+    // Default: pick the first available device
+    var ids = _getSubscribedDeviceIds();
+    if (!ids.length) { Logger.log('No subscribed devices'); return; }
+    playerId = ids[0];
+    Logger.log('No playerId provided, using first: ' + playerId);
+  }
+  
+  var payload = {
+    app_id: appId,
+    include_player_ids: [playerId],
+    headings: { en: 'Test Push 🧪' },
+    contents: { en: 'If you see this, your device is receiving notifications!' },
+    web_url: 'https://suneelchalla.github.io/fitflow-pro/index.html',
+  };
+  
+  var res = UrlFetchApp.fetch('https://api.onesignal.com/notifications', {
+    method: 'post',
+    contentType: 'application/json',
+    headers: { 'Authorization': 'Basic ' + apiKey },
+    payload: JSON.stringify(payload),
+    muteHttpExceptions: true,
+  });
+  Logger.log('Test push to ' + playerId);
+  Logger.log('HTTP ' + res.getResponseCode() + ': ' + res.getContentText());
+}
+
+// ════════════════════════════════════════════════════════════════
+// DIAGNOSTIC — Compare each subscribed device's status
+// Shows: device type, last_active, push_token validity, etc.
+// ════════════════════════════════════════════════════════════════
+function compareDevicesHealth() {
+  var props  = PropertiesService.getScriptProperties();
+  var appId  = props.getProperty('ONESIGNAL_APP_ID');
+  var apiKey = props.getProperty('ONESIGNAL_REST_API_KEY');
+  if (!appId || !apiKey) { Logger.log('❌ Missing creds'); return; }
+
+  try {
+    var url = 'https://api.onesignal.com/players?app_id=' + appId + '&limit=300';
+    var res = UrlFetchApp.fetch(url, {
+      method: 'get',
+      headers: { 'Authorization': 'Basic ' + apiKey },
+      muteHttpExceptions: true,
+    });
+    var players = (JSON.parse(res.getContentText()).players) || [];
+    Logger.log('========== Device Health Report (' + players.length + ' total) ==========');
+    var now = new Date().getTime() / 1000;
+    players.forEach(function(p, i) {
+      var lastActive = p.last_active ? new Date(p.last_active * 1000) : null;
+      var hoursSinceActive = lastActive ? Math.round((now - p.last_active) / 3600) : 'never';
+      Logger.log('Device #' + (i+1) + ' [' + p.id.substring(0, 8) + '...]');
+      Logger.log('  Device type: ' + p.device_type + ' (' + (p.device_type === 5 ? 'Chrome' : p.device_type === 1 ? 'Android' : p.device_type === 0 ? 'iOS' : 'Other') + ')');
+      Logger.log('  Device model: ' + (p.device_model || 'N/A'));
+      Logger.log('  Device OS: ' + (p.device_os || 'N/A'));
+      Logger.log('  External user ID: ' + (p.external_user_id || 'NONE — not linked!'));
+      Logger.log('  Subscribed: ' + (p.invalid_identifier === true ? '❌ INVALID' : (p.identifier ? '✅ YES' : '❌ NO TOKEN')));
+      Logger.log('  Last active: ' + (lastActive ? lastActive.toString() : 'never') + ' (' + hoursSinceActive + ' hours ago)');
+      Logger.log('  Notification types: ' + p.notification_types + ' (1=enabled, -2=disabled, -1=not subscribed)');
+      Logger.log('  Created: ' + new Date(p.created_at * 1000));
+      Logger.log('---');
+    });
+    
+    Logger.log('\n📊 Summary:');
+    var subscribed = players.filter(function(p) { return p.invalid_identifier !== true && p.identifier; });
+    var byType = {};
+    subscribed.forEach(function(p) {
+      var key = p.device_type === 5 ? 'Chrome (laptop/desktop)' : p.device_type === 1 ? 'Android' : p.device_type === 0 ? 'iOS' : 'Other';
+      byType[key] = (byType[key] || 0) + 1;
+    });
+    Object.keys(byType).forEach(function(k) {
+      Logger.log('  ' + k + ': ' + byType[k] + ' device(s)');
+    });
+  } catch (e) {
+    Logger.log('Error: ' + e.message);
+  }
+}
+
 function debugListAllPlayers() {
   var props  = PropertiesService.getScriptProperties();
   var appId  = props.getProperty('ONESIGNAL_APP_ID');
