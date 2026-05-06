@@ -2413,8 +2413,9 @@ window.addEventListener('DOMContentLoaded', function() {
         <button class="admin-nav-btn"        data-tab="custom"    onclick="switchAdminTab('custom',this)">
           <span class="admin-nav-ico">✏️</span><span class="admin-nav-lbl">Custom Workouts</span>
         </button>
-        <button class="admin-nav-btn"        data-tab="feedback"  onclick="switchAdminTab('feedback',this)">
+        <button class="admin-nav-btn"        data-tab="feedback"  onclick="switchAdminTab('feedback',this)" id="nav-btn-feedback">
           <span class="admin-nav-ico">💬</span><span class="admin-nav-lbl">Feedback</span>
+          <span id="feedback-badge" style="display:none;background:#e53935;color:#fff;font-size:10px;font-weight:700;border-radius:50px;padding:1px 6px;margin-left:6px;min-width:18px;text-align:center">0</span>
         </button>
         <button class="admin-nav-btn"        data-tab="announce"  onclick="switchAdminTab('announce',this)">
           <span class="admin-nav-ico">📣</span><span class="admin-nav-lbl">Announcements</span>
