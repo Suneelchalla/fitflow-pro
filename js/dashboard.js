@@ -2568,20 +2568,91 @@ async function toggleNotificationSetting() {
       // Show pending state on the toggle
       const sw = document.getElementById('notif-toggle-switch');
       if (sw) sw.style.opacity = '0.6';
+      showToast('Setting up notifications…', 'info');
 
-      const ok = await PUSH.subscribe();
+      const result = await PUSH.subscribe();
 
       // After subscribe completes, update visual
       await _updateNotifToggleVisual();
-      showToast(
-        ok ? '🔔 Daily reminders enabled!' : 'Could not enable. Check browser notification settings.',
-        ok ? 'success' : 'error'
-      );
+
+      // Subscribe now returns {ok, reason} object — handle each reason clearly
+      if (result?.ok) {
+        showToast('🔔 Daily reminders enabled!', 'success');
+      } else if (result?.reason === 'permission_blocked') {
+        // User had blocked notifications previously — show how to unblock
+        _showUnblockInstructions();
+      } else if (result?.reason === 'permission_denied') {
+        showToast('Permission was denied. Tap toggle again to retry.', 'error');
+      } else if (result?.reason === 'no_subscription_id') {
+        // Token registration failed — page reload usually fixes it
+        showToast('Could not register. Reloading page in 3 seconds…', 'warning');
+        setTimeout(() => window.location.reload(), 3000);
+      } else if (result?.reason === 'unsupported') {
+        showToast('Push notifications not supported on this device', 'error');
+      } else {
+        showToast('Could not enable. Try reloading the page.', 'error');
+      }
     }
   } catch (e) {
     console.error('toggleNotificationSetting error:', e);
     await _updateNotifToggleVisual();
     showToast('Error: ' + (e?.message || e), 'error');
+  }
+}
+
+// Show clear instructions when browser has blocked notifications
+function _showUnblockInstructions() {
+  const isAndroid = /Android/i.test(navigator.userAgent);
+  const isiOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  let html;
+  if (isAndroid) {
+    html = `
+      <div style="text-align:left;line-height:1.55;font-size:14px">
+        <p style="margin-bottom:14px"><strong>Notifications are blocked.</strong> To enable:</p>
+        <ol style="padding-left:20px;display:flex;flex-direction:column;gap:8px">
+          <li>Tap the <strong>🔒 lock icon</strong> in the address bar</li>
+          <li>Tap <strong>Permissions</strong> → <strong>Notifications</strong></li>
+          <li>Change to <strong>Allow</strong></li>
+          <li>Reload this page and toggle notifications ON</li>
+        </ol>
+        <p style="margin-top:14px;color:#a5c8ac;font-size:12px">Or: Chrome ⋮ menu → Settings → Site settings → Notifications → find this site → Allow</p>
+      </div>`;
+  } else if (isiOS) {
+    html = `
+      <div style="text-align:left;line-height:1.55;font-size:14px">
+        <p style="margin-bottom:14px"><strong>Notifications are blocked.</strong></p>
+        <p>iOS supports push only when the app is added to Home Screen. After adding, open from Home Screen and try again.</p>
+      </div>`;
+  } else {
+    html = `
+      <div style="text-align:left;line-height:1.55;font-size:14px">
+        <p style="margin-bottom:14px"><strong>Notifications are blocked.</strong> To enable:</p>
+        <ol style="padding-left:20px;display:flex;flex-direction:column;gap:8px">
+          <li>Click the <strong>🔒 lock icon</strong> in the address bar (left of URL)</li>
+          <li>Find <strong>Notifications</strong></li>
+          <li>Change from <strong>Block</strong> to <strong>Allow</strong></li>
+          <li>Reload this page and toggle notifications ON</li>
+        </ol>
+      </div>`;
+  }
+
+  // Try to use existing modal if available, else fallback to alert
+  if (typeof openCustomModal === 'function') {
+    openCustomModal('Enable Notifications', html);
+  } else {
+    // Build inline modal
+    const overlay = document.createElement('div');
+    overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(4px)';
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:#1a3328;border:1px solid rgba(255,255,255,0.12);border-radius:18px;padding:24px;max-width:420px;width:100%;color:#e8f5e9;box-shadow:0 20px 50px rgba(0,0,0,0.5)';
+    modal.innerHTML = `
+      <h3 style="font-size:18px;margin-bottom:14px;color:#6dc880">🔔 Enable Notifications</h3>
+      ${html}
+      <button onclick="this.closest('div[style*=fixed]').remove()" style="margin-top:18px;width:100%;padding:12px;background:linear-gradient(135deg,#43a05a,#2e7d46);color:white;border:none;border-radius:10px;font-weight:700;cursor:pointer;font-size:14px">Got it</button>`;
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
   }
 }
 
