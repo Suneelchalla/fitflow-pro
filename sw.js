@@ -76,44 +76,16 @@ self.addEventListener('fetch', e => {
 });
 
 // ── PUSH NOTIFICATIONS ────────────────────────────────────────────
-self.addEventListener('push', e => {
-  let data = { title: 'FitFlow Pro 💪', body: "Time for your workout! Let's go!" };
-  try {
-    if (e.data) data = e.data.json();
-  } catch {
-    if (e.data) data.body = e.data.text();
-  }
-
-  const options = {
-    body:     data.body    || "Time for your workout! Let's go!",
-    tag:      data.tag     || 'fitflow-daily',
-    renotify: true,
-    vibrate:  [200, 100, 200],
-    data:     { url: '/' },
-    actions:  [
-      { action: 'open',    title: "Let's Go! 💪" },
-      { action: 'dismiss', title: 'Later' },
-    ],
-  };
-
-  e.waitUntil(
-    self.registration.showNotification(data.title || 'FitFlow Pro 💪', options)
-  );
-});
-
-// ── NOTIFICATION CLICK ────────────────────────────────────────────
-self.addEventListener('notificationclick', e => {
-  e.notification.close();
-  if (e.action === 'dismiss') return;
-
-  e.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(windowClients => {
-      for (const client of windowClients) {
-        if (client.url.includes(self.location.origin) && 'focus' in client) {
-          return client.focus();
-        }
-      }
-      if (clients.openWindow) return clients.openWindow('/');
-    })
-  );
-});
+// NOTE: Push event handling is done entirely by OneSignal's SDK imported above
+// via importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js').
+// DO NOT add manual 'push' or 'notificationclick' listeners here —
+// they conflict with OneSignal's handlers and cause notifications to be
+// silently swallowed or fail to display.
+//
+// The custom push/notificationclick handlers that were here previously were
+// redundant (OneSignal already handles display + click routing) and caused
+// the following issues:
+//   1. Double-registration of the same event — one handler cancels the other
+//   2. OneSignal's internal state gets out of sync with the displayed notification
+//   3. Click routing to '/' fails because OneSignal's handler fires first and
+//      the manual one throws an error trying to fire after
