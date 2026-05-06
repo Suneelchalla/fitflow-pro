@@ -2878,25 +2878,16 @@ window.addEventListener('DOMContentLoaded', function() {
 <script>
 
 // ── PROFILE DROPDOWN ──────────────────────────────────────────
-function toggleProfileMenu() {
-  const menu = document.getElementById('profile-menu');
-  const isOpen = menu.style.display === 'block';
-  if (!isOpen) {
-    const u = APP.currentUser;
-    document.getElementById('profile-menu-name').textContent  = u?.name  || '';
-    document.getElementById('profile-menu-email').textContent = u?.email || '';
-    // Refresh reminder button state when menu opens
-    if (typeof updateReminderBtn === 'function') updateReminderBtn();
-  }
-  menu.style.display = isOpen ? 'none' : 'block';
-}
-document.addEventListener('click', e => {
-  const btn  = document.getElementById('profile-btn');
-  const menu = document.getElementById('profile-menu');
-  if (menu && btn && !btn.contains(e.target) && !menu.contains(e.target)) {
-    menu.style.display = 'none';
-  }
-});
+// NOTE: toggleProfileMenu() is defined in dashboard.js — it correctly calls
+// _updateNotifToggleVisual() AND refreshAdminThemeToggle() when the menu opens.
+// The previous inline duplicate here was overriding it and:
+//   (a) skipping the admin-theme-toggle visibility refresh, leaving the
+//       Dark Mode row visible to non-admin users
+//   (b) calling a stale updateReminderBtn() that read pushManager state
+//       directly instead of OneSignal's state, causing the notification
+//       toggle to never reflect the real subscription.
+// Do NOT redefine toggleProfileMenu, toggleNotificationSetting, or
+// updateReminderBtn here.
 
 // ── FEEDBACK ──────────────────────────────────────────────────
 let _currentRating = 0;
@@ -2962,66 +2953,13 @@ function fillDemo(email, pass) {
   document.getElementById('login-password').value = pass;
 }
 
-async function toggleNotificationSetting() {
-  document.getElementById('profile-menu').style.display = 'none';
+// NOTE: toggleNotificationSetting() and the toggle-visual updater are
+// defined in dashboard.js (toggleNotificationSetting + _updateNotifToggleVisual).
+// The previous inline duplicates checked navigator.serviceWorker pushManager
+// directly, which does NOT reflect OneSignal v16's subscription state — so
+// users could never enable notifications from the toggle. Keeping a single
+// source of truth in dashboard.js fixes that.
 
-  if (typeof PUSH === 'undefined') {
-    showToast('Notification module not loaded. Try refreshing the app.', 'error');
-    return;
-  }
-  if (!PUSH.isSupported()) {
-    showToast('Push notifications not supported on this browser.', 'info');
-    return;
-  }
-
-  try {
-    const reg = await navigator.serviceWorker.ready;
-    const sub = await reg.pushManager.getSubscription();
-
-    if (sub) {
-      // Currently ON — disable
-      if (confirm('Disable daily 6 AM workout reminders?')) {
-        await PUSH.unsubscribe();
-        showToast('Daily reminders disabled.', 'info');
-        updateReminderBtn();
-      }
-    } else {
-      // Currently OFF — show the enable banner (force show even if dismissed)
-      Store.remove('ff_push_dismissed_today'); // clear any dismissal
-      showPushPrompt(true);                    // force show banner
-    }
-  } catch(e) {
-    showToast('Error: ' + e.message, 'error');
-  }
-}
-
-async function updateReminderBtn() {
-  // Updates the toggle switch visuals (does NOT replace innerHTML)
-  const sw   = document.getElementById('notif-toggle-switch');
-  const knob = document.getElementById('notif-toggle-knob');
-  if (!sw || !knob) return;
-  try {
-    if (typeof PUSH === 'undefined' || !PUSH.isSupported()) {
-      sw.style.background = 'rgba(255,255,255,0.08)';
-      sw.style.opacity    = '0.4';
-      knob.style.left     = '3px';
-      sw.setAttribute('data-on', 'false');
-      return;
-    }
-    sw.style.opacity = '1';
-    // Wait for OneSignal SDK to be ready before reading state
-    if (PUSH._ensureInit) await PUSH._ensureInit();
-    await new Promise(r => setTimeout(r, 300));
-    const isSubscribed = await PUSH.isSubscribed();
-    sw.setAttribute('data-on', isSubscribed ? 'true' : 'false');
-    sw.style.background = isSubscribed ? 'var(--g4)' : 'rgba(255,255,255,0.15)';
-    knob.style.left     = isSubscribed ? '21px' : '3px';
-  } catch {
-    sw.setAttribute('data-on', 'false');
-    sw.style.background = 'rgba(255,255,255,0.15)';
-    knob.style.left     = '3px';
-  }
-}
 // Set admin name in header after login
 document.addEventListener('DOMContentLoaded', () => {
   // Patch quotes with any admin-saved custom quotes
