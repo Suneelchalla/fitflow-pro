@@ -628,14 +628,58 @@ async function submitNewPassword() {
 }
 
 // ── QUOTE PAGE ────────────────────────────────────────────────────
+// Rotating emoji + date-based deterministic quote selection
+const _QUOTE_EMOJIS = ["💪", "🔥", "⚡", "🏆", "🎯", "🚀", "⭐", "💯", "🌟", "✨", "💥", "🏋️", "🏃", "🤸", "🧘", "☀️", "🌅", "👊", "🦁", "⚔️"];
+
 function renderQuote() {
   const user   = APP.currentUser;
   const quotes = APP_DATA.quotes;
   if (!quotes?.length) return;
-  const q = quotes[Math.floor(Math.random() * quotes.length)];
-  document.getElementById('quote-text').textContent     = '"' + q.text + '"';
-  document.getElementById('quote-author').textContent   = '— ' + q.author;
-  document.getElementById('quote-greeting').textContent = getGreeting() + ', ' + (user?.name?.split(' ')[0] || 'Champion') + ' 👋';
+
+  // Date-based deterministic selection — same day shows same quote (across reloads),
+  // but quote rotates each day so users don't see repeats
+  const today  = new Date();
+  const dayKey = today.getFullYear() * 1000 + (today.getMonth() + 1) * 31 + today.getDate();
+
+  // Use a per-user offset so two users on the same day see different quotes
+  const userId = user?.id || 'anon';
+  let userHash = 0;
+  for (let i = 0; i < userId.length; i++) userHash = ((userHash << 5) - userHash + userId.charCodeAt(i)) | 0;
+
+  const quoteIdx  = Math.abs(dayKey + userHash) % quotes.length;
+  const emojiIdx  = Math.abs(dayKey + userHash * 7) % _QUOTE_EMOJIS.length;
+
+  const q = quotes[quoteIdx];
+
+  // Update quote text
+  const textEl   = document.getElementById('quote-text');
+  const authorEl = document.getElementById('quote-author');
+  const greetEl  = document.getElementById('quote-greeting');
+
+  if (textEl) textEl.textContent = '"' + q.text + '"';
+  // Hide the author element entirely — no longer used
+  if (authorEl) authorEl.style.display = 'none';
+  if (greetEl) greetEl.textContent = getGreeting() + ', ' + (user?.name?.split(' ')[0] || 'Champion') + ' 👋';
+
+  // Rotate the big emoji above the quote
+  const emojiEl = document.querySelector('#page-quote .quote-emoji, #page-quote [data-quote-emoji]');
+  if (emojiEl) {
+    emojiEl.textContent = _QUOTE_EMOJIS[emojiIdx];
+  } else {
+    // Fallback: find the inline-styled big emoji div before #quote-text
+    const t = textEl;
+    if (t) {
+      let prev = t.previousElementSibling;
+      // The emoji is rendered as a div with font-size:56px right before quote-text
+      while (prev) {
+        if (prev.tagName === 'DIV' && prev.style && prev.style.fontSize && prev.style.fontSize.indexOf('56') >= 0) {
+          prev.textContent = _QUOTE_EMOJIS[emojiIdx];
+          break;
+        }
+        prev = prev.previousElementSibling;
+      }
+    }
+  }
 }
 
 // ── CHANGE PASSWORD (logged-in users & admin) ─────────────────────
