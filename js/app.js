@@ -629,13 +629,13 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   if ('serviceWorker' in navigator) {
-    // Register service worker once — do NOT unregister or wipe caches on every load.
-    // The old unregister+clear approach was causing a reload on every page visit because:
-    //   1. Unregistering then re-registering fires install → activate → clients.claim()
-    //   2. clients.claim() with skipWaiting forces all open tabs to reload.
-    // Now we simply register (no-op if already registered) and let the SW manage its own
-    // cache updates via the standard install/activate lifecycle.
-    navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(() => {});
+    // NOTE: We do NOT manually register sw.js here.
+    // OneSignal's SDK handles the service worker registration in push.js (_ensureInit),
+    // using serviceWorkerPath: '/fitflow-pro/sw.js' and scope: '/fitflow-pro/'.
+    // Registering it again here would create a second competing registration on the
+    // same scope, which causes OneSignal's push events to be swallowed or misdirected.
+    // Result: notifications never arrive.
+    // The SW is registered once by OneSignal when the user first visits the page.
   }
 
   const session = Store.getSession();
