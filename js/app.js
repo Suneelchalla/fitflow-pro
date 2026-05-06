@@ -629,16 +629,13 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   if ('serviceWorker' in navigator) {
-    // Unregister ALL old service workers and clear ALL caches
-    // This forces every device to get fresh files immediately
-    navigator.serviceWorker.getRegistrations().then(registrations => {
-      registrations.forEach(reg => reg.unregister());
-    });
-    caches.keys().then(keys => keys.forEach(k => caches.delete(k)));
-    // Re-register the fresh service worker
-    setTimeout(() => {
-      navigator.serviceWorker.register('sw.js').catch(() => {});
-    }, 1000);
+    // Register service worker once — do NOT unregister or wipe caches on every load.
+    // The old unregister+clear approach was causing a reload on every page visit because:
+    //   1. Unregistering then re-registering fires install → activate → clients.claim()
+    //   2. clients.claim() with skipWaiting forces all open tabs to reload.
+    // Now we simply register (no-op if already registered) and let the SW manage its own
+    // cache updates via the standard install/activate lifecycle.
+    navigator.serviceWorker.register('./sw.js', { scope: './' }).catch(() => {});
   }
 
   const session = Store.getSession();
