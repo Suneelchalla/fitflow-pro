@@ -20,6 +20,7 @@ function renderAdminPanel() {
   const nameEl = document.getElementById('admin-user-name');
   if (nameEl) nameEl.textContent = '👑 ' + (APP.currentUser.name || 'Admin');
   renderAdminStats();
+  refreshFeedbackBadge();
   // Default to Dashboard tab
   const dashBtn = document.querySelector('.admin-nav-btn[data-tab="dashboard"]');
   if (dashBtn) switchAdminTab('dashboard', dashBtn);
@@ -1619,27 +1620,128 @@ async function renderAdminCustomWorkouts() {
 // ════════════════════════════════════════════════════════════════
 // FEEDBACK
 // ════════════════════════════════════════════════════════════════
+async function refreshFeedbackBadge() {
+  try {
+    const res = await Sheets.get('getFeedbackUnread');
+    const count = res?.count || 0;
+    const badge = document.getElementById('feedback-badge');
+    if (!badge) return;
+    if (count > 0) {
+      badge.textContent = count;
+      badge.style.display = 'inline-block';
+    } else {
+      badge.style.display = 'none';
+    }
+  } catch(e) { /* silent */ }
+}
+
 async function renderFeedbackList() {
   const container = document.getElementById('feedback-list');
+  if (!container) return;
   container.innerHTML = `<div style="text-align:center;padding:24px;color:var(--text3)">
     <div class="loader" style="margin:0 auto 12px"></div>Loading…</div>`;
   const res = await Sheets.get('getFeedback');
   if (!res?.success || !res.feedback?.length) {
     container.innerHTML = '<div class="empty-state"><div class="empty-icon">💬</div><p>No feedback yet.</p></div>';
+    refreshFeedbackBadge();
     return;
   }
-  container.innerHTML = res.feedback.map(f => `
-    <div class="card card-sm" style="margin-bottom:10px">
+  container.innerHTML = res.feedback.map(f => {
+    const isRead    = f.adminRead || !!f.adminReply;
+    const stars     = '⭐'.repeat(Math.min(parseInt(f.rating) || 0, 5));
+    const safeId    = (f.id || '').replace(/'/g, "\'");
+    const safeName  = (f.name || 'Anonymous').replace(/</g,'&lt;');
+    const safeEmail = (f.email || '').replace(/</g,'&lt;');
+    const safeMsg   = (f.message || '').replace(/</g,'&lt;');
+    const safeReply = (f.adminReply || '').replace(/</g,'&lt;');
+    return `
+    <div class="card card-sm" id="fb-card-${safeId}"
+      style="margin-bottom:12px;border-left:3px solid ${isRead ? 'var(--border)' : '#e53935'};opacity:${isRead ? '0.75' : '1'}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
-        <div>
-          <div style="font-weight:700;font-size:14px">${f.name || 'Anonymous'}</div>
-          <div style="font-size:12px;color:var(--text3)">${f.email || ''} · ${f.date || ''}</div>
+        <div style="display:flex;align-items:center;gap:8px">
+          ${!isRead ? '<span style="width:8px;height:8px;border-radius:50%;background:#e53935;flex-shrink:0;display:inline-block"></span>' : ''}
+          <div>
+            <div style="font-weight:700;font-size:14px">${safeName}</div>
+            <div style="font-size:11px;color:var(--text3)">${safeEmail} · ${f.date || ''}</div>
+          </div>
         </div>
-        <div>${'⭐'.repeat(Math.min(parseInt(f.rating) || 0, 5))}</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          ${stars ? `<span style="font-size:12px">${stars}</span>` : ''}
+          ${f.category ? `<span class="badge badge-blue" style="font-size:10px">${f.category}</span>` : ''}
+          ${isRead ? '<span style="font-size:10px;color:var(--text3);font-weight:600">✓ Done</span>' : ''}
+        </div>
       </div>
-      <div style="font-size:13px;color:var(--text2);line-height:1.5;margin-bottom:6px">${f.message || ''}</div>
-      ${f.category ? `<span class="badge badge-blue">${f.category}</span>` : ''}
-    </div>`).join('');
+      <div style="font-size:13px;color:var(--text1);line-height:1.6;margin-bottom:10px;padding:8px 10px;background:var(--bg3);border-radius:8px">${safeMsg}</div>
+      ${safeReply ? `
+        <div style="font-size:12px;color:var(--g5);background:rgba(46,125,70,0.1);border:1px solid rgba(46,125,70,0.25);border-radius:8px;padding:8px 10px;margin-bottom:10px">
+          <span style="font-weight:700">✉️ Your reply:</span> ${safeReply}
+        </div>` : ''}
+      ${!isRead ? `
+        <div id="fb-reply-area-${safeId}" style="margin-top:2px">
+          <textarea id="fb-reply-input-${safeId}" rows="2" maxlength="500"
+            placeholder="Type a reply to ${safeName}… (optional)"
+            style="width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--surface);color:var(--text1);font-size:13px;resize:none;box-sizing:border-box;margin-bottom:8px"></textarea>
+          <div style="display:flex;gap:8px">
+            <button class="btn btn-primary" style="flex:1;font-size:12px;padding:8px"
+              onclick="_submitFeedbackReply('${safeId}')">✉️ Reply & Mark Done</button>
+            <button class="btn btn-ghost" style="font-size:12px;padding:8px 14px"
+              onclick="_markFeedbackNoted('${safeId}')">✅ Noted</button>
+          </div>
+        </div>` : ''}
+    </div>`;
+  }).join('');
+  refreshFeedbackBadge();
+}
+
+async function _submitFeedbackReply(feedbackId) {
+  const input = document.getElementById('fb-reply-input-' + feedbackId);
+  const reply = (input?.value || '').trim();
+  if (!reply) return _markFeedbackNoted(feedbackId);
+  const btn = input?.closest('.card')?.querySelector('button');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  const res = await Sheets.post('replyFeedback', { feedbackId, reply });
+  if (res?.success) {
+    _markCardDone(feedbackId, reply);
+    showToast('Reply saved ✅', 'success');
+    refreshFeedbackBadge();
+  } else {
+    showToast('Failed to save reply. Try again.', 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '✉️ Reply & Mark Done'; }
+  }
+}
+
+async function _markFeedbackNoted(feedbackId) {
+  const res = await Sheets.post('markFeedbackRead', { feedbackId });
+  if (res?.success) {
+    _markCardDone(feedbackId, null);
+    showToast('Marked as noted ✅', 'success');
+    refreshFeedbackBadge();
+  } else {
+    showToast('Failed. Try again.', 'error');
+  }
+}
+
+function _markCardDone(feedbackId, reply) {
+  const card = document.getElementById('fb-card-' + feedbackId);
+  if (!card) return;
+  card.style.borderLeftColor = 'var(--border)';
+  card.style.opacity = '0.75';
+  const replyArea = document.getElementById('fb-reply-area-' + feedbackId);
+  if (replyArea) {
+    if (reply) {
+      replyArea.outerHTML = `<div style="font-size:12px;color:var(--g5);background:rgba(46,125,70,0.1);border:1px solid rgba(46,125,70,0.25);border-radius:8px;padding:8px 10px">
+        <span style="font-weight:700">✉️ Your reply:</span> ${reply.replace(/</g,'&lt;')}</div>`;
+    } else { replyArea.remove(); }
+  }
+  card.querySelectorAll('span[style*="background:#e53935"]').forEach(el => el.remove());
+  const statusArea = card.querySelector('[style*="gap:6px"]');
+  if (statusArea && !statusArea.querySelector('.done-label')) {
+    const d = document.createElement('span');
+    d.className = 'done-label';
+    d.style.cssText = 'font-size:10px;color:var(--text3);font-weight:600';
+    d.textContent = '✓ Done';
+    statusArea.appendChild(d);
+  }
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -2055,6 +2157,16 @@ async function renderAdminDashboard() {
     if (logsRes?.success)  allLogs       = logsRes.logs   || allLogs;
     if (runsRes?.success)  allRuns       = runsRes.logs   || allRuns;
     if (onbRes?.success)   _adminOnboardings = onbRes.onboardings || [];
+
+    if (!users.length && allLogs.length) {
+      const seen = {};
+      allLogs.forEach(l => {
+        if (l.userId && !seen[l.userId]) {
+          seen[l.userId] = true;
+          users.push({ id: l.userId, name: l.name || '', email: l.email || '', role: 'USER' });
+        }
+      });
+    }
   } catch(e) { console.warn('Dashboard fetch:', e.message); }
 
   _adminDashboardData = { users, allLogs, allRuns, fetchedAt: new Date() };
@@ -2508,10 +2620,14 @@ function _drillKpi(which) {
       <div class="dash-user-list">
         ${sortedUsers.map(([uid, n]) => {
           const u = realUsers.find(u => u.id === uid);
+          const logEntry = list.find(l => l.userId === uid);
+          const displayName = u?.name || logEntry?.name || '';
+          const displayEmail = u?.email || logEntry?.email || '';
+          const label = displayName || displayEmail || (uid.startsWith('u_') ? 'User #' + uid.replace('u_','').slice(-6) : uid);
           return `<div class="dash-user-row">
             <div class="dash-user-info">
-              <div class="dash-user-name">${u?.name||uid}</div>
-              <div class="dash-user-email">${u?.email||''}</div>
+              <div class="dash-user-name">${label}</div>
+              <div class="dash-user-email">${displayEmail}</div>
             </div>
             <div class="dash-user-count">${n}</div>
           </div>`;
@@ -3509,7 +3625,6 @@ async function _refreshAudienceCount() {
   }
 }
 
-// ── TEMPLATE LIBRARY — 20+ messages per category ─────────────────
 const _NOTIFY_TEMPLATES = {
   motivation: [
     { title: '💪 You got this!',                  message: 'Every workout counts. Take 15 minutes for yourself today and feel amazing afterwards.' },
@@ -3527,7 +3642,7 @@ const _NOTIFY_TEMPLATES = {
     { title: '🌊 Ride the wave!',                 message: "Motivation comes in waves. You're feeling one right now — catch it! Open FitFlow immediately! 🏄" },
     { title: '🦁 Unleash the beast!',             message: "There's a stronger version of you waiting to come out. Today's workout is the door. Open it! 🔥" },
     { title: '⭐ You are worth it!',              message: "Investing 20 mins in your health today pays dividends for the rest of your life. You deserve it! 💪" },
-    { title: '🎵 Let\'s get moving!',             message: "Put on your favourite playlist, open FitFlow, and let the music carry you through. Let's GO! 🎶💪" },
+    { title: '🎵 Let's get moving!',             message: "Put on your favourite playlist, open FitFlow, and let the music carry you through. Let's GO! 🎶💪" },
     { title: '🤸 Feel-good guaranteed!',          message: "Science fact: you will feel better after this workout than before. 100% guaranteed. Try it! 😁" },
     { title: '🌈 After every storm...',           message: "Tough days make the good days sweeter. Show up today — your future self will thank you! 💪" },
     { title: '⚔️ Warrior mentality!',             message: "Warriors don't skip. They don't make excuses. They just do the work. Open FitFlow now! 🔥" },
@@ -3539,20 +3654,19 @@ const _NOTIFY_TEMPLATES = {
     { title: '⏰ Time to move!',                  message: "Haven't logged a session today? A short workout is better than none. Open FitFlow now!" },
     { title: '📋 Daily check-in!',               message: "Your workout for today is still pending. Takes only 15 mins — open FitFlow and check it off! ✅" },
     { title: '🔔 Gentle nudge!',                  message: "Hey! You haven't opened FitFlow today. Your streak needs you — just 10 mins is enough! 💪" },
-    { title: '📅 Don\'t break the chain!',        message: "Every day you work out adds a link to your chain. Don't break it today. Open FitFlow! 🔥" },
+    { title: '📅 Don't break the chain!',        message: "Every day you work out adds a link to your chain. Don't break it today. Open FitFlow! 🔥" },
     { title: '👀 We noticed...',                  message: "You haven't logged a workout yet today. The day's not over! Open FitFlow and make it count! ⚡" },
     { title: '🏃 Your body is waiting!',          message: "Your muscles are rested, your energy is there — all that's missing is the action. GO! 💪" },
     { title: '⌛ Clock is ticking!',              message: "The best workout window is right now. In an hour you'll be tired. Open FitFlow — NOW! 🔥" },
-    { title: '💤 Don\'t let today be a zero!',   message: "Zero days lead to zero results. 15 mins of anything counts. Open FitFlow right now! ⚡" },
-    { title: '🎯 Today\'s goal pending!',         message: "One task left on your list: today's workout. Everything else is done. Finish strong! 💪" },
+    { title: '💤 Don't let today be a zero!',   message: "Zero days lead to zero results. 15 mins of anything counts. Open FitFlow right now! ⚡" },
+    { title: '🎯 Today's goal pending!',         message: "One task left on your list: today's workout. Everything else is done. Finish strong! 💪" },
     { title: '📊 Streak at risk!',               message: "Your workout streak is on the line. A quick 10-min session is all it takes. Open FitFlow! 🔥" },
-    { title: '🧠 Your future self says:',         message: "\"Please work out today. Trust me, you'll be glad you did.\" — Future You. Open FitFlow! 💪" },
-    { title: '🌙 Don\'t sleep on this!',         message: "Tomorrow's energy is built today. A workout now means you wake up feeling GREAT. Do it! ⚡" },
+    { title: '🧠 Your future self says:',         message: ""Please work out today. Trust me, you'll be glad you did." — Future You. Open FitFlow! 💪" },
+    { title: '🌙 Don't sleep on this!',         message: "Tomorrow's energy is built today. A workout now means you wake up feeling GREAT. Do it! ⚡" },
     { title: '🏋️ Equipment is ready!',           message: "FitFlow has your workout queued up. Cardio, yoga, gym, running — pick one. Just start! 💪" },
     { title: '✅ One thing left today!',          message: "You've handled work, meals, and life. One thing remains: YOUR workout. Open FitFlow! 🎯" },
     { title: '🤝 Accountability check!',          message: "You committed to your fitness journey. Today is part of that commitment. Don't break it! 💪" },
     { title: '📱 Quick reminder!',               message: "FitFlow is loaded, your workout is ready, and 15 minutes is all it takes. What are you waiting for? 🔥" },
-    { title: '🌅 Morning fade?',                  message: "That morning motivation is fading — act before it's gone! Open FitFlow while you still feel it! ⚡" },
     { title: '⚡ 15-minute challenge!',           message: "Challenge: Can you complete a 15-min FitFlow workout right now? We think you can. Prove it! 💪" },
     { title: '🎪 Show up for yourself!',          message: "You show up for work. You show up for others. Now show up for YOU. Open FitFlow! 🏆" },
     { title: '🌟 Daily habit building!',          message: "It takes 21 days to build a habit. Every day you log in FitFlow makes it more automatic. Do it! 💪" },
@@ -3568,7 +3682,7 @@ const _NOTIFY_TEMPLATES = {
     { title: '📊 New stats available!',           message: "Your fitness dashboard just got a major upgrade. New insights and data are waiting for you! 📈" },
     { title: '🏃 New running features!',          message: "GPS tracking just got smarter! New pace zones, route maps & more in FitFlow. Go explore! 🗺️" },
     { title: '🧘 New yoga routines added!',       message: "Fresh yoga flows are now in FitFlow Pro. Morning, evening, stress-relief and more! Try them! 🌿" },
-    { title: '💪 New workout plans!',             message: "Brand new training plans have landed in FitFlow Pro. Check your Modules tab — something for everyone! 🏋️" },
+    { title: '💪 New workout plans!',             message: "Brand new training plans have landed in FitFlow Pro. Check your Modules tab! 🏋️" },
     { title: '🤸 Calisthenics upgrade!',          message: "The calisthenics module just got new progressions and skill paths. Open FitFlow to explore! 💪" },
     { title: '🎯 Custom workouts improved!',      message: "Building your own workouts is now easier than ever. New tools, new exercises, same FitFlow! ✨" },
     { title: '📱 App experience improved!',       message: "Smoother animations, faster loads, and better navigation — FitFlow feels brand new! Open it! 🚀" },
@@ -3612,7 +3726,7 @@ const _NOTIFY_TEMPLATES = {
     { title: '⚡ Streak alive!',                  message: "Every day you show up, your streak grows stronger. Today is another day to add to your legend! 💪" },
     { title: '🏅 Streak warrior!',               message: "Only consistent people build long streaks. You're one of them. Keep it going — open FitFlow! 🔥" },
     { title: '🌟 Day streak = power!',           message: "Your streak isn't just a number — it's proof of your discipline. Add another day to it! 💪" },
-    { title: '😤 Don\'t break it now!',          message: "You've worked too hard to let your streak end over one lazy day. 10 mins is all it takes! ⚡" },
+    { title: '😤 Don't break it now!',          message: "You've worked too hard to let your streak end over one lazy day. 10 mins is all it takes! ⚡" },
     { title: '🏆 Streak leaderboard!',           message: "The top streaks on FitFlow belong to people who never give up. Are you one of them? GO! 💪" },
     { title: '🔗 Another link in the chain!',    message: "Each workout adds a link. The chain is only as strong as today's session. Don't break it! 🔥" },
     { title: '📅 Keep the habit alive!',         message: "Habits take 21 days to form and 1 day to break. Don't let today be that day! Open FitFlow! 💪" },
@@ -3643,7 +3757,7 @@ const _NOTIFY_TEMPLATES = {
     { title: '🌿 Yoga Sunday!',                  message: "Start Sunday with 20 mins of yoga. Calm mind, loose body, positive week ahead. FitFlow has it! 🧘" },
     { title: '🏃 Saturday run club!',            message: "Saturdays were made for long runs. Lace up, open FitFlow GPS, and explore! 🗺️🏃" },
     { title: '😌 Active recovery weekend!',      message: "Even rest days can be active! Light yoga, a walk, or stretching counts. Open FitFlow! 🌿" },
-    { title: '💪 Set the week\'s tone!',         message: "A Sunday workout means Monday feels like week 2. Start strong. Open FitFlow now! 🔥" },
+    { title: '💪 Set the week's tone!',         message: "A Sunday workout means Monday feels like week 2. Start strong. Open FitFlow now! 🔥" },
     { title: '🎯 Weekend goal check!',           message: "Did you hit your weekly workout target? If not, the weekend is your last chance. FitFlow — NOW! 💪" },
     { title: '🌄 Golden morning!',               message: "Weekend mornings are golden — quiet streets, cool air, no rush. Perfect for a run or yoga! 🌅" },
     { title: '🤸 Weekend flex session!',         message: "No gym pressure on weekends — just you, FitFlow, and a great stretching routine. Ahh... 🧘" },
@@ -3664,7 +3778,7 @@ const _NOTIFY_TEMPLATES = {
     { title: '🍛 Balanced plate today?',         message: "Carbs for energy, protein for muscle, veggies for vitamins. Then burn it all with FitFlow! 🔥" },
     { title: '💦 Water + workout combo!',        message: "Rule: For every workout, drink 500ml extra water. Your muscles will love you for it! 💧💪" },
     { title: '🥗 Eat the rainbow!',              message: "Colorful plates = better nutrition. Eat your veggies today and fuel that FitFlow session! 🌈" },
-    { title: '⏰ Don\'t skip breakfast!',        message: "Morning fuel = morning performance. Eat well, then crush your FitFlow workout! ☀️💪" },
+    { title: '⏰ Don't skip breakfast!',        message: "Morning fuel = morning performance. Eat well, then crush your FitFlow workout! ☀️💪" },
     { title: '🍽️ Mindful eating today!',         message: "Slow down, eat mindfully, and fuel your body right. Then work it off in FitFlow! 🔥" },
     { title: '🥩 Recovery nutrition!',           message: "After a hard workout, your muscles need protein within 30 mins. Don't skip the refuel! 💪" },
     { title: '🚫 Sugar crash warning!',          message: "That sugary snack gives a spike, then a crash. Real energy? 20 mins in FitFlow. Choose wisely! ⚡" },
@@ -3676,7 +3790,6 @@ const _NOTIFY_TEMPLATES = {
   ],
 };
 
-// Currently selected category and index for the template picker
 let _notifyTemplateCategory = 'motivation';
 let _notifyTemplateIndex    = 0;
 
@@ -3690,16 +3803,13 @@ function _renderTemplateDropdowns() {
     { key: 'feature',    label: '✨ New Feature',  count: _NOTIFY_TEMPLATES.feature.length    },
     { key: 'diet',       label: '🥗 Diet & Fuel',  count: _NOTIFY_TEMPLATES.diet.length       },
   ];
-
   const catOptions = categories.map(c =>
     `<option value="${c.key}" ${c.key === _notifyTemplateCategory ? 'selected' : ''}>${c.label} (${c.count})</option>`
   ).join('');
-
   const msgs = _NOTIFY_TEMPLATES[_notifyTemplateCategory] || [];
   const msgOptions = msgs.map((m, i) =>
     `<option value="${i}" ${i === _notifyTemplateIndex ? 'selected' : ''}>${i + 1}. ${m.title}</option>`
   ).join('');
-
   return `
     <div style="display:flex;flex-direction:column;gap:8px">
       <div style="display:flex;gap:8px;align-items:center">
@@ -3735,9 +3845,7 @@ function _onTemplateCatChange(cat) {
   }
 }
 
-function _onTemplateMsgChange(idx) {
-  _notifyTemplateIndex = idx;
-}
+function _onTemplateMsgChange(idx) { _notifyTemplateIndex = idx; }
 
 function _applySelectedTemplate() {
   const msgs = _NOTIFY_TEMPLATES[_notifyTemplateCategory] || [];
@@ -3768,7 +3876,6 @@ function _templatePrev() {
 }
 
 function _applyNotifyTemplate(key) {
-  // Legacy chip support — picks first message of that category
   _notifyTemplateCategory = key;
   _notifyTemplateIndex    = 0;
   _applySelectedTemplate();
