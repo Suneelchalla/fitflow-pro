@@ -2390,6 +2390,8 @@ function toggleProfileMenu() {
     if (em) em.textContent = APP.currentUser.email;
     // Refresh notification toggle switch state when menu opens
     _updateNotifToggleVisual();
+    // Refresh admin theme toggle (visibility + state)
+    if (typeof refreshAdminThemeToggle === 'function') refreshAdminThemeToggle();
   }
   // Close menu when clicking outside
   if (!isOpen) {
@@ -2671,6 +2673,30 @@ function _showUnblockInstructions() {
     overlay.appendChild(modal);
     document.body.appendChild(overlay);
   }
+}
+
+
+// Update admin theme toggle visibility + state in profile menu
+function refreshAdminThemeToggle() {
+  const btn   = document.getElementById('admin-theme-toggle-btn');
+  const sw    = document.getElementById('admin-theme-toggle-switch');
+  const knob  = document.getElementById('admin-theme-toggle-knob');
+  const label = document.getElementById('admin-theme-toggle-label');
+  if (!btn) return;
+
+  // Only admins see this
+  const isAdmin = APP.currentUser?.role === 'ADMIN';
+  btn.style.display = isAdmin ? 'flex' : 'none';
+  if (!isAdmin) return;
+
+  // Reflect current theme state
+  const isLight = document.documentElement.classList.contains('theme-light');
+  if (sw) {
+    sw.setAttribute('data-on', isLight ? 'true' : 'false');
+    sw.style.background = isLight ? 'var(--g4)' : 'rgba(255,255,255,0.15)';
+  }
+  if (knob) knob.style.left = isLight ? '21px' : '3px';
+  if (label) label.textContent = isLight ? '☀️ Light Mode' : '🌙 Dark Mode';
 }
 
 // Update the notification toggle switch's visual state based on current subscription
