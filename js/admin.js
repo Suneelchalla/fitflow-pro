@@ -2196,6 +2196,30 @@ async function renderAdminDashboard() {
     container.innerHTML = `<div class="dash-grid">${Array(8).fill('<div class="dash-card dash-skeleton"></div>').join('')}</div>`;
   }
 
+  // Quick GS connectivity check — shows banner if unreachable
+  const pingRes = await Sheets.get('ping').catch(() => null);
+  if (!pingRes?.success) {
+    container.innerHTML = `
+      <div class="card" style="margin:16px;background:rgba(229,57,53,0.06);border-color:rgba(229,57,53,0.25);padding:28px 20px;text-align:center">
+        <div style="font-size:36px;margin-bottom:10px">🔌</div>
+        <div style="font-weight:700;font-size:16px;margin-bottom:8px">Cannot reach Google Sheets backend</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.7">
+          The GS web app is not responding. Most likely causes:<br>
+          <strong>1.</strong> GS was redeployed → got a new URL. Update <code>_defaultSheetsUrl</code> in <code>app.js</code><br>
+          <strong>2.</strong> GS v8 not deployed yet — open Apps Script, paste the new code, click Deploy<br>
+          <strong>3.</strong> GS deployment set to "Me only" — must be <strong>Anyone</strong> access
+        </div>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-bottom:14px">
+          <button class="btn btn-primary" onclick="renderAdminDashboard()">🔄 Retry Connection</button>
+          <button class="btn btn-ghost" onclick="openSheetsConfig()">⚙️ Update Sheets URL</button>
+        </div>
+        <div style="font-size:11px;color:var(--text3)">
+          Current URL: <code style="font-size:10px;word-break:break-all">${Store.getSheetsConfig().webAppUrl}</code>
+        </div>
+      </div>`;
+    return;
+  }
+
   let users = [], allLogs = Store.getLogs(), allRuns = Store.getRunLogs();
   try {
     const [usersRes, logsRes, runsRes, onbRes] = await Promise.all([
@@ -2276,7 +2300,50 @@ function _setDashKpiRange(range, btn) {
 function _renderDashboardContent() {
   const container = document.getElementById('admin-dashboard-content');
   if (!container || !_adminDashboardData) return;
+
   const { users, allLogs, allRuns } = _adminDashboardData;
+
+  // If GS returned nothing at all, show a clear diagnostic instead of blank screen
+  if (!users.length && !allLogs.length && !allRuns.length) {
+    container.innerHTML = `
+      <div class="card" style="margin:16px;background:rgba(240,192,64,0.06);border-color:rgba(240,192,64,0.25);text-align:center;padding:32px 20px">
+        <div style="font-size:40px;margin-bottom:12px">⚠️</div>
+        <div style="font-weight:700;font-size:16px;margin-bottom:8px">No data received from Google Sheets</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.6">
+          Possible causes:<br>
+          <strong>1.</strong> GS v8 hasn't been deployed yet — paste the new GS code and deploy<br>
+          <strong>2.</strong> GS was redeployed as a NEW deployment — update the URL in <code>app.js → _defaultSheetsUrl</code><br>
+          <strong>3.</strong> GS has a script error — check Apps Script → Executions for errors
+        </div>
+        <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="renderAdminDashboard()">🔄 Retry</button>
+          <button class="btn btn-ghost" onclick="openSheetsConfig()">⚙️ Check Sheets URL</button>
+        </div>
+        <div style="margin-top:16px;font-size:12px;color:var(--text3)">
+          Current GS URL: <code style="font-size:10px;word-break:break-all">${Store.getSheetsConfig().webAppUrl || 'not set'}</code>
+        </div>
+      </div>`;
+    return;
+  }
+
+  // Wrap the render in try/catch — the huge template literal can crash silently
+  // leaving innerHTML blank if any interpolated function throws
+  try {
+    _renderDashboardHTML(container, users, allLogs, allRuns);
+  } catch(err) {
+    console.error('[FitFlow] Dashboard render error:', err);
+    container.innerHTML = `
+      <div class="card" style="margin:16px;background:rgba(229,57,53,0.06);border-color:rgba(229,57,53,0.25);text-align:center;padding:28px 20px">
+        <div style="font-size:36px;margin-bottom:10px">❌</div>
+        <div style="font-weight:700;margin-bottom:6px">Dashboard render error</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:14px;font-family:monospace">${err.message}</div>
+        <button class="btn btn-primary" onclick="renderAdminDashboard()">🔄 Retry</button>
+      </div>`;
+  }
+}
+
+// The actual dashboard HTML builder — separated so errors can be caught above
+function _renderDashboardHTML(container, users, allLogs, allRuns) {
 
   const today = todayStr();
   const yesterday = _dashDaysAgo(1);
@@ -2574,7 +2641,7 @@ function _renderDashboardContent() {
     </div>
   `;
 }
-
+}
 function _shortDate(ymd) {
   if (!ymd) return '';
   // For 1y view, ymd is YYYY-MM
