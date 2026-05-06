@@ -770,3 +770,64 @@ textarea.form-input { resize: vertical; min-height: 90px; line-height: 1.5; }
   border-color: var(--g4);
 }
 .cw-chip:active { transform: scale(0.95); }
+
+/* ════════════════════════════════════════════════════════════════
+   LIGHT MODE — applied when <html class="theme-light"> is set
+   Only used by admin role. Regular users always get dark mode.
+   ════════════════════════════════════════════════════════════════ */
+html.theme-light {
+  --g1: #d4f1dd;
+  --g2: #b8e3c5;
+  --g3: #2e7d46;
+  --g4: #43a05a;
+  --g5: #2e7d46;
+  --g6: #1a5c32;
+  --accent: #c89a20;
+  --accent2: #d65a20;
+  --danger: #c62828;
+  --bg: #f4f7f5;
+  --bg2: #e8eee9;
+  --bg3: #dde5df;
+  --surface: #ffffff;
+  --surface2: #f0f4f1;
+  --border: rgba(0,0,0,0.08);
+  --text: #1a2620;
+  --text2: #4a6055;
+  --text3: #7a8a82;
+  --white: #ffffff;
+  --shadow: 0 8px 32px rgba(0,0,0,0.08);
+  --shadow-sm: 0 2px 12px rgba(0,0,0,0.06);
+}
+
+/* Adjustments specific to elements that need contrast tweaks in light mode */
+html.theme-light body {
+  background: var(--bg);
+  color: var(--text);
+}
+html.theme-light .topbar,
+html.theme-light .bottom-nav {
+  background: var(--surface);
+  border-color: var(--border);
+}
+html.theme-light .card,
+html.theme-light .user-row,
+html.theme-light .user-info,
+html.theme-light input[type=text],
+html.theme-light input[type=email],
+html.theme-light input[type=password],
+html.theme-light input[type=number],
+html.theme-light input[type=date],
+html.theme-light textarea,
+html.theme-light select {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--border);
+}
+html.theme-light .modal-content {
+  background: var(--surface);
+  color: var(--text);
+}
+html.theme-light .btn-ghost {
+  color: var(--text);
+}
+/* Theme color meta updates handled in JS */
