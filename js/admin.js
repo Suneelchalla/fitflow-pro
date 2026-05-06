@@ -1392,8 +1392,7 @@ function openAdminQuotes() {
     btn.onclick = async () => {
       btn.disabled = true; btn.textContent = 'Saving…';
       const quotes = Array.from(document.querySelectorAll('.quote-row')).map(el => ({
-        text:   (_text(el, 'text')   || '').replace(/^"|"$/g, '').trim(),
-        author: (_text(el, 'author') || '').replace(/^—\s*/, '').trim(),
+        text: (el.querySelector('[data-field="text"]')?.textContent || '').replace(/^["']|["']$/g, '').trim(),
       })).filter(q => q.text);
       Store.setContent('custom_quotes', quotes);
       APP_DATA.quotes = quotes;
@@ -1415,9 +1414,6 @@ function _quoteCard(q, idx) {
         <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Quote Text</div>
         <div class="editable-block editable" data-field="text" contenteditable="true"
           style="font-size:14px;font-style:italic;line-height:1.5">"${q.text || ''}"</div>
-        <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin:8px 0 4px">Author</div>
-        <div class="editable" data-field="author" contenteditable="true"
-          style="font-size:13px;color:var(--text3)">— ${q.author || 'Unknown'}</div>
       </div>
     </div>`;
 }
@@ -1425,7 +1421,7 @@ function _quoteCard(q, idx) {
 function addQuoteRow() {
   const list = document.getElementById('quotes-list');
   const div  = document.createElement('div');
-  div.innerHTML = _quoteCard({ text: 'Enter quote here', author: 'Author Name' }, 999);
+  div.innerHTML = _quoteCard({ text: 'Enter quote here' }, 999);
   activateEditing(div);
   list?.appendChild(div.firstElementChild);
   markDirty();
