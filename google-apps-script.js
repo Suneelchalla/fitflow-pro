@@ -2004,7 +2004,6 @@ function sendDailyPushNotifications() {
     web_url:           'https://suneelchalla.github.io/fitflow-pro/index.html',
     // Web push icons (Chrome/Edge/Firefox on desktop AND mobile)
     chrome_web_icon:   'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png',
-    chrome_web_image:  'https://suneelchalla.github.io/fitflow-pro/icons/icon-512.png',
     chrome_web_badge:  'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png',
     // Action buttons below notification
     web_buttons: [
@@ -2076,7 +2075,6 @@ function sendCustomPush(body) {
     contents:                { en: String(body.message).substring(0, 240) },
     web_url:           'https://suneelchalla.github.io/fitflow-pro/index.html',
     chrome_web_icon:   'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png',
-    chrome_web_image:  'https://suneelchalla.github.io/fitflow-pro/icons/icon-512.png',
     chrome_web_badge:  'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png',
     priority:          10,
     ttl:               86400,
@@ -2156,7 +2154,6 @@ function sendPushToUser(subscriptionId, title, body, url) {
     contents:                { en: body  || 'You have a new update!' },
     web_url:                 url || 'https://suneelchalla.github.io/fitflow-pro/index.html',
     chrome_web_icon:         'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png',
-    chrome_web_image:        'https://suneelchalla.github.io/fitflow-pro/icons/icon-512.png',
     chrome_web_badge:        'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png',
     priority:                10,
   };
