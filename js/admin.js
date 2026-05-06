@@ -79,6 +79,8 @@ async function loadAdminUsers() {
     return;
   }
 
+  // Refresh theme toggle button on admin page load
+  if (typeof refreshAdminThemeToggle === 'function') refreshAdminThemeToggle();
   const res = await Sheets.get('getAllUsers');
   if (!res?.success) {
     container.innerHTML = `<div class="empty-state"><div class="empty-icon">❌</div>
