@@ -297,7 +297,11 @@ function _renderAdminUsersFiltered() {
         <div class="user-info">
           <div class="user-name" style="display:flex;align-items:center;gap:6px">
             ${u.name || '—'}${isAdmin ? ' 👑' : ''}
-            ${isGoogleUser ? '<span style="font-size:10px;background:rgba(66,133,244,0.15);color:#90caf9;border:1px solid rgba(66,133,244,0.3);border-radius:50px;padding:1px 8px;font-weight:600">G Google</span>' : ''}
+            ${isGoogleUser ? (
+              u.hasAppPassword
+                ? '<span style="font-size:10px;background:rgba(66,133,244,0.15);color:#90caf9;border:1px solid rgba(66,133,244,0.3);border-radius:50px;padding:1px 8px;font-weight:600" title="Google + App password set">G Google ✓</span>'
+                : '<span style="font-size:10px;background:rgba(66,133,244,0.15);color:#90caf9;border:1px solid rgba(66,133,244,0.3);border-radius:50px;padding:1px 8px;font-weight:600" title="Google only — no app password">G Google</span>'
+            ) : ''}
           </div>
           <div class="user-email">${u.email || '—'}</div>
           <div style="font-size:11px;color:var(--text3);margin-top:2px">
