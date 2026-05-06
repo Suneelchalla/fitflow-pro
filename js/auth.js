@@ -766,23 +766,87 @@ let _onboardStep = 1;
 let _onboardData = { goal: '', modules: [], age: '', weight: '', height: '', gender: '', fitnessLevel: '' };
 
 function startOnboarding() {
-  _onboardStep = 1;
-  _onboardData = { goal: '', modules: [], age: '', weight: '', height: '', gender: '', fitnessLevel: '' };
-  renderOnboardingStep(1);
+  // For Google users — start at step 0 (set username + password)
+  // For email users — start at step 1 (already have name + password)
+  const isGoogleUser = APP.currentUser?.authType === 'google';
+  _onboardStep = isGoogleUser ? 0 : 1;
+  _onboardData = {
+    name: APP.currentUser?.name || '',
+    password: '',
+    goal: '', modules: [],
+    age: '', weight: '', height: '', gender: '', fitnessLevel: ''
+  };
+  renderOnboardingStep(_onboardStep);
   showPage('page-onboarding', false);
 }
 
 function renderOnboardingStep(step) {
   const container = document.getElementById('onboarding-content');
   const user = APP.currentUser;
+  // Helper: dynamic step label based on user type
+  const isG = APP.currentUser?.authType === 'google' || APP.currentUser?.authType === 'google_with_password';
+  const totalSteps = isG ? 4 : 3;
+  const labelStep = function(uiStep) {
+    // uiStep is 1, 2, 3 in the original onboarding (without the new step 0)
+    // For Google users: uiStep 1 → "Step 2 of 4", uiStep 2 → "Step 3 of 4", uiStep 3 → "Step 4 of 4"
+    // For email users: uiStep 1 → "Step 1 of 3", etc.
+    const displayStep = isG ? uiStep + 1 : uiStep;
+    return 'Step ' + displayStep + ' of ' + totalSteps;
+  };
+  const stepProgress = function(uiStep) {
+    const displayStep = isG ? uiStep + 1 : uiStep;
+    return Math.round((displayStep / totalSteps) * 100);
+  };
 
-  if (step === 1) {
+  if (step === 0) {
+    // STEP 0 (Google users only) — Set username + app password
     container.innerHTML = `
       <div style="background:linear-gradient(135deg,var(--g1),var(--bg));min-height:100vh;padding:48px 24px 32px;display:flex;flex-direction:column">
         <div style="flex:1">
-          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px">Step 1 of 3</div>
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px">Step 1 of 4</div>
           <div style="height:4px;background:var(--bg3);border-radius:2px;margin-bottom:32px">
-            <div style="width:33%;height:100%;background:var(--g4);border-radius:2px"></div>
+            <div style="width:25%;height:100%;background:var(--g4);border-radius:2px"></div>
+          </div>
+          <div style="font-size:40px;margin-bottom:12px">🔐</div>
+          <div style="font-family:var(--font-display);font-size:34px;color:var(--g5);line-height:1.1;margin-bottom:8px">Set Up Your Profile</div>
+          <div style="font-size:14px;color:var(--text2);margin-bottom:24px;line-height:1.55">
+            You signed in with Google. Pick a display name and set an app password — you can also log in with email + password later.
+          </div>
+
+          <label style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px">Display Name</label>
+          <input type="text" id="ob-name" placeholder="Your name"
+            value="${(user?.name || '').replace(/"/g, '&quot;')}"
+            oninput="_validateOb0()"
+            style="width:100%;padding:14px 16px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:12px;font-size:15px;margin-bottom:18px;outline:none">
+
+          <label style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px">App Password</label>
+          <input type="password" id="ob-password" placeholder="At least 6 characters"
+            oninput="_validateOb0()"
+            style="width:100%;padding:14px 16px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:12px;font-size:15px;margin-bottom:6px;outline:none">
+          <div id="ob-pw-strength" style="font-size:11px;color:var(--text3);margin-bottom:14px;height:14px"></div>
+
+          <label style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:6px">Confirm Password</label>
+          <input type="password" id="ob-password-confirm" placeholder="Re-enter your password"
+            oninput="_validateOb0()"
+            style="width:100%;padding:14px 16px;border:2px solid var(--border);background:var(--surface);color:var(--text);border-radius:12px;font-size:15px;margin-bottom:6px;outline:none">
+          <div id="ob-pw-error" style="font-size:12px;color:#ff7878;margin-bottom:14px;height:16px"></div>
+
+          <div style="font-size:12px;color:var(--text3);background:rgba(67,160,90,0.08);border:1px solid rgba(67,160,90,0.2);padding:12px 14px;border-radius:10px;line-height:1.5">
+            💡 Your app password lets you log in with email + password if Google is unavailable. Keep it safe.
+          </div>
+        </div>
+        <button id="ob-next-0" class="btn btn-primary btn-full btn-lg" style="margin-top:20px;opacity:0.4" disabled onclick="_submitOb0()">
+          Continue →
+        </button>
+      </div>`;
+    setTimeout(_validateOb0, 100);
+  } else if (step === 1) {
+    container.innerHTML = `
+      <div style="background:linear-gradient(135deg,var(--g1),var(--bg));min-height:100vh;padding:48px 24px 32px;display:flex;flex-direction:column">
+        <div style="flex:1">
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px">${labelStep(1)}</div>
+          <div style="height:4px;background:var(--bg3);border-radius:2px;margin-bottom:32px">
+            <div style="width:${stepProgress(1)}%;height:100%;background:var(--g4);border-radius:2px"></div>
           </div>
           <div style="font-size:40px;margin-bottom:12px">👋</div>
           <div style="font-family:var(--font-display);font-size:36px;color:var(--g5);line-height:1.1;margin-bottom:8px">
@@ -819,9 +883,9 @@ function renderOnboardingStep(step) {
     container.innerHTML = `
       <div style="background:linear-gradient(135deg,var(--g1),var(--bg));min-height:100vh;padding:48px 24px 32px;display:flex;flex-direction:column">
         <div style="flex:1">
-          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px">Step 2 of 3</div>
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px">${labelStep(2)}</div>
           <div style="height:4px;background:var(--bg3);border-radius:2px;margin-bottom:32px">
-            <div style="width:66%;height:100%;background:var(--g4);border-radius:2px"></div>
+            <div style="width:${stepProgress(2)}%;height:100%;background:var(--g4);border-radius:2px"></div>
           </div>
           <div style="font-size:40px;margin-bottom:12px">🏋️</div>
           <div style="font-family:var(--font-display);font-size:34px;color:var(--g5);line-height:1.1;margin-bottom:8px">Pick Your Modules</div>
@@ -861,7 +925,7 @@ function renderOnboardingStep(step) {
     container.innerHTML = `
       <div style="background:linear-gradient(135deg,var(--g1),var(--bg));min-height:100vh;padding:48px 24px 32px;display:flex;flex-direction:column">
         <div style="flex:1">
-          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px">Step 3 of 4</div>
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.12em;margin-bottom:8px">${labelStep(3)}</div>
           <div style="height:4px;background:var(--bg3);border-radius:2px;margin-bottom:32px">
             <div style="width:75%;height:100%;background:var(--g4);border-radius:2px"></div>
           </div>
@@ -1066,6 +1130,93 @@ function goOnboardStep(step) {
   renderOnboardingStep(step);
 }
 
+// Validate step 0 (Google user setup)
+function _validateOb0() {
+  const name    = (document.getElementById('ob-name')?.value || '').trim();
+  const pw      = document.getElementById('ob-password')?.value || '';
+  const pw2     = document.getElementById('ob-password-confirm')?.value || '';
+  const btn     = document.getElementById('ob-next-0');
+  const errEl   = document.getElementById('ob-pw-error');
+  const strEl   = document.getElementById('ob-pw-strength');
+
+  // Password strength indicator
+  if (strEl) {
+    if (!pw) {
+      strEl.textContent = '';
+    } else if (pw.length < 6) {
+      strEl.textContent = '⚠ Too short (min 6 characters)';
+      strEl.style.color = '#ff7878';
+    } else if (pw.length < 8) {
+      strEl.textContent = '✓ OK strength';
+      strEl.style.color = '#f0c040';
+    } else {
+      strEl.textContent = '✓ Strong';
+      strEl.style.color = '#6dc880';
+    }
+  }
+
+  // Confirm password match
+  if (errEl) {
+    if (pw && pw2 && pw !== pw2) {
+      errEl.textContent = 'Passwords do not match';
+    } else {
+      errEl.textContent = '';
+    }
+  }
+
+  // Enable button only if all valid
+  const valid = name.length >= 2 && pw.length >= 6 && pw === pw2;
+  if (btn) {
+    btn.disabled = !valid;
+    btn.style.opacity = valid ? '1' : '0.4';
+  }
+}
+
+// Submit step 0 — save name + password, then advance to step 1
+async function _submitOb0() {
+  const name = (document.getElementById('ob-name')?.value || '').trim();
+  const pw   = document.getElementById('ob-password')?.value || '';
+  const btn  = document.getElementById('ob-next-0');
+  if (!name || pw.length < 6) return;
+
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; btn.style.opacity = '0.6'; }
+
+  try {
+    // Save to backend: updates name in Users sheet AND sets password
+    const user = APP.currentUser;
+    const res = await Sheets.post('completeGoogleSetup', {
+      userId: user.id,
+      name:   name,
+      password: pw,
+    });
+
+    if (res?.success) {
+      // Update local user object
+      APP.currentUser.name = name;
+      const session = Store.getSession();
+      if (session) {
+        session.name = name;
+        session.authType = 'google_with_password';
+        Store.saveSession(session);
+      }
+      _onboardData.name = name;
+      _onboardData.password = pw; // not stored, just tracked
+
+      // Move to step 1 (existing flow)
+      _onboardStep = 1;
+      renderOnboardingStep(1);
+      window.scrollTo(0, 0);
+    } else {
+      if (btn) { btn.disabled = false; btn.textContent = 'Continue →'; btn.style.opacity = '1'; }
+      alert(res?.error || 'Could not save profile. Please try again.');
+    }
+  } catch (e) {
+    console.error('Onboarding step 0 error:', e);
+    if (btn) { btn.disabled = false; btn.textContent = 'Continue →'; btn.style.opacity = '1'; }
+    alert('Network error. Please try again.');
+  }
+}
+
 function completeOnboarding() {
   // Save goal + module prefs to localStorage
   const user = APP.currentUser;
@@ -1167,17 +1318,16 @@ async function handleGoogleLogin(response) {
 
     if (res?.success && res.user) {
       const googleUser = { ...res.user, authType: 'google' };
-      // Check if this is a brand new Google user (created just now)
-      // New Google users need onboarding to set up their profile
-      const isNewGoogleUser = googleUser.id && googleUser.id.startsWith('u_g_');
-      if (isNewGoogleUser && googleUser.role !== 'ADMIN') {
-        // Store user and go through onboarding like a new user
+      // Use the backend's isNew flag (NOT the u_g_ prefix — every Google user has that)
+      const isBrandNewUser = res.isNew === true;
+      if (isBrandNewUser && googleUser.role !== 'ADMIN') {
+        // Brand new user — go through onboarding to set up profile
         APP.currentUser = googleUser;
         Store.saveSession(googleUser);
         if (typeof _refreshMyPlanNav === 'function') _refreshMyPlanNav();
         startOnboarding();
       } else {
-        // Existing user — go straight to dashboard
+        // Existing user (or admin) — go straight to dashboard
         await completeLogin(googleUser);
       }
     } else {
