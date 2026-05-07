@@ -49,6 +49,60 @@ function toggleAdminTheme() {
 }
 
 
+
+// ── SESSION VALIDATION ────────────────────────────────────────────
+// Checks if current session is still valid (not logged in elsewhere)
+// Called on app load and periodically
+
+async function validateCurrentSession() {
+  const session = Store.getSession();
+  if (!session || !session.id || !session.sessionToken) return true; // No session to validate
+
+  const cfg = Store.getSheetsConfig();
+  if (!cfg.webAppUrl) return true; // Offline — assume valid
+
+  try {
+    const qs = new URLSearchParams({
+      action:       'validateSession',
+      userId:       session.id,
+      sessionToken: session.sessionToken,
+    }).toString();
+    const r    = await fetch(`${cfg.webAppUrl}?${qs}`);
+    const text = await r.text();
+    const res  = JSON.parse(text);
+    if (res && res.valid === false) {
+      // Session invalid — logged in elsewhere
+      _handleSessionExpired();
+      return false;
+    }
+    return true;
+  } catch (e) {
+    return true; // Network error — assume valid, don't log out
+  }
+}
+
+function _handleSessionExpired() {
+  // Clear local session
+  Store.clearSession();
+  APP.currentUser = null;
+
+  // Show friendly message
+  showToast('⚠️ You have been logged in on another device. Please login again.', 'error', 5000);
+
+  // Redirect to login after short delay
+  setTimeout(() => {
+    showPage('page-login', false);
+  }, 2000);
+}
+
+// Start periodic session validation every 5 minutes
+function _startSessionValidation() {
+  if (!Store.getSession()?.sessionToken) return;
+  setInterval(async () => {
+    await validateCurrentSession();
+  }, 5 * 60 * 1000); // every 5 minutes
+}
+
 function initLogin() {
   const form    = document.getElementById('login-form');
   const emailIn = document.getElementById('login-email');
@@ -94,7 +148,7 @@ function initLogin() {
       APP.pendingUser = user;
       openSetPasswordModal();
     } else {
-      completeLogin(user);
+      completeLogin(user, result.sessionToken);
     }  });
 }
 
@@ -163,8 +217,10 @@ async function attemptLogin(email, password) {
 }
 
 // ── COMPLETE LOGIN ────────────────────────────────────────────────
-function completeLogin(user) {
+function completeLogin(user, sessionToken) {
   try {
+    // Save session token for single-device validation
+    if (sessionToken) user.sessionToken = sessionToken;
     APP.currentUser = user;
     Store.saveSession(user);
     // Sync then re-render so data appears immediately after login (not stale empty state)
