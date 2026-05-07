@@ -1500,7 +1500,13 @@ function _renderDayActivityLog(allLogs) {
               <div style="font-family:var(--font-display);font-size:18px;color:var(--g5)">${fmtPace(runLog.distance, runLog.duration)}</div>
               <div style="font-size:10px;color:var(--text3)">pace</div>
             </div>
-          </div>` : ''}
+          </div>
+          <button onclick="event.stopPropagation();openHistoryCardModal(${JSON.stringify(runLog).replace(/"/g,'&quot;')})"
+            style="width:100%;margin-top:8px;padding:9px;border-radius:10px;
+              border:1px solid var(--g4);background:var(--g1);
+              color:var(--g5);font-size:13px;font-weight:700;cursor:pointer">
+            🎴 Generate Activity Card
+          </button>` : ''}
         </div>`;
     }).join('')}`;
 }
