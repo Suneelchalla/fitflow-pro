@@ -3514,6 +3514,306 @@ function _shareActivityCard() {
   }, 'image/png');
 }
 
+
+// ════════════════════════════════════════════════════════════════
+// HISTORY ACTIVITY CARD GENERATOR
+// Allows generating a card from any past activity in History page
+// Supports photo upload, camera capture, and card sharing
+// ════════════════════════════════════════════════════════════════
+
+var _hcmLog      = null;  // Current history log being used for card
+var _hcmPhotoImg = null;  // Uploaded photo for history card
+var _hcmTheme    = 'dark';
+
+function openHistoryCardModal(log) {
+  _hcmLog      = log;
+  _hcmPhotoImg = null;
+  _hcmTheme    = 'dark';
+
+  // Reset modal state
+  const preview = document.getElementById('hcm-photo-preview');
+  if (preview) {
+    preview.innerHTML = '📷<div style="font-size:9px;color:var(--text3);margin-top:2px">Photo</div>';
+    preview.style.border = '2px dashed var(--border)';
+    preview.style.padding = '';
+    preview.style.overflow = '';
+  }
+  const canvas = document.getElementById('hcm-card-canvas');
+  if (canvas) { canvas.style.display = 'none'; }
+  const dlRow = document.getElementById('hcm-dl-row');
+  if (dlRow) { dlRow.style.display = 'none'; }
+
+  // Reset theme buttons
+  document.querySelectorAll('#hcm-fmt-row button').forEach((b, i) => {
+    b.style.border = i === 0 ? '2px solid var(--g4)' : '1px solid var(--border)';
+    b.style.color  = i === 0 ? 'var(--g4)' : 'var(--text2)';
+  });
+
+  // Fill activity info
+  const info = document.getElementById('hcm-activity-info');
+  if (info && log) {
+    const meta    = ACTIVITY_META[log.activityType || 'run'] || ACTIVITY_META.run;
+    const elapsed = log.duration || 0;
+    const pace    = log.distance > 0 ? fmtPace(log.distance, elapsed) : '--:--';
+    const kcal    = Math.round((log.distance || 0) * meta.kcalPerKm);
+    const dateStr = new Date(log.date || log.timestamp).toLocaleDateString('en-IN', {
+      weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'
+    });
+    info.innerHTML = `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span style="font-size:28px">\${meta.emoji}</span>
+        <div>
+          <div style="font-size:14px;font-weight:700;color:var(--text)">\${log.title || meta.label}</div>
+          <div style="font-size:12px;color:var(--text3)">\${dateStr}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:12px">
+        <div style="text-align:center">
+          <div style="font-size:18px;font-weight:800;color:var(--g5)">\${(log.distance||0).toFixed(2)}</div>
+          <div style="font-size:10px;color:var(--text3)">km</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:18px;font-weight:800;color:var(--text)">\${fmtTime(elapsed)}</div>
+          <div style="font-size:10px;color:var(--text3)">Duration</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:18px;font-weight:800;color:var(--text)">\${pace}</div>
+          <div style="font-size:10px;color:var(--text3)">Pace/km</div>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:18px;font-weight:800;color:var(--text)">\${kcal}</div>
+          <div style="font-size:10px;color:var(--text3)">kcal</div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Show modal
+  const modal = document.getElementById('history-card-modal');
+  if (modal) { modal.style.display = 'flex'; }
+}
+
+function closeHistoryCardModal() {
+  const modal = document.getElementById('history-card-modal');
+  if (modal) { modal.style.display = 'none'; }
+  _hcmLog      = null;
+  _hcmPhotoImg = null;
+}
+
+function _onHcmPhotoSelected(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    _hcmPhotoImg = new Image();
+    _hcmPhotoImg.onload = () => {
+      const preview = document.getElementById('hcm-photo-preview');
+      if (preview) {
+        preview.innerHTML = '';
+        preview.style.border = '2px solid var(--g4)';
+        preview.style.padding = '0';
+        preview.style.overflow = 'hidden';
+        const thumb = document.createElement('img');
+        thumb.src = ev.target.result;
+        thumb.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:8px';
+        preview.appendChild(thumb);
+      }
+      // Auto-regenerate if card already shown
+      const canvas = document.getElementById('hcm-card-canvas');
+      if (canvas && canvas.style.display !== 'none') _generateHcmCard();
+    };
+    _hcmPhotoImg.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function _setHcmTheme(t, btn) {
+  _hcmTheme = t;
+  document.querySelectorAll('#hcm-fmt-row button').forEach(b => {
+    b.style.border = '1px solid var(--border)';
+    b.style.color  = 'var(--text2)';
+  });
+  if (btn) { btn.style.border = '2px solid var(--g4)'; btn.style.color = 'var(--g4)'; }
+  const canvas = document.getElementById('hcm-card-canvas');
+  if (canvas && canvas.style.display !== 'none') _generateHcmCard();
+}
+
+function _generateHcmCard() {
+  const log  = _hcmLog;
+  const user = APP.currentUser;
+  if (!log || !user) return;
+
+  const cv  = document.getElementById('hcm-card-canvas');
+  const dlr = document.getElementById('hcm-dl-row');
+  if (!cv) return;
+
+  const T       = _CARD_THEMES[_hcmTheme] || _CARD_THEMES.dark;
+  const elapsed = log.duration || 0;
+  const meta    = ACTIVITY_META[log.activityType || 'run'] || ACTIVITY_META.run;
+  const dist    = (log.distance || 0).toFixed(2);
+  const kcal    = Math.round((log.distance || 0) * meta.kcalPerKm);
+  const pace    = log.distance > 0 ? fmtPace(log.distance, elapsed) : '--:--';
+  const coords  = (log.coords || []).filter(c => c.lat && c.lon);
+  const drawCoords = coords.length > 300
+    ? coords.filter((_, i) => i % Math.ceil(coords.length / 300) === 0)
+    : coords;
+
+  // Canvas size matches photo aspect ratio
+  let W = 1080, H = 1080;
+  if (_hcmPhotoImg) {
+    const photoW = _hcmPhotoImg.naturalWidth  || _hcmPhotoImg.width;
+    const photoH = _hcmPhotoImg.naturalHeight || _hcmPhotoImg.height;
+    if (photoW && photoH) {
+      const ratio = photoW / photoH;
+      if (ratio > 1) {
+        W = 1080; H = Math.round(1080 / ratio);
+        if (H < 900) { H = 900; W = Math.round(900 * ratio); }
+      } else {
+        H = 1080; W = Math.round(1080 * ratio);
+        if (W < 720) { W = 720; H = Math.round(720 / ratio); }
+      }
+    }
+  }
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+
+  // Background
+  ctx.fillStyle = T.bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // Photo
+  if (_hcmPhotoImg) {
+    ctx.drawImage(_hcmPhotoImg, 0, 0, W, H);
+    ctx.fillStyle = T.overlay.replace('VV', '0.72');
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // Route area
+  if (drawCoords.length >= 2) {
+    const routeAreaH = _hcmPhotoImg ? 420 : 480;
+    if (!_hcmPhotoImg) {
+      ctx.fillStyle = 'rgba(255,255,255,0.04)';
+      _cardRoundRect(ctx, 40, 40, W-80, routeAreaH, 20);
+      ctx.fill();
+    }
+    _drawRouteOnCanvas(ctx, drawCoords, 40, 40, W-80, routeAreaH, meta.color || T.accent);
+  }
+
+  // Stats panel
+  const panelY = _hcmPhotoImg ? (H - 420) : 540;
+  const panelH = 380;
+  ctx.fillStyle = T.panel;
+  _cardRoundRect(ctx, 40, panelY, W-80, panelH, 20);
+  ctx.fill();
+
+  // Activity badge
+  ctx.fillStyle = T.accent;
+  _cardRoundRect(ctx, 72, panelY + 24, 180, 36, 10);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 20px -apple-system, Arial, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(meta.emoji + ' ' + meta.label.toUpperCase(), 88, panelY + 47);
+
+  // Distance
+  ctx.fillStyle = T.text;
+  ctx.font = 'bold 96px -apple-system, Arial, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(dist, 72, panelY + 145);
+  ctx.fillStyle = T.sub;
+  ctx.font = 'bold 28px -apple-system, Arial, sans-serif';
+  ctx.fillText('KM', 72 + ctx.measureText(dist).width + 12, panelY + 125);
+
+  // Date
+  const dateStr = new Date(log.date || log.timestamp).toLocaleDateString('en-IN', {
+    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric'
+  });
+  ctx.fillStyle = T.sub;
+  ctx.font = '20px -apple-system, Arial, sans-serif';
+  ctx.fillText(dateStr, 72, panelY + 178);
+
+  // Divider
+  ctx.strokeStyle = T.accent + '33';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(72, panelY + 200);
+  ctx.lineTo(W-72, panelY + 200);
+  ctx.stroke();
+
+  // Stats grid
+  const stats = [
+    { val: fmtTime(elapsed), lbl: 'Duration' },
+    { val: pace + ' /km',    lbl: 'Pace'     },
+    { val: kcal + ' kcal',   lbl: 'Calories' },
+  ];
+  const cellW = (W - 80) / 3;
+  stats.forEach((st, i) => {
+    const cx = 40 + i * cellW + cellW / 2;
+    if (i > 0) {
+      ctx.strokeStyle = T.accent + '33';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(40 + i * cellW, panelY + 220);
+      ctx.lineTo(40 + i * cellW, panelY + 310);
+      ctx.stroke();
+    }
+    ctx.fillStyle = T.text;
+    ctx.font = 'bold 32px -apple-system, Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(st.val, cx, panelY + 270);
+    ctx.fillStyle = T.sub;
+    ctx.font = '18px -apple-system, Arial, sans-serif';
+    ctx.fillText(st.lbl, cx, panelY + 298);
+  });
+
+  // Footer
+  ctx.fillStyle = T.sub;
+  ctx.font = '20px -apple-system, Arial, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText('🏃 ' + user.name, 72, panelY + panelH - 24);
+  ctx.fillStyle = T.accent;
+  ctx.font = 'bold 20px -apple-system, Arial, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText('fitflow.pro', W - 72, panelY + panelH - 24);
+
+  cv.style.display = 'block';
+  if (dlr) { dlr.style.display = 'flex'; }
+  showToast('Activity card ready! 🎴', 'success');
+}
+
+function _downloadHcmCard() {
+  const cv  = document.getElementById('hcm-card-canvas');
+  if (!cv) return;
+  const log  = _hcmLog;
+  const meta = ACTIVITY_META[log?.activityType || 'run'] || ACTIVITY_META.run;
+  const name = 'fitflow-' + (meta.label||'activity').toLowerCase().replace(/\s+/g,'-') + '-' + Date.now() + '.png';
+  cv.toBlob(blob => {
+    if (!blob) return;
+    const file = new File([blob], name, { type: 'image/png' });
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ title: 'FitFlow Pro Activity Card', files: [file] })
+        .then(() => showToast('Card saved! 📸', 'success'))
+        .catch(() => _triggerBlobDownload(blob, name));
+    } else {
+      _triggerBlobDownload(blob, name);
+    }
+  }, 'image/png', 0.95);
+}
+
+function _shareHcmCard() {
+  const cv = document.getElementById('hcm-card-canvas');
+  if (!cv) return;
+  cv.toBlob(blob => {
+    const file = new File([blob], 'fitflow-activity.png', { type: 'image/png' });
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({ title: 'My FitFlow Pro Activity', files: [file] })
+        .catch(() => _downloadHcmCard());
+    } else {
+      _downloadHcmCard();
+    }
+  }, 'image/png');
+}
+
 function shareRun() {
   const s       = APP.runSession;
   if (!s) return;
