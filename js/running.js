@@ -2595,10 +2595,11 @@ function openHistoryCardFromDetail() {
     return;
   }
   closeModal('modal-run-detail');
-  // Store log for HCM editor and open editor
+  // Store log for HCM editor, reset photo, then show the photo-selection modal
   _hcmLog      = log;
   _hcmPhotoImg = null;
-  setTimeout(() => _initCardEditorFromLog(log), 300);
+  // Use the history card modal so user can optionally add a photo before opening editor
+  setTimeout(() => openHistoryCardModal(log), 300);
 }
 
 function _showRunDetail(idx) {
@@ -3583,7 +3584,8 @@ function _setHcmTheme(t, btn) {
 
 
 function _generateHcmCard() {
-  _initCardEditorFromLog(_hcmLog);
+  closeHistoryCardModal();
+  setTimeout(() => _initCardEditorFromLog(_hcmLog), 200);
 }
 
 function _generateHcmCardDirect() {
@@ -3713,7 +3715,7 @@ function _generateHcmCardDirect() {
   ctx.fillStyle = routeColor;
   ctx.font      = 'bold 22px -apple-system, Arial, sans-serif';
   ctx.textAlign = 'right';
-  ctx.fillText('⚡ fitflow.pro', W - 60, H - 36);
+  ctx.fillText('⚡ FitFlow Pro', W - 60, H - 36);
 
   ctx.fillStyle = 'rgba(255,255,255,0.6)';
   ctx.font      = '18px -apple-system, Arial, sans-serif';
@@ -3940,9 +3942,8 @@ function _renderRouteElement() {
   cv.height = elH;
   const ctx = cv.getContext('2d');
 
-  // Dark bg for route
-  ctx.fillStyle = 'rgba(13,26,16,0.75)';
-  ctx.fillRect(0, 0, elW, elH);
+  // Transparent background — no bg fill
+  ctx.clearRect(0, 0, elW, elH);
 
   if (_cardEditor.routeCoords.length >= 2) {
     _drawRouteOnCanvas(ctx, _cardEditor.routeCoords, 10, 10, elW-20, elH-20,
@@ -3985,17 +3986,20 @@ function _renderStatsElement(session, meta) {
   // Scale fonts to element size
   const fScale = elH / 240;
 
-  // Big distance
+  // Big distance — measure width BEFORE changing font
+  const bigFont = `bold ${Math.round(72 * fScale)}px -apple-system, Arial, sans-serif`;
+  ctx.font      = bigFont;
   ctx.fillStyle = '#ffffff';
-  ctx.font      = `bold ${Math.round(72 * fScale)}px -apple-system, Arial, sans-serif`;
   ctx.textAlign = 'left';
   ctx.shadowColor = 'rgba(0,0,0,0.8)';
   ctx.shadowBlur  = 8;
+  const distW = ctx.measureText(dist).width;
   ctx.fillText(dist, 16, Math.round(80 * fScale));
 
+  // KM superscript — use the big font width measured above
   ctx.fillStyle = 'rgba(255,255,255,0.7)';
   ctx.font      = `bold ${Math.round(22 * fScale)}px -apple-system, Arial, sans-serif`;
-  ctx.fillText('KM', 16 + ctx.measureText(dist).width + 8, Math.round(60 * fScale));
+  ctx.fillText('KM', 16 + distW + 6, Math.round(52 * fScale));
 
   // Activity type
   ctx.fillStyle = meta.color;
@@ -4047,7 +4051,7 @@ function _renderStatsElement(session, meta) {
   ctx.textAlign   = 'right';
   ctx.shadowColor = 'rgba(0,0,0,0.6)';
   ctx.shadowBlur  = 4;
-  ctx.fillText('⚡ fitflow.pro', elW - 16, elH - 10);
+  ctx.fillText('⚡ FitFlow Pro', elW - 16, elH - 10);
 
   if (user) {
     ctx.fillStyle = 'rgba(255,255,255,0.5)';
@@ -4235,8 +4239,7 @@ function _exportCardFromEditor() {
   tmpRoute.width  = routeElW;
   tmpRoute.height = routeElH;
   const routeCtx  = tmpRoute.getContext('2d');
-  routeCtx.fillStyle = 'rgba(13,26,16,0.75)';
-  routeCtx.fillRect(0, 0, routeElW, routeElH);
+  routeCtx.clearRect(0, 0, routeElW, routeElH);
   if (_cardEditor.routeCoords.length >= 2) {
     _drawRouteOnCanvas(routeCtx, _cardEditor.routeCoords, 10, 10,
       routeElW-20, routeElH-20, _cardEditor.meta.color);
@@ -4267,10 +4270,11 @@ function _exportCardFromEditor() {
   sCtx.font       = `bold ${Math.round(72*fScale)}px -apple-system,Arial,sans-serif`;
   sCtx.textAlign  = 'left';
   sCtx.shadowColor = 'rgba(0,0,0,0.8)'; sCtx.shadowBlur = 12;
+  const _distW = sCtx.measureText(dist).width;
   sCtx.fillText(dist, 16, Math.round(80*fScale));
   sCtx.fillStyle = 'rgba(255,255,255,0.7)';
   sCtx.font      = `bold ${Math.round(22*fScale)}px -apple-system,Arial,sans-serif`;
-  sCtx.fillText('KM', 16 + sCtx.measureText(dist).width + 8, Math.round(60*fScale));
+  sCtx.fillText('KM', 16 + _distW + 6, Math.round(52*fScale));
   sCtx.fillStyle = meta.color;
   sCtx.font      = `bold ${Math.round(18*fScale)}px -apple-system,Arial,sans-serif`;
   sCtx.fillText(meta.emoji + ' ' + (session.title || meta.label).toUpperCase(), 16, Math.round(104*fScale));
@@ -4294,7 +4298,7 @@ function _exportCardFromEditor() {
   });
   sCtx.fillStyle = meta.color; sCtx.font = `bold ${Math.round(14*fScale)}px -apple-system,Arial,sans-serif`;
   sCtx.textAlign = 'right'; sCtx.shadowColor = 'rgba(0,0,0,0.6)'; sCtx.shadowBlur = 4;
-  sCtx.fillText('⚡ fitflow.pro', statsElW-16, statsElH-10);
+  sCtx.fillText('⚡ FitFlow Pro', statsElW-16, statsElH-10);
   if (user) {
     sCtx.fillStyle = 'rgba(255,255,255,0.5)'; sCtx.font = `${Math.round(13*fScale)}px -apple-system,Arial,sans-serif`;
     sCtx.textAlign = 'left'; sCtx.shadowBlur = 0;
