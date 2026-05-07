@@ -908,26 +908,25 @@ function _doStartRun() {
   const labelEl = document.getElementById('run-active-label');
   if (labelEl) labelEl.textContent = meta.emoji + ' ' + meta.label;
 
+  // Single shared function to transition idle → active and begin tracking
+  function _activateRunUI() {
+    document.getElementById('run-idle').style.display = 'none';
+    document.getElementById('run-active').classList.remove('hidden');
+    _startRunTimerLoop();
+    _initLiveMap();
+    startGPS();          // always start watchPosition — GPS may warm up after UI shows
+    _requestWakeLock();
+    LockScreen.start();
+  }
+
   navigator.geolocation.getCurrentPosition(
+    () => { _activateRunUI(); },
     () => {
-      document.getElementById('run-idle').style.display = 'none';
-      document.getElementById('run-active').classList.remove('hidden');
-      _startRunTimerLoop();
-      _initLiveMap();
-      startGPS();
-      _requestWakeLock();   // keep GPS alive when screen locks
-      LockScreen.start();
+      // Timeout / denied on first fix — still activate and let watchPosition keep trying
+      showToast('Searching for GPS… 📡', 'info');
+      _activateRunUI();
     },
-    () => {
-      document.getElementById('run-idle').style.display = 'none';
-      document.getElementById('run-active').classList.remove('hidden');
-      showToast('GPS unavailable — time-only mode 🕐', 'info');
-      _initLiveMap();
-      _startRunTimerLoop();
-      _requestWakeLock();
-      LockScreen.start();
-    },
-    { enableHighAccuracy: true, timeout: 10000 }
+    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
   );
 }
 
@@ -3533,13 +3532,11 @@ function openHistoryCardModal(log) {
   }
 
   // Show modal
-  const modal = document.getElementById('history-card-modal');
-  if (modal) { modal.style.display = 'flex'; }
+  openModal('history-card-modal');
 }
 
 function closeHistoryCardModal() {
-  const modal = document.getElementById('history-card-modal');
-  if (modal) { modal.style.display = 'none'; }
+  closeModal('history-card-modal');
   _hcmLog      = null;
   _hcmPhotoImg = null;
 }
