@@ -3379,152 +3379,7 @@ function _drawRouteOnCanvas(ctx, coords, x, y, w, h, color) {
   ctx.restore();
 }
 
-function _generateActivityCard() {
-  const s    = APP.runSession;
-  const user = APP.currentUser;
-  if (!s || !user) return;
-
-  const cv  = document.getElementById('activity-card-canvas');
-  const dlr = document.getElementById('card-dl-row');
-  if (!cv) return;
-
-  // Match canvas to photo aspect ratio — no cropping
-  let W = 1080, H = 1080;
-  if (_cardPhotoImg) {
-    const pW = _cardPhotoImg.naturalWidth  || _cardPhotoImg.width;
-    const pH = _cardPhotoImg.naturalHeight || _cardPhotoImg.height;
-    if (pW && pH) {
-      const r = pW / pH;
-      if (r > 1) { W = 1080; H = Math.max(Math.round(1080/r), 900); }
-      else        { H = 1080; W = Math.max(Math.round(1080*r), 720); }
-    }
-  }
-  cv.width = W; cv.height = H;
-  const ctx = cv.getContext('2d');
-  const meta = ACTIVITY_META[s.activityType || _activityType] || ACTIVITY_META.run;
-  const routeColor = meta.color;
-
-  const elapsed  = s.finalElapsed || _calcElapsed(s);
-  const dist     = s.distance.toFixed(2);
-  const kcal     = Math.round(s.distance * meta.kcalPerKm);
-  const pace     = fmtPace(s.distance, elapsed);
-  const titleTxt = document.getElementById('save-activity-title')?.value?.trim() || meta.label;
-  const coords   = (APP.gpsCoords || []).filter(c => c.lat && c.lon);
-  const drawCoords = coords.length > 300
-    ? coords.filter((_, i) => i % Math.ceil(coords.length / 300) === 0)
-    : coords;
-
-  // ── STRAVA STYLE: Photo fills full canvas, stats float transparently ──
-
-  // 1 — background (dark if no photo)
-  ctx.fillStyle = '#0d1a10';
-  ctx.fillRect(0, 0, W, H);
-
-  // 2 — photo fills entire canvas
-  if (_cardPhotoImg) {
-    ctx.drawImage(_cardPhotoImg, 0, 0, W, H);
-    // Light gradient overlay at bottom for text readability
-    const grad = ctx.createLinearGradient(0, H*0.45, 0, H);
-    grad.addColorStop(0, 'rgba(0,0,0,0)');
-    grad.addColorStop(0.5, 'rgba(0,0,0,0.55)');
-    grad.addColorStop(1, 'rgba(0,0,0,0.82)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, W, H);
-  }
-
-  // 3 — route map (centered, transparent background)
-  if (drawCoords.length >= 2) {
-    const mapH = _cardPhotoImg ? Math.round(H * 0.52) : Math.round(H * 0.48);
-    const mapY = 0;
-    if (!_cardPhotoImg) {
-      // Dark bg for route area when no photo
-      const mapGrad = ctx.createLinearGradient(0, 0, 0, mapH);
-      mapGrad.addColorStop(0, 'rgba(13,26,16,1)');
-      mapGrad.addColorStop(1, 'rgba(13,26,16,0.6)');
-      ctx.fillStyle = mapGrad;
-      ctx.fillRect(0, mapY, W, mapH);
-    }
-    _drawRouteOnCanvas(ctx, drawCoords, 40, mapY + 40, W-80, mapH - 80, routeColor);
-  }
-
-  // 4 — STRAVA-STYLE transparent stats overlay at bottom
-  const statsY = _cardPhotoImg ? Math.round(H * 0.52) : Math.round(H * 0.5);
-
-  // Big distance — main hero number
-  ctx.fillStyle  = '#ffffff';
-  ctx.font       = 'bold 96px -apple-system, Arial, sans-serif';
-  ctx.textAlign  = 'left';
-  ctx.fillText(dist, 60, statsY + 100);
-
-  // KM unit
-  ctx.fillStyle  = 'rgba(255,255,255,0.7)';
-  ctx.font       = 'bold 32px -apple-system, Arial, sans-serif';
-  ctx.fillText('KM', 60 + ctx.measureText(dist).width + 12, statsY + 78);
-
-  // Activity type + title
-  ctx.fillStyle  = routeColor;
-  ctx.font       = 'bold 24px -apple-system, Arial, sans-serif';
-  ctx.fillText(meta.emoji + ' ' + titleTxt.toUpperCase(), 60, statsY + 136);
-
-  // Thin separator line
-  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-  ctx.lineWidth   = 1;
-  ctx.beginPath();
-  ctx.moveTo(60, statsY + 152);
-  ctx.lineTo(W - 60, statsY + 152);
-  ctx.stroke();
-
-  // Stats row: Time | Pace | Calories
-  const stats = [
-    { val: fmtTime(elapsed), lbl: 'TIME'     },
-    { val: pace,             lbl: 'PACE/KM'  },
-    { val: kcal + '',        lbl: 'KCAL'     },
-  ];
-  const cw = (W - 120) / 3;
-  stats.forEach((st, i) => {
-    const cx = 60 + i * cw;
-    if (i > 0) {
-      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(cx, statsY + 162);
-      ctx.lineTo(cx, statsY + 240);
-      ctx.stroke();
-    }
-    ctx.fillStyle = '#ffffff';
-    ctx.font      = 'bold 30px -apple-system, Arial, sans-serif';
-    ctx.textAlign = 'left';
-    ctx.fillText(st.val, cx + (i > 0 ? 16 : 0), statsY + 198);
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font      = '16px -apple-system, Arial, sans-serif';
-    ctx.fillText(st.lbl, cx + (i > 0 ? 16 : 0), statsY + 220);
-  });
-
-  // Date
-  const dateStr = new Date().toLocaleDateString('en-IN', {
-    weekday:'short', day:'numeric', month:'short', year:'numeric'
-  });
-  ctx.fillStyle = 'rgba(255,255,255,0.5)';
-  ctx.font      = '18px -apple-system, Arial, sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText(dateStr, 60, statsY + 258);
-
-  // FitFlow Pro logo — bottom right (Strava-style branding)
-  ctx.fillStyle = routeColor;
-  ctx.font      = 'bold 22px -apple-system, Arial, sans-serif';
-  ctx.textAlign = 'right';
-  ctx.fillText('⚡ fitflow.pro', W - 60, H - 36);
-
-  // User name — bottom left
-  ctx.fillStyle = 'rgba(255,255,255,0.6)';
-  ctx.font      = '18px -apple-system, Arial, sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText(user.name, 60, H - 36);
-
-  cv.style.display = 'block';
-  if (dlr) { dlr.style.display = 'flex'; dlr.style.gap = '8px'; }
-  showToast('Activity card ready! 🎴', 'success');
-}
+// _generateActivityCard moved to card editor below
 
 function _downloadActivityCard() {
   const cv = document.getElementById('activity-card-canvas');
@@ -3725,7 +3580,12 @@ function _setHcmTheme(t, btn) {
   if (canvas && canvas.style.display !== 'none') _generateHcmCard();
 }
 
+
 function _generateHcmCard() {
+  _initCardEditorFromLog(_hcmLog);
+}
+
+function _generateHcmCardDirect() {
   const log  = _hcmLog;
   const user = APP.currentUser;
   if (!log || !user) return;
@@ -3929,4 +3789,532 @@ function sharePlanCertificate() {
   } else {
     navigator.clipboard?.writeText(text).then(() => showToast('Copied to clipboard!', 'success'));
   }
+}
+
+
+// ════════════════════════════════════════════════════════════════
+// FITFLOW PRO — Interactive Card Editor
+// Drag-and-drop + pinch-resize card elements like Instagram Stories
+// Two draggable elements: Route map + Stats overlay
+// ════════════════════════════════════════════════════════════════
+
+var _cardEditor = {
+  active:      false,
+  session:     null,    // APP.runSession or history log
+  photoImg:    null,    // uploaded photo
+  routeCoords: [],      // GPS coords
+  meta:        null,    // ACTIVITY_META
+  // Element states
+  route: { x: 0.05, y: 0.05, w: 0.4, h: 0.4, scale: 1 },
+  stats: { x: 0.05, y: 0.52, w: 0.9, h: 0.22, scale: 1 },
+  selected: 'stats',
+  // Canvas dimensions
+  bgW: 0, bgH: 0,
+  displayW: 0, displayH: 0,
+  ratio: 1,
+};
+
+var _ceIsDragging    = false;
+var _ceDragEl        = null;
+var _ceDragStartX    = 0;
+var _ceDragStartY    = 0;
+var _ceDragElStartX  = 0;
+var _ceDragElStartY  = 0;
+var _ceIsResizing    = false;
+var _ceResizeEl      = null;
+var _ceResizeStartW  = 0;
+var _ceResizeStartH  = 0;
+var _ceResizeStartX  = 0;
+var _ceResizeStartY  = 0;
+var _cePinchStartDist = 0;
+var _cePinchStartScale = 1;
+
+function _initCardEditor() {
+  const s    = APP.runSession;
+  const user = APP.currentUser;
+  if (!s || !user) { showToast('No activity data', 'error'); return; }
+
+  const meta = ACTIVITY_META[s.activityType || _activityType] || ACTIVITY_META.run;
+  const coords = (APP.gpsCoords || []).filter(c => c.lat && c.lon);
+  const drawCoords = coords.length > 300
+    ? coords.filter((_, i) => i % Math.ceil(coords.length / 300) === 0)
+    : coords;
+
+  _cardEditor.session     = s;
+  _cardEditor.photoImg    = _cardPhotoImg;
+  _cardEditor.routeCoords = drawCoords;
+  _cardEditor.meta        = meta;
+
+  _openCardEditorModal(s, meta, drawCoords, _cardPhotoImg);
+}
+
+function _initCardEditorFromLog(log) {
+  const user = APP.currentUser;
+  if (!log || !user) return;
+  const meta = ACTIVITY_META[log.activityType || 'run'] || ACTIVITY_META.run;
+  const coords = (log.coords || []).filter(c => c.lat && c.lon);
+  const drawCoords = coords.length > 300
+    ? coords.filter((_, i) => i % Math.ceil(coords.length / 300) === 0)
+    : coords;
+
+  _cardEditor.session     = log;
+  _cardEditor.photoImg    = _hcmPhotoImg;
+  _cardEditor.routeCoords = drawCoords;
+  _cardEditor.meta        = meta;
+
+  _openCardEditorModal(log, meta, drawCoords, _hcmPhotoImg);
+}
+
+function _openCardEditorModal(session, meta, drawCoords, photoImg) {
+  const modal = document.getElementById('card-editor-modal');
+  if (!modal) return;
+
+  modal.style.display = 'flex';
+  _cardEditor.active   = true;
+  _cardEditor.selected = 'stats';
+
+  // Determine canvas size from photo
+  let W = 1080, H = 1080;
+  if (photoImg) {
+    const pW = photoImg.naturalWidth  || photoImg.width;
+    const pH = photoImg.naturalHeight || photoImg.height;
+    if (pW && pH) {
+      const r = pW / pH;
+      if (r > 1) { W = 1080; H = Math.max(Math.round(1080/r), 900); }
+      else        { H = 1080; W = Math.max(Math.round(1080*r), 720); }
+    }
+  }
+  _cardEditor.bgW = W;
+  _cardEditor.bgH = H;
+
+  // Draw background canvas
+  const bgCv = document.getElementById('card-editor-bg-canvas');
+  bgCv.width  = W;
+  bgCv.height = H;
+  const bgCtx = bgCv.getContext('2d');
+
+  bgCtx.fillStyle = '#0d1a10';
+  bgCtx.fillRect(0, 0, W, H);
+
+  if (photoImg) {
+    bgCtx.drawImage(photoImg, 0, 0, W, H);
+    // Subtle darkening so elements are visible
+    bgCtx.fillStyle = 'rgba(0,0,0,0.25)';
+    bgCtx.fillRect(0, 0, W, H);
+  }
+
+  // Get display ratio after CSS sizing
+  setTimeout(() => {
+    const rect = bgCv.getBoundingClientRect();
+    _cardEditor.displayW = rect.width;
+    _cardEditor.displayH = rect.height;
+    _cardEditor.ratio    = rect.width / W;
+
+    // Draw route mini canvas
+    _renderRouteElement();
+
+    // Draw stats mini canvas
+    _renderStatsElement(session, meta);
+
+    // Position elements
+    _positionElements();
+
+    // Attach drag/resize handlers
+    _attachCardEditorHandlers();
+
+    // Select stats by default
+    _selectCardEl('stats');
+  }, 100);
+}
+
+function _renderRouteElement() {
+  const cv  = document.getElementById('card-route-mini');
+  const el  = document.getElementById('card-editor-el-route');
+  const W   = _cardEditor.bgW;
+  const H   = _cardEditor.bgH;
+  const elW = Math.round(W * _cardEditor.route.w * _cardEditor.route.scale);
+  const elH = Math.round(H * _cardEditor.route.h * _cardEditor.route.scale);
+
+  cv.width  = elW;
+  cv.height = elH;
+  const ctx = cv.getContext('2d');
+
+  // Dark bg for route
+  ctx.fillStyle = 'rgba(13,26,16,0.75)';
+  ctx.fillRect(0, 0, elW, elH);
+
+  if (_cardEditor.routeCoords.length >= 2) {
+    _drawRouteOnCanvas(ctx, _cardEditor.routeCoords, 10, 10, elW-20, elH-20,
+      _cardEditor.meta.color);
+  } else {
+    ctx.fillStyle = 'rgba(255,255,255,0.2)';
+    ctx.font = '14px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('No GPS route', elW/2, elH/2);
+  }
+
+  // Apply display scale
+  const ratio = _cardEditor.ratio;
+  cv.style.width  = Math.round(elW * ratio) + 'px';
+  cv.style.height = Math.round(elH * ratio) + 'px';
+}
+
+function _renderStatsElement(session, meta) {
+  if (!session) session = _cardEditor.session;
+  if (!meta)    meta    = _cardEditor.meta;
+  const cv  = document.getElementById('card-stats-mini');
+  const W   = _cardEditor.bgW;
+  const H   = _cardEditor.bgH;
+  const elW = Math.round(W * _cardEditor.stats.w * _cardEditor.stats.scale);
+  const elH = Math.round(H * _cardEditor.stats.h * _cardEditor.stats.scale);
+
+  cv.width  = elW;
+  cv.height = elH;
+  const ctx = cv.getContext('2d');
+
+  // Transparent background
+  ctx.clearRect(0, 0, elW, elH);
+
+  const elapsed = session.finalElapsed || session.duration || _calcElapsed?.(session) || 0;
+  const dist    = (session.distance || 0).toFixed(2);
+  const kcal    = Math.round((session.distance || 0) * meta.kcalPerKm);
+  const pace    = session.distance > 0 ? fmtPace(session.distance, elapsed) : '--:--';
+  const user    = APP.currentUser;
+
+  // Scale fonts to element size
+  const fScale = elH / 240;
+
+  // Big distance
+  ctx.fillStyle = '#ffffff';
+  ctx.font      = `bold ${Math.round(72 * fScale)}px -apple-system, Arial, sans-serif`;
+  ctx.textAlign = 'left';
+  ctx.shadowColor = 'rgba(0,0,0,0.8)';
+  ctx.shadowBlur  = 8;
+  ctx.fillText(dist, 16, Math.round(80 * fScale));
+
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.font      = `bold ${Math.round(22 * fScale)}px -apple-system, Arial, sans-serif`;
+  ctx.fillText('KM', 16 + ctx.measureText(dist).width + 8, Math.round(60 * fScale));
+
+  // Activity type
+  ctx.fillStyle = meta.color;
+  ctx.font      = `bold ${Math.round(18 * fScale)}px -apple-system, Arial, sans-serif`;
+  ctx.fillText(meta.emoji + ' ' + (session.title || meta.label).toUpperCase(),
+               16, Math.round(104 * fScale));
+
+  // Separator
+  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+  ctx.lineWidth   = 1;
+  ctx.shadowBlur  = 0;
+  ctx.beginPath();
+  ctx.moveTo(16, Math.round(116 * fScale));
+  ctx.lineTo(elW - 16, Math.round(116 * fScale));
+  ctx.stroke();
+
+  // Stats row
+  const stats = [
+    { val: fmtTime(elapsed), lbl: 'TIME'    },
+    { val: pace,             lbl: 'PACE/KM' },
+    { val: kcal + '',        lbl: 'KCAL'    },
+  ];
+  const cw = (elW - 32) / 3;
+  stats.forEach((st, i) => {
+    const cx = 16 + i * cw;
+    if (i > 0) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.lineWidth   = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx, Math.round(126 * fScale));
+      ctx.lineTo(cx, Math.round(188 * fScale));
+      ctx.stroke();
+    }
+    ctx.fillStyle  = '#ffffff';
+    ctx.font       = `bold ${Math.round(22 * fScale)}px -apple-system, Arial, sans-serif`;
+    ctx.textAlign  = 'left';
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur  = 6;
+    ctx.fillText(st.val, cx + (i > 0 ? 12 : 0), Math.round(158 * fScale));
+    ctx.fillStyle  = 'rgba(255,255,255,0.55)';
+    ctx.shadowBlur = 0;
+    ctx.font       = `${Math.round(13 * fScale)}px -apple-system, Arial, sans-serif`;
+    ctx.fillText(st.lbl, cx + (i > 0 ? 12 : 0), Math.round(178 * fScale));
+  });
+
+  // Branding
+  ctx.fillStyle   = meta.color;
+  ctx.font        = `bold ${Math.round(14 * fScale)}px -apple-system, Arial, sans-serif`;
+  ctx.textAlign   = 'right';
+  ctx.shadowColor = 'rgba(0,0,0,0.6)';
+  ctx.shadowBlur  = 4;
+  ctx.fillText('⚡ fitflow.pro', elW - 16, elH - 10);
+
+  if (user) {
+    ctx.fillStyle = 'rgba(255,255,255,0.5)';
+    ctx.font      = `${Math.round(13 * fScale)}px -apple-system, Arial, sans-serif`;
+    ctx.textAlign = 'left';
+    ctx.fillText(user.name, 16, elH - 10);
+  }
+
+  // Apply display scale
+  const ratio = _cardEditor.ratio;
+  cv.style.width  = Math.round(elW * ratio) + 'px';
+  cv.style.height = Math.round(elH * ratio) + 'px';
+}
+
+function _positionElements() {
+  const W     = _cardEditor.bgW;
+  const H     = _cardEditor.bgH;
+  const ratio = _cardEditor.ratio;
+  const wrap  = document.getElementById('card-editor-wrap');
+  const wRect = wrap.getBoundingClientRect();
+
+  ['route', 'stats'].forEach(key => {
+    const el  = document.getElementById('card-editor-el-' + key);
+    const st  = _cardEditor[key];
+    const px  = Math.round(st.x * W * ratio);
+    const py  = Math.round(st.y * H * ratio);
+    el.style.left = px + 'px';
+    el.style.top  = py + 'px';
+  });
+}
+
+function _selectCardEl(key) {
+  _cardEditor.selected = key;
+  ['route', 'stats'].forEach(k => {
+    const el  = document.getElementById('card-editor-el-' + k);
+    const btn = document.getElementById('card-sel-' + k + '-btn');
+    if (k === key) {
+      el.classList.add('selected');
+      if (btn) {
+        btn.style.border     = '2px solid #43d17a';
+        btn.style.background = 'rgba(67,160,90,0.2)';
+        btn.style.color      = '#43d17a';
+      }
+    } else {
+      el.classList.remove('selected');
+      if (btn) {
+        btn.style.border     = '1px solid #555';
+        btn.style.background = 'none';
+        btn.style.color      = '#aaa';
+      }
+    }
+  });
+  // Update slider to reflect current element scale
+  const slider = document.getElementById('card-el-size-slider');
+  const label  = document.getElementById('card-el-size-label');
+  const scale  = Math.round(_cardEditor[key].scale * 100);
+  if (slider) slider.value = scale;
+  if (label)  label.textContent = scale + '%';
+}
+
+function _onCardElSizeSlider(val) {
+  const key   = _cardEditor.selected;
+  const scale = parseInt(val) / 100;
+  _cardEditor[key].scale = scale;
+  const label = document.getElementById('card-el-size-label');
+  if (label) label.textContent = val + '%';
+  if (key === 'route') _renderRouteElement();
+  else                 _renderStatsElement();
+  _positionElements();
+}
+
+function _resetCardElPositions() {
+  _cardEditor.route = { x: 0.05, y: 0.05, w: 0.4,  h: 0.4,  scale: 1 };
+  _cardEditor.stats = { x: 0.05, y: 0.52, w: 0.9,  h: 0.22, scale: 1 };
+  _renderRouteElement();
+  _renderStatsElement();
+  _positionElements();
+  _selectCardEl('stats');
+}
+
+function _attachCardEditorHandlers() {
+  ['route', 'stats'].forEach(key => {
+    const el     = document.getElementById('card-editor-el-' + key);
+    const resize = el.querySelector('.card-el-resize');
+
+    // Select on tap
+    el.addEventListener('pointerdown', e => {
+      if (e.target === resize) return;
+      _selectCardEl(key);
+    });
+
+    // Drag
+    el.addEventListener('pointerdown', e => {
+      if (e.target === resize) return;
+      e.preventDefault();
+      _ceIsDragging   = true;
+      _ceDragEl       = key;
+      _ceDragStartX   = e.clientX;
+      _ceDragStartY   = e.clientY;
+      _ceDragElStartX = _cardEditor[key].x;
+      _ceDragElStartY = _cardEditor[key].y;
+      el.setPointerCapture(e.pointerId);
+    });
+
+    el.addEventListener('pointermove', e => {
+      if (!_ceIsDragging || _ceDragEl !== key) return;
+      const dx    = e.clientX - _ceDragStartX;
+      const dy    = e.clientY - _ceDragStartY;
+      const W     = _cardEditor.bgW;
+      const H     = _cardEditor.bgH;
+      const ratio = _cardEditor.ratio;
+      _cardEditor[key].x = Math.max(0, Math.min(0.95, _ceDragElStartX + dx / (W * ratio)));
+      _cardEditor[key].y = Math.max(0, Math.min(0.95, _ceDragElStartY + dy / (H * ratio)));
+      const pel = document.getElementById('card-editor-el-' + key);
+      pel.style.left = Math.round(_cardEditor[key].x * W * ratio) + 'px';
+      pel.style.top  = Math.round(_cardEditor[key].y * H * ratio) + 'px';
+    });
+
+    el.addEventListener('pointerup', () => { _ceIsDragging = false; _ceDragEl = null; });
+
+    // Resize handle
+    resize.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      e.stopPropagation();
+      _ceIsResizing    = true;
+      _ceResizeEl      = key;
+      _ceResizeStartX  = e.clientX;
+      _ceResizeStartY  = e.clientY;
+      _ceResizeStartW  = _cardEditor[key].scale;
+      resize.setPointerCapture(e.pointerId);
+    });
+
+    resize.addEventListener('pointermove', e => {
+      if (!_ceIsResizing || _ceResizeEl !== key) return;
+      const dx      = e.clientX - _ceResizeStartX;
+      const newScale = Math.max(0.2, Math.min(2.5, _ceResizeStartW + dx / 200));
+      _cardEditor[key].scale = newScale;
+      const slider = document.getElementById('card-el-size-slider');
+      const label  = document.getElementById('card-el-size-label');
+      if (slider) slider.value = Math.round(newScale * 100);
+      if (label)  label.textContent = Math.round(newScale * 100) + '%';
+      if (key === 'route') _renderRouteElement();
+      else                 _renderStatsElement();
+    });
+
+    resize.addEventListener('pointerup', () => { _ceIsResizing = false; _ceResizeEl = null; });
+  });
+}
+
+function _closeCardEditor() {
+  const modal = document.getElementById('card-editor-modal');
+  if (modal) modal.style.display = 'none';
+  _cardEditor.active = false;
+}
+
+function _exportCardFromEditor() {
+  // Flatten editor elements onto the final high-res canvas
+  const W   = _cardEditor.bgW;
+  const H   = _cardEditor.bgH;
+  const cv  = document.getElementById('activity-card-canvas');
+  cv.width  = W;
+  cv.height = H;
+  const ctx = cv.getContext('2d');
+
+  // Background
+  ctx.fillStyle = '#0d1a10';
+  ctx.fillRect(0, 0, W, H);
+
+  // Photo
+  if (_cardEditor.photoImg) {
+    ctx.drawImage(_cardEditor.photoImg, 0, 0, W, H);
+    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // Route element
+  const routeSt  = _cardEditor.route;
+  const routeCv  = document.getElementById('card-route-mini');
+  const routeElW = Math.round(W * routeSt.w * routeSt.scale);
+  const routeElH = Math.round(H * routeSt.h * routeSt.scale);
+  const routeX   = Math.round(routeSt.x * W);
+  const routeY   = Math.round(routeSt.y * H);
+  // Re-render route at full resolution
+  const tmpRoute = document.createElement('canvas');
+  tmpRoute.width  = routeElW;
+  tmpRoute.height = routeElH;
+  const routeCtx  = tmpRoute.getContext('2d');
+  routeCtx.fillStyle = 'rgba(13,26,16,0.75)';
+  routeCtx.fillRect(0, 0, routeElW, routeElH);
+  if (_cardEditor.routeCoords.length >= 2) {
+    _drawRouteOnCanvas(routeCtx, _cardEditor.routeCoords, 10, 10,
+      routeElW-20, routeElH-20, _cardEditor.meta.color);
+  }
+  ctx.drawImage(tmpRoute, routeX, routeY);
+
+  // Stats element
+  const statsSt  = _cardEditor.stats;
+  const statsElW = Math.round(W * statsSt.w * statsSt.scale);
+  const statsElH = Math.round(H * statsSt.h * statsSt.scale);
+  const statsX   = Math.round(statsSt.x * W);
+  const statsY   = Math.round(statsSt.y * H);
+  const tmpStats = document.createElement('canvas');
+  tmpStats.width  = statsElW;
+  tmpStats.height = statsElH;
+  // Re-render stats at full resolution
+  const session = _cardEditor.session;
+  const meta    = _cardEditor.meta;
+  const elapsed = session.finalElapsed || session.duration || 0;
+  const dist    = (session.distance || 0).toFixed(2);
+  const kcal    = Math.round((session.distance || 0) * meta.kcalPerKm);
+  const pace    = session.distance > 0 ? fmtPace(session.distance, elapsed) : '--:--';
+  const user    = APP.currentUser;
+  const sCtx    = tmpStats.getContext('2d');
+  const fScale  = statsElH / 240;
+
+  sCtx.fillStyle  = '#ffffff';
+  sCtx.font       = `bold ${Math.round(72*fScale)}px -apple-system,Arial,sans-serif`;
+  sCtx.textAlign  = 'left';
+  sCtx.shadowColor = 'rgba(0,0,0,0.8)'; sCtx.shadowBlur = 12;
+  sCtx.fillText(dist, 16, Math.round(80*fScale));
+  sCtx.fillStyle = 'rgba(255,255,255,0.7)';
+  sCtx.font      = `bold ${Math.round(22*fScale)}px -apple-system,Arial,sans-serif`;
+  sCtx.fillText('KM', 16 + sCtx.measureText(dist).width + 8, Math.round(60*fScale));
+  sCtx.fillStyle = meta.color;
+  sCtx.font      = `bold ${Math.round(18*fScale)}px -apple-system,Arial,sans-serif`;
+  sCtx.fillText(meta.emoji + ' ' + (session.title || meta.label).toUpperCase(), 16, Math.round(104*fScale));
+  sCtx.strokeStyle = 'rgba(255,255,255,0.25)'; sCtx.lineWidth = 1; sCtx.shadowBlur = 0;
+  sCtx.beginPath(); sCtx.moveTo(16, Math.round(116*fScale)); sCtx.lineTo(statsElW-16, Math.round(116*fScale)); sCtx.stroke();
+
+  const statsRow = [{ val: fmtTime(elapsed), lbl: 'TIME'}, { val: pace, lbl: 'PACE/KM'}, { val: kcal+'', lbl: 'KCAL'}];
+  const cw = (statsElW - 32) / 3;
+  statsRow.forEach((st, i) => {
+    const cx = 16 + i * cw;
+    if (i > 0) {
+      sCtx.strokeStyle = 'rgba(255,255,255,0.15)'; sCtx.lineWidth = 1;
+      sCtx.beginPath(); sCtx.moveTo(cx, Math.round(126*fScale)); sCtx.lineTo(cx, Math.round(188*fScale)); sCtx.stroke();
+    }
+    sCtx.fillStyle = '#fff'; sCtx.font = `bold ${Math.round(22*fScale)}px -apple-system,Arial,sans-serif`;
+    sCtx.textAlign = 'left'; sCtx.shadowColor = 'rgba(0,0,0,0.8)'; sCtx.shadowBlur = 6;
+    sCtx.fillText(st.val, cx + (i>0?12:0), Math.round(158*fScale));
+    sCtx.fillStyle = 'rgba(255,255,255,0.55)'; sCtx.shadowBlur = 0;
+    sCtx.font = `${Math.round(13*fScale)}px -apple-system,Arial,sans-serif`;
+    sCtx.fillText(st.lbl, cx + (i>0?12:0), Math.round(178*fScale));
+  });
+  sCtx.fillStyle = meta.color; sCtx.font = `bold ${Math.round(14*fScale)}px -apple-system,Arial,sans-serif`;
+  sCtx.textAlign = 'right'; sCtx.shadowColor = 'rgba(0,0,0,0.6)'; sCtx.shadowBlur = 4;
+  sCtx.fillText('⚡ fitflow.pro', statsElW-16, statsElH-10);
+  if (user) {
+    sCtx.fillStyle = 'rgba(255,255,255,0.5)'; sCtx.font = `${Math.round(13*fScale)}px -apple-system,Arial,sans-serif`;
+    sCtx.textAlign = 'left'; sCtx.shadowBlur = 0;
+    sCtx.fillText(user.name, 16, statsElH-10);
+  }
+  ctx.drawImage(tmpStats, statsX, statsY);
+
+  // Close editor and show save/share buttons
+  _closeCardEditor();
+  const dlr = document.getElementById('card-dl-row');
+  if (dlr) { dlr.style.display = 'flex'; }
+  showToast('Card ready! Tap Save or Share 🎴', 'success');
+
+  // Scroll to save buttons
+  setTimeout(() => {
+    const dlrEl = document.getElementById('card-dl-row');
+    if (dlrEl) dlrEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, 300);
+}
+
+// ── Also update _generateActivityCard to open editor ──────────────
+function _generateActivityCard() {
+  _initCardEditor();
 }
