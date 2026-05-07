@@ -32,6 +32,44 @@ const ACTIVITY_META = {
 };
 let _activityType = 'run';   // selected on idle screen, saved with run
 
+// ── MAP TILE STYLES ────────────────────────────────────────────────
+var _mapStyle = 'dark'; // 'dark' | 'light' | 'satellite'
+
+const MAP_TILES = {
+  dark:      'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',
+  light:     'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+  satellite: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+};
+
+function _getTileLayer(style) {
+  return MAP_TILES[style] || MAP_TILES.dark;
+}
+
+var _liveMapTileLayer = null;
+
+function switchMapStyle(style, btn) {
+  _mapStyle = style;
+  // Update button styles
+  document.querySelectorAll('.map-style-btn').forEach(b => {
+    b.style.background = 'rgba(7,21,16,0.88)';
+    b.style.color      = '#fff';
+    b.style.borderColor = 'rgba(255,255,255,0.2)';
+  });
+  if (btn) {
+    btn.style.background  = 'rgba(67,209,122,0.25)';
+    btn.style.borderColor = '#43d17a';
+    btn.style.color       = '#43d17a';
+  }
+  // Update live map tile layer
+  if (_liveMap && _liveMapTileLayer) {
+    _liveMap.removeLayer(_liveMapTileLayer);
+    _liveMapTileLayer = L.tileLayer(_getTileLayer(style), { maxZoom: 19 });
+    _liveMapTileLayer.addTo(_liveMap);
+  }
+}
+
+
+
 // ── PWA INSTALL PROMPT (Fix 12) ───────────────────────────────────
 let _deferredInstallPrompt = null;
 window.addEventListener('beforeinstallprompt', e => {
@@ -524,12 +562,44 @@ function _initLiveMap() {
     };
     recenterBtn.addTo(_liveMap);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19,
-    }).addTo(_liveMap);
+    // Map style toggle control
+    const styleCtrl = L.control({ position: 'topright' });
+    styleCtrl.onAdd = () => {
+      const div = L.DomUtil.create('div', '');
+      div.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
+      const styles = [
+        { key: 'dark',      label: '🌙' },
+        { key: 'light',     label: '☀️' },
+        { key: 'satellite', label: '🛰' },
+      ];
+      styles.forEach(s => {
+        const btn = L.DomUtil.create('button', 'map-style-btn', div);
+        btn.innerHTML = s.label;
+        btn.title     = s.key.charAt(0).toUpperCase() + s.key.slice(1);
+        btn.style.cssText = `
+          width:34px;height:34px;border-radius:8px;
+          background:rgba(7,21,16,0.88);border:1px solid rgba(255,255,255,0.2);
+          color:#fff;font-size:14px;cursor:pointer;display:flex;
+          align-items:center;justify-content:center;backdrop-filter:blur(8px);
+          touch-action:manipulation;
+        `;
+        if (s.key === _mapStyle) {
+          btn.style.background  = 'rgba(67,209,122,0.25)';
+          btn.style.borderColor = '#43d17a';
+          btn.style.color       = '#43d17a';
+        }
+        L.DomEvent.on(btn, 'click', () => switchMapStyle(s.key, btn));
+        L.DomEvent.disableClickPropagation(btn);
+      });
+      return div;
+    };
+    styleCtrl.addTo(_liveMap);
+
+    _liveMapTileLayer = L.tileLayer(_getTileLayer(_mapStyle), { maxZoom: 19 });
+    _liveMapTileLayer.addTo(_liveMap);
 
     _livePolyline = L.polyline([], {
-      color:   '#ff6b35',
+      color:   (ACTIVITY_META[_activityType] || ACTIVITY_META.run).color,
       weight:  5,
       opacity: 0.95,
       lineCap: 'round',
@@ -2516,6 +2586,21 @@ function _renderHistoryRunPBInfo(r) {
   el.innerHTML = html;
 }
 
+
+function openHistoryCardFromDetail() {
+  // Get the currently open run log from detail modal
+  const user = APP.currentUser;
+  if (!user) return;
+  const logs = Store.getUserRunLogs(user.id);
+  const log  = logs.find(r => (r.id || r.timestamp) === window._currentRunDetailId);
+  if (!log) {
+    showToast('Activity data not found', 'error');
+    return;
+  }
+  closeModal('modal-run-detail');
+  setTimeout(() => openHistoryCardModal(log), 200);
+}
+
 function _showRunDetail(idx) {
   const user = APP.currentUser;
   const logs = Store.getUserRunLogs(user.id)
@@ -2604,7 +2689,7 @@ function _showRunDetail(idx) {
         const smoothedCoords = _smoothCoordsForDisplay(r.coords);
         const latlngs = smoothedCoords.map(c => [c.lat, c.lon]);
         _detailMapInst = L.map(mapEl, {
-          zoomControl:     true,
+          zoomControl:     false,
           attributionControl: false,
           dragging:        true,
           scrollWheelZoom: false,
@@ -2613,9 +2698,7 @@ function _showRunDetail(idx) {
           doubleClickZoom: false,
         });
 
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-          maxZoom: 19,
-        }).addTo(_detailMapInst);
+        L.tileLayer(_getTileLayer(_mapStyle), { maxZoom: 19 }).addTo(_detailMapInst);
 
         L.polyline(latlngs, {
           color:   meta.color,
@@ -3094,7 +3177,7 @@ function _renderRunRouteMap(coords) {
     const latlngs = pts.map(p => [p.lat, p.lon]);
 
     _sumMap = L.map(el, {
-      zoomControl:        true,
+      zoomControl:        false,
       attributionControl: false,
       dragging:           true,
       scrollWheelZoom:    false,
@@ -3103,9 +3186,7 @@ function _renderRunRouteMap(coords) {
       doubleClickZoom:    false,
     });
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-      maxZoom: 19,
-    }).addTo(_sumMap);
+    L.tileLayer(_getTileLayer(_mapStyle), { maxZoom: 19 }).addTo(_sumMap);
 
     // Route line — activity color
     L.polyline(latlngs, {
@@ -3185,7 +3266,8 @@ function showPlanCertificate(planKey) {
 // ════════════════════════════════════════════════════════════════
 
 var _cardTheme   = 'dark';
-var _cardPhotoImg = null;
+var _cardPhotoImg    = null;
+var _historyRunLogs  = {};  // Store run logs by ID for card generation
 
 var _CARD_THEMES = {
   dark:   { bg:'#0d1a10', overlay:'rgba(10,26,14,VV)',   accent:'#43d17a', text:'#e0ffe0', sub:'#7dcf8e', dim:'rgba(255,255,255,0.10)', route:'#43d17a' },
@@ -3306,151 +3388,141 @@ function _generateActivityCard() {
   const dlr = document.getElementById('card-dl-row');
   if (!cv) return;
 
-  // Match canvas size to uploaded photo aspect ratio — no cropping
+  // Match canvas to photo aspect ratio — no cropping
   let W = 1080, H = 1080;
   if (_cardPhotoImg) {
-    const photoW = _cardPhotoImg.naturalWidth  || _cardPhotoImg.width;
-    const photoH = _cardPhotoImg.naturalHeight || _cardPhotoImg.height;
-    if (photoW && photoH) {
-      const ratio = photoW / photoH;
-      if (ratio > 1) {
-        // Landscape photo
-        W = 1080;
-        H = Math.round(1080 / ratio);
-        // Ensure minimum height for stats panel (at least 900px)
-        if (H < 900) { H = 900; W = Math.round(900 * ratio); }
-      } else {
-        // Portrait photo
-        H = 1080;
-        W = Math.round(1080 * ratio);
-        // Ensure minimum width
-        if (W < 720) { W = 720; H = Math.round(720 / ratio); }
-      }
+    const pW = _cardPhotoImg.naturalWidth  || _cardPhotoImg.width;
+    const pH = _cardPhotoImg.naturalHeight || _cardPhotoImg.height;
+    if (pW && pH) {
+      const r = pW / pH;
+      if (r > 1) { W = 1080; H = Math.max(Math.round(1080/r), 900); }
+      else        { H = 1080; W = Math.max(Math.round(1080*r), 720); }
     }
   }
   cv.width = W; cv.height = H;
   const ctx = cv.getContext('2d');
-  const T   = _CARD_THEMES[_cardTheme] || _CARD_THEMES.dark;
+  const meta = ACTIVITY_META[s.activityType || _activityType] || ACTIVITY_META.run;
+  const routeColor = meta.color;
 
   const elapsed  = s.finalElapsed || _calcElapsed(s);
-  const meta     = ACTIVITY_META[s.activityType || _activityType] || ACTIVITY_META.run;
   const dist     = s.distance.toFixed(2);
   const kcal     = Math.round(s.distance * meta.kcalPerKm);
   const pace     = fmtPace(s.distance, elapsed);
   const titleTxt = document.getElementById('save-activity-title')?.value?.trim() || meta.label;
   const coords   = (APP.gpsCoords || []).filter(c => c.lat && c.lon);
-  // Thin coords for canvas drawing — max 300 points
   const drawCoords = coords.length > 300
     ? coords.filter((_, i) => i % Math.ceil(coords.length / 300) === 0)
     : coords;
 
-  // 1 — background
-  ctx.fillStyle = T.bg;
+  // ── STRAVA STYLE: Photo fills full canvas, stats float transparently ──
+
+  // 1 — background (dark if no photo)
+  ctx.fillStyle = '#0d1a10';
   ctx.fillRect(0, 0, W, H);
 
-  // 2 — photo if uploaded
+  // 2 — photo fills entire canvas
   if (_cardPhotoImg) {
-    // Draw photo to fill entire canvas — no cropping since canvas matches photo ratio
     ctx.drawImage(_cardPhotoImg, 0, 0, W, H);
-    // Dark overlay for text readability
-    const ov = T.overlay.replace('VV', '0.72');
-    ctx.fillStyle = ov;
+    // Light gradient overlay at bottom for text readability
+    const grad = ctx.createLinearGradient(0, H*0.45, 0, H);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(0.5, 'rgba(0,0,0,0.55)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.82)');
+    ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
   }
 
-  // 3 — route drawing area (top portion)
+  // 3 — route map (centered, transparent background)
   if (drawCoords.length >= 2) {
-    const routeAreaH = _cardPhotoImg ? 420 : 480;
+    const mapH = _cardPhotoImg ? Math.round(H * 0.52) : Math.round(H * 0.48);
+    const mapY = 0;
     if (!_cardPhotoImg) {
-      ctx.fillStyle = 'rgba(255,255,255,0.04)';
-      _cardRoundRect(ctx, 40, 40, W-80, routeAreaH, 28);
-      ctx.fill();
+      // Dark bg for route area when no photo
+      const mapGrad = ctx.createLinearGradient(0, 0, 0, mapH);
+      mapGrad.addColorStop(0, 'rgba(13,26,16,1)');
+      mapGrad.addColorStop(1, 'rgba(13,26,16,0.6)');
+      ctx.fillStyle = mapGrad;
+      ctx.fillRect(0, mapY, W, mapH);
     }
-    _drawRouteOnCanvas(ctx, drawCoords, 40, 40, W-80, routeAreaH, T.route);
+    _drawRouteOnCanvas(ctx, drawCoords, 40, mapY + 40, W-80, mapH - 80, routeColor);
   }
 
-  // 4 — stats panel
-  const panelY = drawCoords.length >= 2 ? 570 : 200;
-  const panelH = 410;
+  // 4 — STRAVA-STYLE transparent stats overlay at bottom
+  const statsY = _cardPhotoImg ? Math.round(H * 0.52) : Math.round(H * 0.5);
 
-  ctx.fillStyle = T.dim;
-  _cardRoundRect(ctx, 40, panelY, W-80, panelH, 32);
-  ctx.fill();
-  ctx.strokeStyle = T.accent + '55';
-  ctx.lineWidth   = 2;
-  _cardRoundRect(ctx, 40, panelY, W-80, panelH, 32);
-  ctx.stroke();
-
-  // Brand row
-  ctx.fillStyle  = T.accent;
-  ctx.font       = 'bold 30px -apple-system, Arial, sans-serif';
+  // Big distance — main hero number
+  ctx.fillStyle  = '#ffffff';
+  ctx.font       = 'bold 96px -apple-system, Arial, sans-serif';
   ctx.textAlign  = 'left';
-  ctx.fillText('⚡ FitFlow Pro', 72, panelY + 52);
+  ctx.fillText(dist, 60, statsY + 100);
 
-  ctx.fillStyle  = T.sub;
-  ctx.font       = '22px -apple-system, Arial, sans-serif';
-  ctx.fillText(meta.emoji + ' ' + titleTxt, 72, panelY + 86);
+  // KM unit
+  ctx.fillStyle  = 'rgba(255,255,255,0.7)';
+  ctx.font       = 'bold 32px -apple-system, Arial, sans-serif';
+  ctx.fillText('KM', 60 + ctx.measureText(dist).width + 12, statsY + 78);
 
-  // Big distance hero
-  ctx.fillStyle  = T.text;
-  ctx.font       = 'bold 80px -apple-system, Arial, sans-serif';
-  ctx.fillText(dist + ' km', 72, panelY + 170);
+  // Activity type + title
+  ctx.fillStyle  = routeColor;
+  ctx.font       = 'bold 24px -apple-system, Arial, sans-serif';
+  ctx.fillText(meta.emoji + ' ' + titleTxt.toUpperCase(), 60, statsY + 136);
 
-  // Date
-  const dateStr = new Date().toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short', year:'numeric' });
-  ctx.fillStyle  = T.sub;
-  ctx.font       = '20px -apple-system, Arial, sans-serif';
-  ctx.fillText(dateStr, 72, panelY + 206);
-
-  // Divider
-  ctx.strokeStyle = T.accent + '33';
+  // Thin separator line
+  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
   ctx.lineWidth   = 1;
   ctx.beginPath();
-  ctx.moveTo(72, panelY + 228);
-  ctx.lineTo(W-72, panelY + 228);
+  ctx.moveTo(60, statsY + 152);
+  ctx.lineTo(W - 60, statsY + 152);
   ctx.stroke();
 
-  // Stats grid: 3 columns
+  // Stats row: Time | Pace | Calories
   const stats = [
-    { val: fmtTime(elapsed), lbl: 'Duration' },
-    { val: pace + ' /km',    lbl: 'Pace'     },
-    { val: kcal + ' kcal',   lbl: 'Calories' },
+    { val: fmtTime(elapsed), lbl: 'TIME'     },
+    { val: pace,             lbl: 'PACE/KM'  },
+    { val: kcal + '',        lbl: 'KCAL'     },
   ];
-  const cellW = (W - 80) / 3;
+  const cw = (W - 120) / 3;
   stats.forEach((st, i) => {
-    const cx = 40 + i * cellW + cellW / 2;
+    const cx = 60 + i * cw;
     if (i > 0) {
-      ctx.strokeStyle = T.accent + '33';
-      ctx.lineWidth   = 1;
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(40 + i * cellW, panelY + 248);
-      ctx.lineTo(40 + i * cellW, panelY + 340);
+      ctx.moveTo(cx, statsY + 162);
+      ctx.lineTo(cx, statsY + 240);
       ctx.stroke();
     }
-    ctx.fillStyle  = T.text;
-    ctx.font       = 'bold 34px -apple-system, Arial, sans-serif';
-    ctx.textAlign  = 'center';
-    ctx.fillText(st.val, cx, panelY + 300);
-    ctx.fillStyle  = T.sub;
-    ctx.font       = '20px -apple-system, Arial, sans-serif';
-    ctx.fillText(st.lbl, cx, panelY + 330);
+    ctx.fillStyle = '#ffffff';
+    ctx.font      = 'bold 30px -apple-system, Arial, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(st.val, cx + (i > 0 ? 16 : 0), statsY + 198);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.font      = '16px -apple-system, Arial, sans-serif';
+    ctx.fillText(st.lbl, cx + (i > 0 ? 16 : 0), statsY + 220);
   });
 
-  // Footer
-  ctx.fillStyle  = T.sub;
-  ctx.font       = '20px -apple-system, Arial, sans-serif';
-  ctx.textAlign  = 'left';
-  ctx.fillText('🏃 ' + user.name, 72, panelY + panelH - 24);
+  // Date
+  const dateStr = new Date().toLocaleDateString('en-IN', {
+    weekday:'short', day:'numeric', month:'short', year:'numeric'
+  });
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.font      = '18px -apple-system, Arial, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(dateStr, 60, statsY + 258);
 
-  ctx.fillStyle  = T.accent;
-  ctx.font       = 'bold 20px -apple-system, Arial, sans-serif';
-  ctx.textAlign  = 'right';
-  ctx.fillText('fitflow.pro', W - 72, panelY + panelH - 24);
+  // FitFlow Pro logo — bottom right (Strava-style branding)
+  ctx.fillStyle = routeColor;
+  ctx.font      = 'bold 22px -apple-system, Arial, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText('⚡ fitflow.pro', W - 60, H - 36);
 
-  // Show canvas + download row
+  // User name — bottom left
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.font      = '18px -apple-system, Arial, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(user.name, 60, H - 36);
+
   cv.style.display = 'block';
   if (dlr) { dlr.style.display = 'flex'; dlr.style.gap = '8px'; }
-
   showToast('Activity card ready! 🎴', 'success');
 }
 
@@ -3461,28 +3533,32 @@ function _downloadActivityCard() {
   const meta = ACTIVITY_META[s?.activityType || 'run'] || ACTIVITY_META.run;
   const name = 'fitflow-' + (meta.label || 'activity').toLowerCase().replace(/\s+/g,'-') + '-' + Date.now() + '.png';
 
-  // Use blob URL method — works on mobile Chrome/Android
   cv.toBlob(blob => {
     if (!blob) { showToast('Could not generate image', 'error'); return; }
-
-    // Try Web Share API first (native save on Android)
-    const file = new File([blob], name, { type: 'image/png' });
-    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-      navigator.share({
-        title: 'FitFlow Pro Activity Card',
-        files: [file],
-      }).then(() => {
-        showToast('Card shared/saved! 📸', 'success');
-      }).catch(() => {
-        // User cancelled share — try direct download
-        _triggerBlobDownload(blob, name);
-      });
-      return;
-    }
-
-    // Fallback: blob URL download
-    _triggerBlobDownload(blob, name);
+    _saveOrShareBlob(blob, name);
   }, 'image/png', 0.95);
+}
+
+// Universal save/share for mobile and desktop
+function _saveOrShareBlob(blob, name) {
+  const file = new File([blob], name, { type: 'image/png' });
+
+  // Android/iOS — use Web Share API which allows saving to Gallery
+  if (navigator.share && navigator.canShare) {
+    try {
+      if (navigator.canShare({ files: [file] })) {
+        navigator.share({ title: 'FitFlow Pro Activity Card', files: [file] })
+          .then(() => showToast('Card saved/shared! 📸', 'success'))
+          .catch(err => {
+            if (err.name !== 'AbortError') _triggerBlobDownload(blob, name);
+          });
+        return;
+      }
+    } catch(e) {}
+  }
+
+  // Desktop / fallback — blob URL download
+  _triggerBlobDownload(blob, name);
 }
 
 function _triggerBlobDownload(blob, filename) {
@@ -3524,6 +3600,17 @@ function _shareActivityCard() {
 var _hcmLog      = null;  // Current history log being used for card
 var _hcmPhotoImg = null;  // Uploaded photo for history card
 var _hcmTheme    = 'dark';
+
+
+// Store run log for card generation (avoids HTML attribute JSON issues)
+function _registerRunLogForCard(id, log) {
+  _historyRunLogs[id] = log;
+}
+function openHistoryCardById(id) {
+  const log = _historyRunLogs[id];
+  if (!log) { showToast('Activity data not found', 'error'); return; }
+  openHistoryCardModal(log);
+}
 
 function openHistoryCardModal(log) {
   _hcmLog      = log;
@@ -3647,9 +3734,9 @@ function _generateHcmCard() {
   const dlr = document.getElementById('hcm-dl-row');
   if (!cv) return;
 
-  const T       = _CARD_THEMES[_hcmTheme] || _CARD_THEMES.dark;
-  const elapsed = log.duration || 0;
   const meta    = ACTIVITY_META[log.activityType || 'run'] || ACTIVITY_META.run;
+  const routeColor = meta.color;
+  const elapsed = log.duration || 0;
   const dist    = (log.distance || 0).toFixed(2);
   const kcal    = Math.round((log.distance || 0) * meta.kcalPerKm);
   const pace    = log.distance > 0 ? fmtPace(log.distance, elapsed) : '--:--';
@@ -3658,129 +3745,124 @@ function _generateHcmCard() {
     ? coords.filter((_, i) => i % Math.ceil(coords.length / 300) === 0)
     : coords;
 
-  // Canvas size matches photo aspect ratio
+  // Canvas size matches photo ratio
   let W = 1080, H = 1080;
   if (_hcmPhotoImg) {
-    const photoW = _hcmPhotoImg.naturalWidth  || _hcmPhotoImg.width;
-    const photoH = _hcmPhotoImg.naturalHeight || _hcmPhotoImg.height;
-    if (photoW && photoH) {
-      const ratio = photoW / photoH;
-      if (ratio > 1) {
-        W = 1080; H = Math.round(1080 / ratio);
-        if (H < 900) { H = 900; W = Math.round(900 * ratio); }
-      } else {
-        H = 1080; W = Math.round(1080 * ratio);
-        if (W < 720) { W = 720; H = Math.round(720 / ratio); }
-      }
+    const pW = _hcmPhotoImg.naturalWidth  || _hcmPhotoImg.width;
+    const pH = _hcmPhotoImg.naturalHeight || _hcmPhotoImg.height;
+    if (pW && pH) {
+      const r = pW / pH;
+      if (r > 1) { W = 1080; H = Math.max(Math.round(1080/r), 900); }
+      else        { H = 1080; W = Math.max(Math.round(1080*r), 720); }
     }
   }
   cv.width = W; cv.height = H;
   const ctx = cv.getContext('2d');
 
-  // Background
-  ctx.fillStyle = T.bg;
+  // 1 — dark background
+  ctx.fillStyle = '#0d1a10';
   ctx.fillRect(0, 0, W, H);
 
-  // Photo
+  // 2 — photo fills entire canvas
   if (_hcmPhotoImg) {
     ctx.drawImage(_hcmPhotoImg, 0, 0, W, H);
-    ctx.fillStyle = T.overlay.replace('VV', '0.72');
+    const grad = ctx.createLinearGradient(0, H*0.45, 0, H);
+    grad.addColorStop(0, 'rgba(0,0,0,0)');
+    grad.addColorStop(0.5, 'rgba(0,0,0,0.55)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.82)');
+    ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H);
   }
 
-  // Route area
+  // 3 — route map
   if (drawCoords.length >= 2) {
-    const routeAreaH = _hcmPhotoImg ? 420 : 480;
+    const mapH = _hcmPhotoImg ? Math.round(H * 0.52) : Math.round(H * 0.48);
     if (!_hcmPhotoImg) {
-      ctx.fillStyle = 'rgba(255,255,255,0.04)';
-      _cardRoundRect(ctx, 40, 40, W-80, routeAreaH, 20);
-      ctx.fill();
+      const mapGrad = ctx.createLinearGradient(0, 0, 0, mapH);
+      mapGrad.addColorStop(0, 'rgba(13,26,16,1)');
+      mapGrad.addColorStop(1, 'rgba(13,26,16,0.6)');
+      ctx.fillStyle = mapGrad;
+      ctx.fillRect(0, 0, W, mapH);
     }
-    _drawRouteOnCanvas(ctx, drawCoords, 40, 40, W-80, routeAreaH, meta.color || T.accent);
+    _drawRouteOnCanvas(ctx, drawCoords, 40, 40, W-80, mapH - 80, routeColor);
   }
 
-  // Stats panel
-  const panelY = _hcmPhotoImg ? (H - 420) : 540;
-  const panelH = 380;
-  ctx.fillStyle = T.panel;
-  _cardRoundRect(ctx, 40, panelY, W-80, panelH, 20);
-  ctx.fill();
+  // 4 — Strava-style transparent stats overlay
+  const statsY = _hcmPhotoImg ? Math.round(H * 0.52) : Math.round(H * 0.5);
 
-  // Activity badge
-  ctx.fillStyle = T.accent;
-  _cardRoundRect(ctx, 72, panelY + 24, 180, 36, 10);
-  ctx.fill();
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 20px -apple-system, Arial, sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText(meta.emoji + ' ' + meta.label.toUpperCase(), 88, panelY + 47);
+  // Big distance
+  ctx.fillStyle  = '#ffffff';
+  ctx.font       = 'bold 96px -apple-system, Arial, sans-serif';
+  ctx.textAlign  = 'left';
+  ctx.fillText(dist, 60, statsY + 100);
 
-  // Distance
-  ctx.fillStyle = T.text;
-  ctx.font = 'bold 96px -apple-system, Arial, sans-serif';
-  ctx.textAlign = 'left';
-  ctx.fillText(dist, 72, panelY + 145);
-  ctx.fillStyle = T.sub;
-  ctx.font = 'bold 28px -apple-system, Arial, sans-serif';
-  ctx.fillText('KM', 72 + ctx.measureText(dist).width + 12, panelY + 125);
+  ctx.fillStyle  = 'rgba(255,255,255,0.7)';
+  ctx.font       = 'bold 32px -apple-system, Arial, sans-serif';
+  ctx.fillText('KM', 60 + ctx.measureText(dist).width + 12, statsY + 78);
+
+  // Activity type
+  ctx.fillStyle  = routeColor;
+  ctx.font       = 'bold 24px -apple-system, Arial, sans-serif';
+  ctx.fillText(meta.emoji + ' ' + (log.title || meta.label).toUpperCase(), 60, statsY + 136);
+
+  // Separator
+  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+  ctx.lineWidth   = 1;
+  ctx.beginPath();
+  ctx.moveTo(60, statsY + 152);
+  ctx.lineTo(W - 60, statsY + 152);
+  ctx.stroke();
+
+  // Stats row
+  const stats = [
+    { val: fmtTime(elapsed), lbl: 'TIME'    },
+    { val: pace,             lbl: 'PACE/KM' },
+    { val: kcal + '',        lbl: 'KCAL'    },
+  ];
+  const cw = (W - 120) / 3;
+  stats.forEach((st, i) => {
+    const cx = 60 + i * cw;
+    if (i > 0) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(cx, statsY + 162);
+      ctx.lineTo(cx, statsY + 240);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#ffffff';
+    ctx.font      = 'bold 30px -apple-system, Arial, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText(st.val, cx + (i > 0 ? 16 : 0), statsY + 198);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.font      = '16px -apple-system, Arial, sans-serif';
+    ctx.fillText(st.lbl, cx + (i > 0 ? 16 : 0), statsY + 220);
+  });
 
   // Date
   const dateStr = new Date(log.date || log.timestamp).toLocaleDateString('en-IN', {
-    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric'
+    weekday:'short', day:'numeric', month:'short', year:'numeric'
   });
-  ctx.fillStyle = T.sub;
-  ctx.font = '20px -apple-system, Arial, sans-serif';
-  ctx.fillText(dateStr, 72, panelY + 178);
-
-  // Divider
-  ctx.strokeStyle = T.accent + '33';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(72, panelY + 200);
-  ctx.lineTo(W-72, panelY + 200);
-  ctx.stroke();
-
-  // Stats grid
-  const stats = [
-    { val: fmtTime(elapsed), lbl: 'Duration' },
-    { val: pace + ' /km',    lbl: 'Pace'     },
-    { val: kcal + ' kcal',   lbl: 'Calories' },
-  ];
-  const cellW = (W - 80) / 3;
-  stats.forEach((st, i) => {
-    const cx = 40 + i * cellW + cellW / 2;
-    if (i > 0) {
-      ctx.strokeStyle = T.accent + '33';
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(40 + i * cellW, panelY + 220);
-      ctx.lineTo(40 + i * cellW, panelY + 310);
-      ctx.stroke();
-    }
-    ctx.fillStyle = T.text;
-    ctx.font = 'bold 32px -apple-system, Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText(st.val, cx, panelY + 270);
-    ctx.fillStyle = T.sub;
-    ctx.font = '18px -apple-system, Arial, sans-serif';
-    ctx.fillText(st.lbl, cx, panelY + 298);
-  });
-
-  // Footer
-  ctx.fillStyle = T.sub;
-  ctx.font = '20px -apple-system, Arial, sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.5)';
+  ctx.font      = '18px -apple-system, Arial, sans-serif';
   ctx.textAlign = 'left';
-  ctx.fillText('🏃 ' + user.name, 72, panelY + panelH - 24);
-  ctx.fillStyle = T.accent;
-  ctx.font = 'bold 20px -apple-system, Arial, sans-serif';
+  ctx.fillText(dateStr, 60, statsY + 258);
+
+  // Branding
+  ctx.fillStyle = routeColor;
+  ctx.font      = 'bold 22px -apple-system, Arial, sans-serif';
   ctx.textAlign = 'right';
-  ctx.fillText('fitflow.pro', W - 72, panelY + panelH - 24);
+  ctx.fillText('⚡ fitflow.pro', W - 60, H - 36);
+
+  ctx.fillStyle = 'rgba(255,255,255,0.6)';
+  ctx.font      = '18px -apple-system, Arial, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.fillText(user.name, 60, H - 36);
 
   cv.style.display = 'block';
   if (dlr) { dlr.style.display = 'flex'; }
   showToast('Activity card ready! 🎴', 'success');
 }
-
 function _downloadHcmCard() {
   const cv  = document.getElementById('hcm-card-canvas');
   if (!cv) return;
@@ -3789,14 +3871,7 @@ function _downloadHcmCard() {
   const name = 'fitflow-' + (meta.label||'activity').toLowerCase().replace(/\s+/g,'-') + '-' + Date.now() + '.png';
   cv.toBlob(blob => {
     if (!blob) return;
-    const file = new File([blob], name, { type: 'image/png' });
-    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
-      navigator.share({ title: 'FitFlow Pro Activity Card', files: [file] })
-        .then(() => showToast('Card saved! 📸', 'success'))
-        .catch(() => _triggerBlobDownload(blob, name));
-    } else {
-      _triggerBlobDownload(blob, name);
-    }
+    _saveOrShareBlob(blob, name);
   }, 'image/png', 0.95);
 }
 
