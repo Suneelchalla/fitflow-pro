@@ -1274,7 +1274,7 @@ var MORNING_MESSAGES = [
   { title: '⭐ Rate your morning!',      body: "Option A: Scroll reels. Option B: Crush a workout. One of these builds abs. 😏" },
   { title: '🔔 Order confirmed!',        body: "Your body placed an order for energy, confidence & good mood. Fulfil it now! 💪" },
   { title: '🎯 Today\'s special offer!', body: "Buy 1 workout, get: better sleep, more energy & a longer life. Free! 🏃" },
-  { title: '📲 New notification!',       body: "From: Your Future Self. Message: Thank you for working out today. Do it! 🙏" },
+  { title: '📲 Message from Future You!', body: "Thank you for working out today. Trust me, you'll be glad you did. Now open FitFlow! 🙏" },
   { title: '🚨 Flash sale ends at 7AM!', body: "Morning metabolism boost — burns 2x more. Available only NOW. Go! ⚡" },
   { title: '🥘 Today\'s combo deal:',    body: "10 mins yoga + 10 mins cardio = zero stress + full energy. Better than chai! ☕" },
   { title: '📍 Your location: Bed',      body: "Suggested destination: FitFlow workout. ETA: 2 mins. Start now? 🏃" },
@@ -1547,6 +1547,102 @@ function getSubscribedDevices() {
 }
 
 // ════════════════════════════════════════════════════════════════
+// SMART PUSH HELPERS
+// ════════════════════════════════════════════════════════════════
+
+// Returns { workedOut: [playerIds], notYet: [playerIds] }
+// by checking CompletionLog + RunningLog for today
+function _segmentDevicesByActivity() {
+  var props  = PropertiesService.getScriptProperties();
+  var appId  = props.getProperty('ONESIGNAL_APP_ID');
+  var apiKey = props.getProperty('ONESIGNAL_REST_API_KEY');
+  if (!appId || !apiKey) return { workedOut:[], notYet:[] };
+
+  var today = _ymdLocal();
+
+  // Get all today's logs — both workout + run
+  var allLogs = getAllLogs()    || [];
+  var allRuns = getAllRunLogs() || [];
+  var activeToday = {};
+  allLogs.forEach(function(l) { if ((l.date||'').substring(0,10) === today) activeToday[l.userId] = true; });
+  allRuns.forEach(function(r) { if ((r.date||'').substring(0,10) === today) activeToday[r.userId] = true; });
+
+  // Get all subscribed devices from OneSignal
+  try {
+    var url = 'https://api.onesignal.com/players?app_id=' + appId + '&limit=300';
+    var res = UrlFetchApp.fetch(url, {
+      method: 'get',
+      headers: { 'Authorization': 'Basic ' + apiKey },
+      muteHttpExceptions: true,
+    });
+    if (res.getResponseCode() !== 200) return { workedOut:[], notYet:[] };
+    var players = JSON.parse(res.getContentText()).players || [];
+    var valid   = players.filter(function(p) { return p.invalid_identifier !== true && p.identifier; });
+
+    var workedOut = [], notYet = [];
+    valid.forEach(function(p) {
+      var uid = p.external_user_id || '';
+      if (uid && activeToday[uid]) {
+        workedOut.push(p.id);
+      } else {
+        notYet.push(p.id);
+      }
+    });
+    Logger.log('Today segments — Worked out: ' + workedOut.length + ' | Not yet: ' + notYet.length);
+    return { workedOut: workedOut, notYet: notYet };
+  } catch(e) {
+    Logger.log('Segment error: ' + e.message);
+    return { workedOut:[], notYet:[] };
+  }
+}
+
+// Messages for users who ALREADY worked out today (evening only — praise them)
+var WELL_DONE_MESSAGES = [
+  { title: '🏆 You crushed it today!',        body: "Workout done and logged. That's the discipline that builds champions. Rest well! 💪" },
+  { title: '✅ Mission complete!',              body: "You showed up today when it mattered. That's what separates the best from the rest! 🔥" },
+  { title: '🎉 Today: DONE!',                  body: "Your future self is already grateful. Recovery mode ON — eat well, sleep well! 🌙" },
+  { title: '💪 Beast mode: activated!',         body: "Workout logged. Endorphins delivered. Repeat tomorrow? We'll be here! 🏃" },
+  { title: "🌟 You're on a roll!",             body: "Another workout in the books. Keep stacking those wins — the results are coming! 📈" },
+  { title: '🔥 Consistency is your superpower',body: "Today's workout is done. Tomorrow's gains are already in progress. Rest up! 💤" },
+  { title: "😤 That's how it's done!",        body: "You didn't wait for motivation — you went anyway. That's the real secret. 💪" },
+  { title: '🧠 Smart move today!',              body: "Exercise = dopamine + serotonin + endorphins. You just dosed yourself. Well done! 😁" },
+  { title: '📊 Streak: growing!',               body: "You worked out today. The streak continues. Don't break it tomorrow! 🔥" },
+  { title: '🌙 Sleep well tonight!',            body: "You earned it. Post-workout sleep is the deepest, most restorative kind. Enjoy! 💤" },
+];
+
+function getWellDoneMessage() {
+  var day = Math.floor((new Date() - new Date(new Date().getFullYear(),0,0)) / 86400000);
+  return WELL_DONE_MESSAGES[day % WELL_DONE_MESSAGES.length];
+}
+
+function _sendPushToIds(appId, apiKey, deviceIds, msg, buttons) {
+  if (!deviceIds || !deviceIds.length) return { success:false, error:'No device IDs' };
+  var payload = {
+    app_id:             appId,
+    include_player_ids: deviceIds,
+    headings:           { en: msg.title },
+    contents:           { en: msg.body  },
+    web_url:            'https://suneelchalla.github.io/fitflow-pro/index.html',
+    chrome_web_icon:    'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png',
+    chrome_web_badge:   'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png',
+    priority: 10,
+    ttl:      86400,
+  };
+  if (buttons) payload.web_buttons = buttons;
+  var res    = UrlFetchApp.fetch('https://api.onesignal.com/notifications', {
+    method:'post', contentType:'application/json',
+    headers:{ 'Authorization':'Basic ' + apiKey },
+    payload:JSON.stringify(payload), muteHttpExceptions:true,
+  });
+  var code   = res.getResponseCode();
+  var parsed = {}; try { parsed = JSON.parse(res.getContentText()); } catch(e) {}
+  if (code >= 200 && code < 300 && parsed.id) {
+    return { success:true, id:parsed.id, recipients:parsed.recipients };
+  }
+  return { success:false, error:'HTTP ' + code };
+}
+
+// ════════════════════════════════════════════════════════════════
 // PUSH SEND FUNCTIONS
 // ════════════════════════════════════════════════════════════════
 function sendDailyPushNotifications() {
@@ -1557,53 +1653,31 @@ function sendDailyPushNotifications() {
     Logger.log('OneSignal credentials missing.');
     return { success:false, error:'Missing OneSignal credentials' };
   }
+
+  // Morning: everyone gets a motivational push to START their day
+  // No segmentation needed at 6AM — nobody has worked out yet
   var msg       = getTodaysMessage();
   var deviceIds = _getSubscribedDeviceIds();
   if (!deviceIds.length) {
     Logger.log('No subscribed devices found — cannot send push');
     return { success:false, error:'No subscribed devices' };
   }
-  var payload = {
-    app_id:             appId,
-    include_player_ids: deviceIds,
-    headings:           { en: msg.title },
-    contents:           { en: msg.body  },
-    web_url:            'https://suneelchalla.github.io/fitflow-pro/index.html',
-    chrome_web_icon:    'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png',
-    chrome_web_badge:   'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png',
-    web_buttons: [
-      { id:'open',  text:"💪 Let's Go!", icon:'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png', url:'https://suneelchalla.github.io/fitflow-pro/index.html' },
-      { id:'later', text:"⏰ Later",      icon:'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png', url:'https://suneelchalla.github.io/fitflow-pro/index.html' },
-    ],
-    priority: 10,
-    ttl:      86400,
-  };
+
+  var buttons = [
+    { id:'open',  text:"💪 Let's Go!", icon:'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png', url:'https://suneelchalla.github.io/fitflow-pro/index.html' },
+    { id:'later', text:"⏰ Later",      icon:'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png' },
+  ];
+
   try {
-    var res    = UrlFetchApp.fetch('https://api.onesignal.com/notifications', {
-      method:'post', contentType:'application/json',
-      headers:{ 'Authorization':'Basic ' + apiKey },
-      payload:JSON.stringify(payload), muteHttpExceptions:true,
-    });
-    var code   = res.getResponseCode();
-    var body   = res.getContentText();
-    var parsed = {}; try { parsed = JSON.parse(body); } catch(e) {}
-    Logger.log('OneSignal HTTP ' + code + ' response: ' + body);
-    if (code >= 200 && code < 300) {
-      if (parsed.errors) {
-        Logger.log('OneSignal returned errors: ' + JSON.stringify(parsed.errors));
-        return { success:false, error:'OneSignal errors', errors:parsed.errors };
-      }
-      if (!parsed.id) {
-        Logger.log('OneSignal returned no notification ID — likely no recipients');
-        return { success:false, error:'No notification created', body:body };
-      }
-      Logger.log('✅ Morning push sent. Targeted: ' + deviceIds.length + ' devices. id: ' + parsed.id);
-      return { success:true, recipients:parsed.recipients, id:parsed.id, targeted:deviceIds.length };
+    var result = _sendPushToIds(appId, apiKey, deviceIds, msg, buttons);
+    if (result.success) {
+      Logger.log('✅ Morning push sent to ' + deviceIds.length + ' devices. id: ' + result.id);
+      return { success:true, id:result.id, targeted:deviceIds.length };
     }
-    Logger.log('OneSignal push failed (HTTP ' + code + '): ' + body.substring(0, 500));
-    return { success:false, error:'HTTP ' + code, body:body.substring(0, 500) };
-  } catch (e) {
-    Logger.log('OneSignal push error: ' + e.message);
+    Logger.log('Morning push failed: ' + result.error);
+    return result;
+  } catch(e) {
+    Logger.log('Morning push error: ' + e.message);
     return { success:false, error:e.message };
   }
 }
@@ -1616,42 +1690,47 @@ function sendEveningPushNotifications() {
     Logger.log('OneSignal credentials missing.');
     return { success:false, error:'Missing OneSignal credentials' };
   }
-  var msg       = getTonightsMessage();
-  var deviceIds = _getSubscribedDeviceIds();
-  if (!deviceIds.length) {
-    Logger.log('No subscribed devices found — cannot send push');
+
+  // Evening: SMART segmentation
+  // Users who worked out today  → "Well done!" praise message
+  // Users who haven't yet       → motivational push to still go
+  var segments  = _segmentDevicesByActivity();
+  var totalSent = 0;
+  var results   = {};
+
+  // Group 1: Already worked out — send praise (no action buttons needed)
+  if (segments.workedOut.length > 0) {
+    var praiseMsg = getWellDoneMessage();
+    try {
+      var r1 = _sendPushToIds(appId, apiKey, segments.workedOut, praiseMsg, null);
+      Logger.log('✅ Praise push → ' + segments.workedOut.length + ' users who worked out. id: ' + r1.id);
+      results.praise = r1;
+      totalSent += segments.workedOut.length;
+    } catch(e) { Logger.log('Praise push error: ' + e.message); }
+  }
+
+  // Group 2: Haven't worked out yet — send motivational push with action button
+  if (segments.notYet.length > 0) {
+    var motivMsg = getTonightsMessage();
+    var buttons  = [
+      { id:'open',  text:"💪 Open FitFlow", icon:'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png', url:'https://suneelchalla.github.io/fitflow-pro/index.html' },
+      { id:'later', text:"⏰ Later",         icon:'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png' },
+    ];
+    try {
+      var r2 = _sendPushToIds(appId, apiKey, segments.notYet, motivMsg, buttons);
+      Logger.log('✅ Motivational push → ' + segments.notYet.length + ' users who have not worked out yet. id: ' + r2.id);
+      results.motivational = r2;
+      totalSent += segments.notYet.length;
+    } catch(e) { Logger.log('Motivational push error: ' + e.message); }
+  }
+
+  if (totalSent === 0) {
+    Logger.log('No subscribed devices found');
     return { success:false, error:'No subscribed devices' };
   }
-  var payload = {
-    app_id:             appId,
-    include_player_ids: deviceIds,
-    headings:           { en: msg.title },
-    contents:           { en: msg.body  },
-    web_url:            'https://suneelchalla.github.io/fitflow-pro/index.html',
-    chrome_web_icon:    'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png',
-    chrome_web_badge:   'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png',
-    priority: 10,
-    ttl:      86400,
-  };
-  try {
-    var res    = UrlFetchApp.fetch('https://api.onesignal.com/notifications', {
-      method:'post', contentType:'application/json',
-      headers:{ 'Authorization':'Basic ' + apiKey },
-      payload:JSON.stringify(payload), muteHttpExceptions:true,
-    });
-    var code   = res.getResponseCode();
-    var body   = res.getContentText();
-    var parsed = {}; try { parsed = JSON.parse(body); } catch(e) {}
-    Logger.log('Evening push HTTP ' + code + ': ' + body);
-    if (code >= 200 && code < 300 && parsed.id) {
-      Logger.log('✅ Evening push sent. Targeted: ' + deviceIds.length + ' devices. id: ' + parsed.id);
-      return { success:true, recipients:parsed.recipients, id:parsed.id, targeted:deviceIds.length };
-    }
-    return { success:false, error:'HTTP ' + code, body:body.substring(0, 500) };
-  } catch (e) {
-    Logger.log('Evening push error: ' + e.message);
-    return { success:false, error:e.message };
-  }
+
+  Logger.log('✅ Evening smart push complete. Praised: ' + segments.workedOut.length + ' | Motivated: ' + segments.notYet.length);
+  return { success:true, praised:segments.workedOut.length, motivated:segments.notYet.length, total:totalSent, results:results };
 }
 
 function sendCustomPush(body) {
