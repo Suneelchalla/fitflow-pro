@@ -1,0 +1,10 @@
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.fitflow.pro",
+    "sha256_cert_fingerprints": [
+      "A1:AA:9C:A3:5C:08:91:0B:71:76:1D:53:56:6B:A7:7F:7D:4F:90:27:ED:AC:B2:B5:84:87:E3:AF:95:AE:55:77"
+    ]
+  }
+}]
