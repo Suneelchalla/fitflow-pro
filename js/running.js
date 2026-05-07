@@ -3510,12 +3510,15 @@ function _drawRouteOnCanvas(ctx, coords, x, y, w, h, color) {
   ctx.lineCap     = 'round';
   ctx.lineJoin    = 'round';
   ctx.globalAlpha = 0.9;
+  ctx.shadowColor = color;
+  ctx.shadowBlur  = 18;
   ctx.beginPath();
   coords.forEach((c, i) => {
     const px = toX(c.lon), py = toY(c.lat);
     i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
   });
   ctx.stroke();
+  ctx.shadowBlur = 0;
 
   // Start dot — green
   ctx.globalAlpha = 1;
@@ -4066,6 +4069,20 @@ function _openCardEditorModal(session, meta, drawCoords, photoImg) {
     bgCtx.fillStyle = 'rgba(0,0,0,0.25)';
     bgCtx.fillRect(0, 0, W, H);
   }
+  // Draw user name fixed in bottom-left corner of background canvas (preview only)
+  {
+    const u = APP.currentUser;
+    if (u) {
+      const nameFontPx = Math.round(W * 0.022);
+      bgCtx.font        = nameFontPx + 'px -apple-system,Arial,sans-serif';
+      bgCtx.fillStyle   = 'rgba(255,255,255,0.65)';
+      bgCtx.textAlign   = 'left';
+      bgCtx.shadowColor = 'rgba(0,0,0,0.8)';
+      bgCtx.shadowBlur  = 6;
+      bgCtx.fillText(u.name, Math.round(W * 0.03), H - Math.round(H * 0.025));
+      bgCtx.shadowBlur = 0;
+    }
+  }
 
   // Get display ratio after CSS sizing
   setTimeout(() => {
@@ -4128,101 +4145,114 @@ function _renderRouteElement() {
 function _renderStatsElement(session, meta) {
   if (!session) session = _cardEditor.session;
   if (!meta)    meta    = _cardEditor.meta;
-  const cv  = document.getElementById('card-stats-mini');
+  const cv = document.getElementById('card-stats-mini');
   if (!cv) return;
   const W   = _cardEditor.bgW;
   const H   = _cardEditor.bgH;
-  // stats element: full width, fixed height proportion
   const elW = Math.round(W * _cardEditor.stats.w * _cardEditor.stats.scale);
   const elH = Math.round(H * _cardEditor.stats.h * _cardEditor.stats.scale);
 
   cv.width  = elW;
   cv.height = elH;
   const ctx = cv.getContext('2d');
-  ctx.clearRect(0, 0, elW, elH);
+  ctx.clearRect(0, 0, elW, elH);  // fully transparent — no panel background
 
   const elapsed = session.finalElapsed || session.duration || (_calcElapsed ? _calcElapsed(session) : 0) || 0;
   const dist    = (session.distance || 0).toFixed(2);
   const kcal    = Math.round((session.distance || 0) * meta.kcalPerKm);
   const pace    = session.distance > 0 ? fmtPace(session.distance, elapsed) : '--:--';
-  const speed   = elapsed > 0 ? ((session.distance || 0) / elapsed * 3600).toFixed(1) : '0.0';
+  const pad     = Math.round(elW * 0.04);
 
-  // ── Strava-style layout (label small ABOVE value large) ─────────
-  // Four stat columns: Distance | Time | Pace | Kcal
-  // Each column: label (grey small) on top line, value (white bold) on bottom line
-  // Padding around whole block
-  const pad   = Math.round(elW * 0.03);
-  const cols  = [
-    { lbl: 'Distance',  val: dist,            unit: 'km'   },
-    { lbl: 'Time',      val: fmtTime(elapsed),unit: ''     },
-    { lbl: 'Pace /km',  val: pace,            unit: ''     },
-    { lbl: 'Calories',  val: kcal + '',       unit: 'kcal' },
-  ];
-  const numCols = cols.length;
-  const colW    = (elW - pad * 2) / numCols;
+  function ts(c, blur) { c.shadowColor = 'rgba(0,0,0,0.9)'; c.shadowBlur = blur || 8; }
 
-  // Activity header row
-  const headerH  = Math.round(elH * 0.30);
-  const statsH   = elH - headerH;
+  // ── Row 1: activity title + date ─────────────────────────────────
+  const titleH  = Math.round(elH * 0.28);
+  const titleFont = Math.round(titleH * 0.54);
+  const dateFont  = Math.round(titleH * 0.30);
+  ts(ctx);
+  ctx.font      = 'bold ' + titleFont + 'px -apple-system,Arial,sans-serif';
+  ctx.fillStyle = '#ffffff'; ctx.textAlign = 'left';
+  ctx.fillText(meta.emoji + '  ' + (session.title || meta.label), pad, Math.round(titleH * 0.68));
+  ctx.font      = dateFont + 'px -apple-system,Arial,sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.50)'; ctx.shadowBlur = 4;
+  const dateStr = (() => {
+    try {
+      return new Date(session.date || session.timestamp).toLocaleDateString('en-IN',
+        { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+    } catch(e) { return ''; }
+  })();
+  ctx.fillText(dateStr, pad, Math.round(titleH * 0.96));
 
-  // ── Header: emoji + activity name ──────────────────────────────
-  ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 6;
-  const hFont = Math.round(headerH * 0.55);
-  ctx.font      = 'bold ' + hFont + 'px -apple-system,Arial,sans-serif';
-  ctx.fillStyle = '#ffffff';
-  ctx.textAlign = 'left';
-  ctx.fillText(meta.emoji + '  ' + (session.title || meta.label).toUpperCase(),
-    pad, Math.round(headerH * 0.72));
-
-  // thin divider under header
-  ctx.shadowBlur  = 0;
-  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
-  ctx.lineWidth   = 1;
+  // divider
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(pad, headerH);
-  ctx.lineTo(elW - pad, headerH);
+  ctx.moveTo(pad, titleH); ctx.lineTo(elW - pad, titleH); ctx.stroke();
+
+  // ── Row 2: big Distance left | Time + Pace stacked right ─────────
+  const bodyY  = titleH;
+  const bodyH  = Math.round(elH * 0.56);
+  const leftW  = Math.round(elW * 0.50);
+
+  const lblFont  = Math.round(bodyH * 0.17);
+  const bigFont  = Math.round(bodyH * 0.54);
+  const unitFont = Math.round(bodyH * 0.22);
+  const smValFont = Math.round(bodyH * 0.28);
+  const smLblFont = Math.round(bodyH * 0.16);
+
+  // Distance label
+  ctx.font = lblFont + 'px -apple-system,Arial,sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.50)'; ctx.textAlign = 'left'; ctx.shadowBlur = 4;
+  ts(ctx, 4);
+  ctx.fillText('Distance', pad, bodyY + Math.round(bodyH * 0.18));
+
+  // Big distance number
+  ctx.font = 'bold ' + bigFont + 'px -apple-system,Arial,sans-serif';
+  ctx.fillStyle = '#ffffff'; ts(ctx, 12);
+  ctx.fillText(dist, pad, bodyY + Math.round(bodyH * 0.72));
+
+  // km unit (superscript beside the number)
+  ctx.font = 'bold ' + bigFont + 'px -apple-system,Arial,sans-serif';
+  const dw = ctx.measureText(dist).width;
+  ctx.font = 'bold ' + unitFont + 'px -apple-system,Arial,sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.70)'; ts(ctx, 6);
+  ctx.fillText('km', pad + dw + 6, bodyY + Math.round(bodyH * 0.50));
+
+  // vertical separator
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = 'rgba(255,255,255,0.20)'; ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(leftW, bodyY + Math.round(bodyH * 0.05));
+  ctx.lineTo(leftW, bodyY + Math.round(bodyH * 0.93));
   ctx.stroke();
 
-  // ── Stat columns ────────────────────────────────────────────────
-  const lblFont = Math.round(statsH * 0.28);
-  const valFont = Math.round(statsH * 0.50);
-  const lblY    = headerH + Math.round(statsH * 0.32);  // label baseline
-  const valY    = headerH + Math.round(statsH * 0.88);  // value baseline
-
-  cols.forEach((col, i) => {
-    const cx = pad + i * colW;
-
-    // Vertical divider between columns (not before first)
-    if (i > 0) {
-      ctx.strokeStyle = 'rgba(255,255,255,0.15)';
-      ctx.lineWidth   = 1;
-      ctx.beginPath();
-      ctx.moveTo(cx, headerH + Math.round(statsH * 0.08));
-      ctx.lineTo(cx, elH - Math.round(statsH * 0.05));
-      ctx.stroke();
-    }
-
-    const textX = cx + Math.round(colW * 0.08);
-
-    // Label (small grey, on top)
-    ctx.fillStyle = 'rgba(255,255,255,0.55)';
-    ctx.font      = lblFont + 'px -apple-system,Arial,sans-serif';
-    ctx.textAlign = 'left';
-    ctx.shadowBlur = 0;
-    ctx.fillText(col.lbl, textX, lblY);
-
-    // Value (large white, below)
-    ctx.fillStyle   = '#ffffff';
-    ctx.font        = 'bold ' + valFont + 'px -apple-system,Arial,sans-serif';
-    ctx.shadowColor = 'rgba(0,0,0,0.8)';
-    ctx.shadowBlur  = 6;
-    const valText = col.unit ? col.val + ' ' + col.unit : col.val;
-    ctx.fillText(valText, textX, valY);
+  // Right: Time (top half) + Pace (bottom half)
+  const rx    = leftW + Math.round(elW * 0.05);
+  const halfH = Math.round(bodyH * 0.50);
+  [[fmtTime(elapsed), 'Time', 0], [pace, 'Pace /km', halfH]].forEach(([val, lbl, oy]) => {
+    ctx.font = smLblFont + 'px -apple-system,Arial,sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.50)'; ctx.textAlign = 'left'; ctx.shadowBlur = 4;
+    ts(ctx, 4);
+    ctx.fillText(lbl, rx, bodyY + oy + Math.round(halfH * 0.26));
+    ctx.font = 'bold ' + smValFont + 'px -apple-system,Arial,sans-serif';
+    ctx.fillStyle = '#ffffff'; ts(ctx, 10);
+    ctx.fillText(val, rx, bodyY + oy + Math.round(halfH * 0.80));
   });
 
+  // ── Row 3: Calories strip ─────────────────────────────────────────
+  ctx.shadowBlur = 0;
+  const calY = bodyY + bodyH + Math.round(elH * 0.02);
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad, calY); ctx.lineTo(elW - pad, calY); ctx.stroke();
+  const calFont = Math.round(elH * 0.08);
+  ctx.font = calFont + 'px -apple-system,Arial,sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.45)'; ts(ctx, 4);
+  ctx.fillText('Calories', pad, calY + Math.round(elH * 0.085));
+  ctx.font = 'bold ' + calFont + 'px -apple-system,Arial,sans-serif';
+  ctx.fillStyle = 'rgba(255,255,255,0.80)';
+  ctx.fillText(kcal + ' kcal', pad + Math.round(elW * 0.24), calY + Math.round(elH * 0.085));
   ctx.shadowBlur = 0;
 
-  // Apply display scale
   const ratio = _cardEditor.ratio;
   cv.style.width  = Math.round(elW * ratio) + 'px';
   cv.style.height = Math.round(elH * ratio) + 'px';
@@ -4248,12 +4278,7 @@ function _renderLogoElement() {
   ctx.shadowColor = 'rgba(0,0,0,0.7)';
   ctx.shadowBlur  = 6;
   ctx.fillText('⚡ FitFlow Pro', 0, fS);
-  if (user) {
-    ctx.fillStyle = 'rgba(255,255,255,0.6)';
-    ctx.font      = Math.round(fS * 0.7) + 'px -apple-system,Arial,sans-serif';
-    ctx.shadowBlur = 3;
-    ctx.fillText(user.name, 0, elH - 2);
-  }
+  // User name is drawn fixed in the card corner — not inside this draggable element
   const ratio = _cardEditor.ratio;
   cv.style.width  = Math.round(elW * ratio) + 'px';
   cv.style.height = Math.round(elH * ratio) + 'px';
@@ -4536,74 +4561,95 @@ function _exportCardFromEditor() {
     }
   });
 
-  // Stats — Strava-style: label ABOVE value, four columns side-by-side
+  // Stats — transparent overlay, Strava-style layout
   _drawEl('stats', (sCtx, sW, sH) => {
-    const session  = _cardEditor.session;
-    const meta     = _cardEditor.meta;
-    const elapsed  = session.finalElapsed || session.duration || 0;
-    const dist     = (session.distance || 0).toFixed(2);
-    const kcal     = Math.round((session.distance || 0) * meta.kcalPerKm);
-    const pace     = session.distance > 0 ? fmtPace(session.distance, elapsed) : '--:--';
+    const session = _cardEditor.session;
+    const meta    = _cardEditor.meta;
+    const elapsed = session.finalElapsed || session.duration || 0;
+    const dist    = (session.distance || 0).toFixed(2);
+    const kcal    = Math.round((session.distance || 0) * meta.kcalPerKm);
+    const pace    = session.distance > 0 ? fmtPace(session.distance, elapsed) : '--:--';
+    const pad     = Math.round(sW * 0.04);
 
     sCtx.clearRect(0, 0, sW, sH);
 
-    const pad     = Math.round(sW * 0.03);
-    const cols    = [
-      { lbl: 'Distance', val: dist,             unit: 'km'   },
-      { lbl: 'Time',     val: fmtTime(elapsed), unit: ''     },
-      { lbl: 'Pace /km', val: pace,             unit: ''     },
-      { lbl: 'Calories', val: kcal + '',        unit: 'kcal' },
-    ];
-    const colW    = (sW - pad * 2) / cols.length;
-    const headerH = Math.round(sH * 0.30);
-    const statsH  = sH - headerH;
+    function ts(c, b) { c.shadowColor = 'rgba(0,0,0,0.9)'; c.shadowBlur = b || 8; }
 
-    // Header: activity emoji + name
-    sCtx.shadowColor = 'rgba(0,0,0,0.8)'; sCtx.shadowBlur = 8;
-    sCtx.font      = 'bold ' + Math.round(headerH * 0.55) + 'px -apple-system,Arial,sans-serif';
+    // Title + date
+    const titleH    = Math.round(sH * 0.28);
+    const titleFont = Math.round(titleH * 0.54);
+    const dateFont  = Math.round(titleH * 0.30);
+    ts(sCtx);
+    sCtx.font = 'bold ' + titleFont + 'px -apple-system,Arial,sans-serif';
     sCtx.fillStyle = '#ffffff'; sCtx.textAlign = 'left';
-    sCtx.fillText(meta.emoji + '  ' + (session.title || meta.label).toUpperCase(),
-      pad, Math.round(headerH * 0.72));
+    sCtx.fillText(meta.emoji + '  ' + (session.title || meta.label), pad, Math.round(titleH * 0.68));
+    sCtx.font = dateFont + 'px -apple-system,Arial,sans-serif';
+    sCtx.fillStyle = 'rgba(255,255,255,0.50)'; sCtx.shadowBlur = 4;
+    const dateStr = (() => {
+      try { return new Date(session.date || session.timestamp).toLocaleDateString('en-IN',
+        { weekday:'long', day:'numeric', month:'long', year:'numeric' }); } catch(e) { return ''; }
+    })();
+    sCtx.fillText(dateStr, pad, Math.round(titleH * 0.96));
+    sCtx.shadowBlur = 0;
+    sCtx.strokeStyle = 'rgba(255,255,255,0.22)'; sCtx.lineWidth = 1;
+    sCtx.beginPath(); sCtx.moveTo(pad, titleH); sCtx.lineTo(sW - pad, titleH); sCtx.stroke();
+
+    // Body
+    const bodyY    = titleH;
+    const bodyH    = Math.round(sH * 0.56);
+    const leftW    = Math.round(sW * 0.50);
+    const lblFont  = Math.round(bodyH * 0.17);
+    const bigFont  = Math.round(bodyH * 0.54);
+    const unitFont = Math.round(bodyH * 0.22);
+    const smValF   = Math.round(bodyH * 0.28);
+    const smLblF   = Math.round(bodyH * 0.16);
+
+    sCtx.font = lblFont + 'px -apple-system,Arial,sans-serif';
+    sCtx.fillStyle = 'rgba(255,255,255,0.50)'; ts(sCtx, 4);
+    sCtx.fillText('Distance', pad, bodyY + Math.round(bodyH * 0.18));
+    sCtx.font = 'bold ' + bigFont + 'px -apple-system,Arial,sans-serif';
+    sCtx.fillStyle = '#ffffff'; ts(sCtx, 12);
+    sCtx.fillText(dist, pad, bodyY + Math.round(bodyH * 0.72));
+    const dw = sCtx.measureText(dist).width;
+    sCtx.font = 'bold ' + unitFont + 'px -apple-system,Arial,sans-serif';
+    sCtx.fillStyle = 'rgba(255,255,255,0.70)'; ts(sCtx, 6);
+    sCtx.fillText('km', pad + dw + 6, bodyY + Math.round(bodyH * 0.50));
 
     sCtx.shadowBlur = 0;
-    sCtx.strokeStyle = 'rgba(255,255,255,0.2)'; sCtx.lineWidth = 1;
+    sCtx.strokeStyle = 'rgba(255,255,255,0.20)'; sCtx.lineWidth = 1;
     sCtx.beginPath();
-    sCtx.moveTo(pad, headerH); sCtx.lineTo(sW - pad, headerH); sCtx.stroke();
+    sCtx.moveTo(leftW, bodyY + Math.round(bodyH * 0.05));
+    sCtx.lineTo(leftW, bodyY + Math.round(bodyH * 0.93));
+    sCtx.stroke();
 
-    const lblY = headerH + Math.round(statsH * 0.32);
-    const valY = headerH + Math.round(statsH * 0.88);
-
-    cols.forEach((col, i) => {
-      const cx    = pad + i * colW;
-      const textX = cx + Math.round(colW * 0.08);
-
-      if (i > 0) {
-        sCtx.strokeStyle = 'rgba(255,255,255,0.15)'; sCtx.lineWidth = 1;
-        sCtx.beginPath();
-        sCtx.moveTo(cx, headerH + Math.round(statsH * 0.08));
-        sCtx.lineTo(cx, sH - Math.round(statsH * 0.05));
-        sCtx.stroke();
-      }
-
-      // Label (small, grey)
-      sCtx.fillStyle = 'rgba(255,255,255,0.55)';
-      sCtx.font      = Math.round(statsH * 0.28) + 'px -apple-system,Arial,sans-serif';
-      sCtx.textAlign = 'left'; sCtx.shadowBlur = 0;
-      sCtx.fillText(col.lbl, textX, lblY);
-
-      // Value (large, white)
-      sCtx.fillStyle   = '#ffffff';
-      sCtx.font        = 'bold ' + Math.round(statsH * 0.50) + 'px -apple-system,Arial,sans-serif';
-      sCtx.shadowColor = 'rgba(0,0,0,0.8)'; sCtx.shadowBlur = 6;
-      sCtx.fillText(col.unit ? col.val + ' ' + col.unit : col.val, textX, valY);
+    const rx = leftW + Math.round(sW * 0.05);
+    const halfH = Math.round(bodyH * 0.50);
+    [[fmtTime(elapsed), 'Time', 0], [pace, 'Pace /km', halfH]].forEach(([val, lbl, oy]) => {
+      sCtx.font = smLblF + 'px -apple-system,Arial,sans-serif';
+      sCtx.fillStyle = 'rgba(255,255,255,0.50)'; ts(sCtx, 4);
+      sCtx.fillText(lbl, rx, bodyY + oy + Math.round(halfH * 0.26));
+      sCtx.font = 'bold ' + smValF + 'px -apple-system,Arial,sans-serif';
+      sCtx.fillStyle = '#ffffff'; ts(sCtx, 10);
+      sCtx.fillText(val, rx, bodyY + oy + Math.round(halfH * 0.80));
     });
+
+    sCtx.shadowBlur = 0;
+    const calY = bodyY + bodyH + Math.round(sH * 0.02);
+    sCtx.strokeStyle = 'rgba(255,255,255,0.18)'; sCtx.lineWidth = 1;
+    sCtx.beginPath(); sCtx.moveTo(pad, calY); sCtx.lineTo(sW - pad, calY); sCtx.stroke();
+    const calFont = Math.round(sH * 0.08);
+    sCtx.font = calFont + 'px -apple-system,Arial,sans-serif';
+    sCtx.fillStyle = 'rgba(255,255,255,0.45)'; ts(sCtx, 4);
+    sCtx.fillText('Calories', pad, calY + Math.round(sH * 0.085));
+    sCtx.font = 'bold ' + calFont + 'px -apple-system,Arial,sans-serif';
+    sCtx.fillStyle = 'rgba(255,255,255,0.80)';
+    sCtx.fillText(kcal + ' kcal', pad + Math.round(sW * 0.24), calY + Math.round(sH * 0.085));
     sCtx.shadowBlur = 0;
   });
 
-  // Logo
+  // Logo (brand only — user name is fixed separately in card corner)
   _drawEl('logo', (lCtx, lW, lH) => {
     const meta = _cardEditor.meta;
-    const user = APP.currentUser;
     const fS   = Math.round(lH * 0.52);
     lCtx.clearRect(0, 0, lW, lH);
     lCtx.font = 'bold ' + fS + 'px -apple-system,Arial,sans-serif';
@@ -4611,13 +4657,20 @@ function _exportCardFromEditor() {
     lCtx.textAlign = 'left';
     lCtx.shadowColor = 'rgba(0,0,0,0.7)'; lCtx.shadowBlur = 6;
     lCtx.fillText('\u26a1 FitFlow Pro', 0, fS);
-    if (user) {
-      lCtx.fillStyle = 'rgba(255,255,255,0.6)';
-      lCtx.font = Math.round(fS * 0.7) + 'px -apple-system,Arial,sans-serif';
-      lCtx.shadowBlur = 3;
-      lCtx.fillText(user.name, 0, lH - 4);
-    }
   });
+
+  // User name — fixed bottom-left corner, always on the final card
+  const user = APP.currentUser;
+  if (user) {
+    const nameFontPx  = Math.round(W * 0.022);
+    ctx.font        = nameFontPx + 'px -apple-system,Arial,sans-serif';
+    ctx.fillStyle   = 'rgba(255,255,255,0.65)';
+    ctx.textAlign   = 'left';
+    ctx.shadowColor = 'rgba(0,0,0,0.8)';
+    ctx.shadowBlur  = 8;
+    ctx.fillText(user.name, Math.round(W * 0.03), H - Math.round(H * 0.025));
+    ctx.shadowBlur = 0;
+  }
 
   // Close editor then share
   _closeCardEditor();
