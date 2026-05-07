@@ -2299,12 +2299,12 @@ window.addEventListener('DOMContentLoaded', function() {
           <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;
             letter-spacing:.06em;margin-bottom:8px">Background Photo (optional)</div>
           <div style="display:flex;gap:8px;margin-bottom:12px;align-items:center">
-            <div id="card-photo-preview" onclick="document.getElementById('card-photo-input').click()"
+            <div id="card-photo-preview"
               style="width:72px;height:72px;border-radius:10px;background:var(--bg3);
                 border:2px dashed var(--border);display:flex;flex-direction:column;
-                align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;
+                align-items:center;justify-content:center;flex-shrink:0;
                 font-size:24px">📷
-              <div style="font-size:9px;color:var(--text3);margin-top:3px">Add photo</div>
+              <div style="font-size:9px;color:var(--text3);margin-top:3px">Preview</div>
             </div>
             <input type="file" id="card-photo-input" accept="image/*" style="display:none"
               onchange="_onCardPhotoSelected(this)">
@@ -2312,12 +2312,12 @@ window.addEventListener('DOMContentLoaded', function() {
               onchange="_onCardPhotoSelected(this)">
             <div style="display:flex;flex-direction:column;gap:6px;flex:1">
               <button onclick="document.getElementById('card-photo-input').click()"
-                style="padding:8px 12px;border-radius:10px;border:1px solid var(--border);
-                  background:var(--bg3);color:var(--text2);font-size:12px;font-weight:600;
+                style="padding:10px 12px;border-radius:10px;border:1px solid var(--border);
+                  background:var(--bg3);color:var(--text2);font-size:13px;font-weight:600;
                   cursor:pointer;text-align:left">🖼 Upload from Gallery</button>
               <button onclick="document.getElementById('card-camera-input').click()"
-                style="padding:8px 12px;border-radius:10px;border:1px solid var(--g4);
-                  background:var(--g1);color:var(--g5);font-size:12px;font-weight:600;
+                style="padding:10px 12px;border-radius:10px;border:1px solid var(--g4);
+                  background:var(--g1);color:var(--g5);font-size:13px;font-weight:600;
                   cursor:pointer;text-align:left">📸 Open Camera</button>
             </div>
           </div>
@@ -3287,9 +3287,8 @@ document.addEventListener('DOMContentLoaded', () => {
       <div id="hcm-photo-preview" 
         style="width:68px;height:68px;border-radius:10px;background:var(--bg3);
           border:2px dashed var(--border);display:flex;flex-direction:column;
-          align-items:center;justify-content:center;cursor:pointer;flex-shrink:0;font-size:22px"
-        onclick="document.getElementById('hcm-photo-input').click()">📷
-        <div style="font-size:9px;color:var(--text3);margin-top:2px">Photo</div>
+          align-items:center;justify-content:center;flex-shrink:0;font-size:22px">📷
+        <div style="font-size:9px;color:var(--text3);margin-top:2px">Preview</div>
       </div>
       
       <!-- Hidden inputs -->
@@ -3301,14 +3300,14 @@ document.addEventListener('DOMContentLoaded', () => {
       <!-- Buttons -->
       <div style="display:flex;flex-direction:column;gap:6px;flex:1">
         <button onclick="document.getElementById('hcm-photo-input').click()"
-          style="padding:8px 12px;border-radius:10px;border:1px solid var(--border);
-            background:var(--bg3);color:var(--text2);font-size:12px;font-weight:600;
+          style="padding:9px 12px;border-radius:10px;border:1px solid var(--border);
+            background:var(--bg3);color:var(--text2);font-size:13px;font-weight:600;
             cursor:pointer;text-align:left">
           🖼 Upload from Gallery
         </button>
         <button onclick="document.getElementById('hcm-camera-input').click()"
-          style="padding:8px 12px;border-radius:10px;border:1px solid var(--g4);
-            background:var(--g1);color:var(--g5);font-size:12px;font-weight:600;
+          style="padding:9px 12px;border-radius:10px;border:1px solid var(--g4);
+            background:var(--g1);color:var(--g5);font-size:13px;font-weight:600;
             cursor:pointer;text-align:left">
           📸 Open Camera
         </button>
@@ -3322,7 +3321,7 @@ document.addEventListener('DOMContentLoaded', () => {
       style="width:100%;padding:13px;border-radius:12px;border:none;
         background:var(--g3);color:#fff;font-size:15px;font-weight:700;
         cursor:pointer;margin-bottom:12px">
-      ✨ Generate Card
+      ✨ Open Card Editor
     </button>
 
     <!-- Canvas preview -->
