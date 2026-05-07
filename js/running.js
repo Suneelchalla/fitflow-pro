@@ -3109,6 +3109,289 @@ function showPlanCertificate(planKey) {
 }
 
 // ── SHARE RUN ─────────────────────────────────────────────────────
+
+// ════════════════════════════════════════════════════════════════
+// ACTIVITY CARD GENERATOR
+// ════════════════════════════════════════════════════════════════
+
+var _cardTheme   = 'dark';
+var _cardPhotoImg = null;
+
+var _CARD_THEMES = {
+  dark:   { bg:'#0d1a10', overlay:'rgba(10,26,14,VV)',   accent:'#43d17a', text:'#e0ffe0', sub:'#7dcf8e', dim:'rgba(255,255,255,0.10)', route:'#43d17a' },
+  light:  { bg:'#f0f9f2', overlay:'rgba(235,248,238,VV)', accent:'#1a5c28', text:'#0a2010', sub:'#2d7a3a', dim:'rgba(0,0,0,0.07)',      route:'#1a5c28' },
+  night:  { bg:'#0a0a1e', overlay:'rgba(10,10,30,VV)',   accent:'#7eb8f7', text:'#e8f0ff', sub:'#9ec8ff', dim:'rgba(255,255,255,0.10)', route:'#7eb8f7' },
+  sunset: { bg:'#2d1a00', overlay:'rgba(45,26,0,VV)',    accent:'#f7a940', text:'#fff0d0', sub:'#f7c97a', dim:'rgba(255,255,255,0.10)', route:'#f7a940' },
+};
+
+function _toggleCardGen() {
+  const body    = document.getElementById('card-gen-body');
+  const chevron = document.getElementById('card-gen-chevron');
+  if (!body) return;
+  const open = body.style.display === 'block';
+  body.style.display   = open ? 'none' : 'block';
+  chevron.style.transform = open ? '' : 'rotate(90deg)';
+}
+
+function _setCardTheme(t, btn) {
+  _cardTheme = t;
+  document.querySelectorAll('#card-fmt-row button').forEach(b => {
+    b.style.border = '1px solid var(--border)';
+    b.style.color  = 'var(--text2)';
+  });
+  if (btn) { btn.style.border = '2px solid var(--g4)'; btn.style.color = 'var(--g4)'; }
+  const cv = document.getElementById('activity-card-canvas');
+  if (cv && cv.style.display !== 'none') _generateActivityCard();
+}
+
+function _onCardPhotoSelected(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    _cardPhotoImg = new Image();
+    _cardPhotoImg.onload = () => {
+      const preview = document.getElementById('card-photo-preview');
+      if (preview) {
+        preview.innerHTML = '';
+        preview.style.border = '2px solid var(--g4)';
+        preview.style.padding = '0';
+        preview.style.overflow = 'hidden';
+        const thumb = document.createElement('img');
+        thumb.src = ev.target.result;
+        thumb.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:8px';
+        preview.appendChild(thumb);
+      }
+    };
+    _cardPhotoImg.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+function _cardRoundRect(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r, y);
+  ctx.lineTo(x+w-r, y);
+  ctx.quadraticCurveTo(x+w, y, x+w, y+r);
+  ctx.lineTo(x+w, y+h-r);
+  ctx.quadraticCurveTo(x+w, y+h, x+w-r, y+h);
+  ctx.lineTo(x+r, y+h);
+  ctx.quadraticCurveTo(x, y+h, x, y+h-r);
+  ctx.lineTo(x, y+r);
+  ctx.quadraticCurveTo(x, y, x+r, y);
+  ctx.closePath();
+}
+
+function _drawRouteOnCanvas(ctx, coords, x, y, w, h, color) {
+  if (!coords || coords.length < 2) return;
+  const lats = coords.map(c => c.lat);
+  const lons = coords.map(c => c.lon);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const minLon = Math.min(...lons), maxLon = Math.max(...lons);
+  const latRange = maxLat - minLat || 0.001;
+  const lonRange = maxLon - minLon || 0.001;
+  const pad = 0.12;
+  const toX = lon => x + (w * pad) + ((lon - minLon) / lonRange) * (w * (1 - pad*2));
+  const toY = lat => y + (h * pad) + ((maxLat - lat) / latRange) * (h * (1 - pad*2));
+
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = 8;
+  ctx.lineCap     = 'round';
+  ctx.lineJoin    = 'round';
+  ctx.globalAlpha = 0.9;
+  ctx.beginPath();
+  coords.forEach((c, i) => {
+    const px = toX(c.lon), py = toY(c.lat);
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+  });
+  ctx.stroke();
+
+  // Start dot — green
+  ctx.globalAlpha = 1;
+  ctx.fillStyle   = '#43d17a';
+  ctx.beginPath();
+  ctx.arc(toX(coords[0].lon), toY(coords[0].lat), 14, 0, Math.PI*2);
+  ctx.fill();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
+  ctx.stroke();
+
+  // End dot — red
+  const last = coords[coords.length - 1];
+  ctx.fillStyle = '#ef5350';
+  ctx.beginPath();
+  ctx.arc(toX(last.lon), toY(last.lat), 14, 0, Math.PI*2);
+  ctx.fill();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.restore();
+}
+
+function _generateActivityCard() {
+  const s    = APP.runSession;
+  const user = APP.currentUser;
+  if (!s || !user) return;
+
+  const cv  = document.getElementById('activity-card-canvas');
+  const dlr = document.getElementById('card-dl-row');
+  if (!cv) return;
+
+  const W = 1080, H = 1080;
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  const T   = _CARD_THEMES[_cardTheme] || _CARD_THEMES.dark;
+
+  const elapsed  = s.finalElapsed || _calcElapsed(s);
+  const meta     = ACTIVITY_META[s.activityType || _activityType] || ACTIVITY_META.run;
+  const dist     = s.distance.toFixed(2);
+  const kcal     = Math.round(s.distance * meta.kcalPerKm);
+  const pace     = fmtPace(s.distance, elapsed);
+  const titleTxt = document.getElementById('save-activity-title')?.value?.trim() || meta.label;
+  const coords   = (APP.gpsCoords || []).filter(c => c.lat && c.lon);
+  // Thin coords for canvas drawing — max 300 points
+  const drawCoords = coords.length > 300
+    ? coords.filter((_, i) => i % Math.ceil(coords.length / 300) === 0)
+    : coords;
+
+  // 1 — background
+  ctx.fillStyle = T.bg;
+  ctx.fillRect(0, 0, W, H);
+
+  // 2 — photo if uploaded
+  if (_cardPhotoImg) {
+    const ir = _cardPhotoImg.width / _cardPhotoImg.height;
+    let iw = W, ih = W / ir;
+    if (ih < H) { ih = H; iw = H * ir; }
+    ctx.drawImage(_cardPhotoImg, (W-iw)/2, (H-ih)/2, iw, ih);
+    const ov = T.overlay.replace('VV', '0.78');
+    ctx.fillStyle = ov;
+    ctx.fillRect(0, 0, W, H);
+  }
+
+  // 3 — route drawing area (top portion)
+  if (drawCoords.length >= 2) {
+    const routeAreaH = _cardPhotoImg ? 420 : 480;
+    if (!_cardPhotoImg) {
+      ctx.fillStyle = 'rgba(255,255,255,0.04)';
+      _cardRoundRect(ctx, 40, 40, W-80, routeAreaH, 28);
+      ctx.fill();
+    }
+    _drawRouteOnCanvas(ctx, drawCoords, 40, 40, W-80, routeAreaH, T.route);
+  }
+
+  // 4 — stats panel
+  const panelY = drawCoords.length >= 2 ? 570 : 200;
+  const panelH = 410;
+
+  ctx.fillStyle = T.dim;
+  _cardRoundRect(ctx, 40, panelY, W-80, panelH, 32);
+  ctx.fill();
+  ctx.strokeStyle = T.accent + '55';
+  ctx.lineWidth   = 2;
+  _cardRoundRect(ctx, 40, panelY, W-80, panelH, 32);
+  ctx.stroke();
+
+  // Brand row
+  ctx.fillStyle  = T.accent;
+  ctx.font       = 'bold 30px -apple-system, Arial, sans-serif';
+  ctx.textAlign  = 'left';
+  ctx.fillText('⚡ FitFlow Pro', 72, panelY + 52);
+
+  ctx.fillStyle  = T.sub;
+  ctx.font       = '22px -apple-system, Arial, sans-serif';
+  ctx.fillText(meta.emoji + ' ' + titleTxt, 72, panelY + 86);
+
+  // Big distance hero
+  ctx.fillStyle  = T.text;
+  ctx.font       = 'bold 80px -apple-system, Arial, sans-serif';
+  ctx.fillText(dist + ' km', 72, panelY + 170);
+
+  // Date
+  const dateStr = new Date().toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short', year:'numeric' });
+  ctx.fillStyle  = T.sub;
+  ctx.font       = '20px -apple-system, Arial, sans-serif';
+  ctx.fillText(dateStr, 72, panelY + 206);
+
+  // Divider
+  ctx.strokeStyle = T.accent + '33';
+  ctx.lineWidth   = 1;
+  ctx.beginPath();
+  ctx.moveTo(72, panelY + 228);
+  ctx.lineTo(W-72, panelY + 228);
+  ctx.stroke();
+
+  // Stats grid: 3 columns
+  const stats = [
+    { val: fmtTime(elapsed), lbl: 'Duration' },
+    { val: pace + ' /km',    lbl: 'Pace'     },
+    { val: kcal + ' kcal',   lbl: 'Calories' },
+  ];
+  const cellW = (W - 80) / 3;
+  stats.forEach((st, i) => {
+    const cx = 40 + i * cellW + cellW / 2;
+    if (i > 0) {
+      ctx.strokeStyle = T.accent + '33';
+      ctx.lineWidth   = 1;
+      ctx.beginPath();
+      ctx.moveTo(40 + i * cellW, panelY + 248);
+      ctx.lineTo(40 + i * cellW, panelY + 340);
+      ctx.stroke();
+    }
+    ctx.fillStyle  = T.text;
+    ctx.font       = 'bold 34px -apple-system, Arial, sans-serif';
+    ctx.textAlign  = 'center';
+    ctx.fillText(st.val, cx, panelY + 300);
+    ctx.fillStyle  = T.sub;
+    ctx.font       = '20px -apple-system, Arial, sans-serif';
+    ctx.fillText(st.lbl, cx, panelY + 330);
+  });
+
+  // Footer
+  ctx.fillStyle  = T.sub;
+  ctx.font       = '20px -apple-system, Arial, sans-serif';
+  ctx.textAlign  = 'left';
+  ctx.fillText('🏃 ' + user.name, 72, panelY + panelH - 24);
+
+  ctx.fillStyle  = T.accent;
+  ctx.font       = 'bold 20px -apple-system, Arial, sans-serif';
+  ctx.textAlign  = 'right';
+  ctx.fillText('fitflow.pro', W - 72, panelY + panelH - 24);
+
+  // Show canvas + download row
+  cv.style.display = 'block';
+  if (dlr) { dlr.style.display = 'flex'; dlr.style.gap = '8px'; }
+
+  showToast('Activity card ready! 🎴', 'success');
+}
+
+function _downloadActivityCard() {
+  const cv = document.getElementById('activity-card-canvas');
+  if (!cv) return;
+  const a = document.createElement('a');
+  const s = APP.runSession;
+  const meta = ACTIVITY_META[s?.activityType || 'run'] || ACTIVITY_META.run;
+  a.download = 'fitflow-' + (meta.label || 'activity').toLowerCase().replace(/\s+/g,'-') + '-' + Date.now() + '.png';
+  a.href     = cv.toDataURL('image/png');
+  a.click();
+  showToast('Card saved to gallery! 📸', 'success');
+}
+
+function _shareActivityCard() {
+  const cv = document.getElementById('activity-card-canvas');
+  if (!cv) return;
+  cv.toBlob(blob => {
+    const file = new File([blob], 'fitflow-activity.png', { type:'image/png' });
+    if (navigator.share && navigator.canShare && navigator.canShare({ files:[file] })) {
+      navigator.share({
+        title:  'My FitFlow Pro Activity',
+        files:  [file],
+      }).catch(() => _downloadActivityCard());
+    } else {
+      _downloadActivityCard();
+    }
+  }, 'image/png');
+}
+
 function shareRun() {
   const s       = APP.runSession;
   if (!s) return;
