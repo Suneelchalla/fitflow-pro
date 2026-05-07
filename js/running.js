@@ -708,7 +708,7 @@ function _initLiveMap() {
     _liveMapTileLayer.addTo(_liveMap);
 
     _livePolyline = L.polyline([], {
-      color:   (ACTIVITY_META[_activityType] || ACTIVITY_META.run).color,
+      color:   '#43d17a',
       weight:  5,
       opacity: 0.95,
       lineCap: 'round',
@@ -721,8 +721,8 @@ function _initLiveMap() {
         width:0;height:0;
         border-left:9px solid transparent;
         border-right:9px solid transparent;
-        border-bottom:26px solid #4285f4;
-        filter:drop-shadow(0 0 4px rgba(66,133,244,0.8)) drop-shadow(0 2px 6px rgba(0,0,0,0.5));
+        border-bottom:26px solid #43d17a;
+        filter:drop-shadow(0 0 6px rgba(67,209,122,0.9)) drop-shadow(0 2px 6px rgba(0,0,0,0.5));
         transform-origin:50% 70%;
       "></div>`,
       iconSize:   [18, 26],
@@ -3757,7 +3757,7 @@ function _generateHcmCardDirect() {
   if (!cv) return;
 
   const meta    = ACTIVITY_META[log.activityType || 'run'] || ACTIVITY_META.run;
-  const routeColor = meta.color;
+  const routeColor = '#43d17a';  // always FitFlow green
   const elapsed = log.duration || 0;
   const dist    = (log.distance || 0).toFixed(2);
   const kcal    = Math.round((log.distance || 0) * meta.kcalPerKm);
@@ -3969,7 +3969,7 @@ var _cardEditor = {
   // Element states — x/y are 0-1 fractions, scale multiplier, rot degrees
   route: { x: 0.05, y: 0.05, w: 0.4, h: 0.4, scale: 1, rot: 0 },
   stats: { x: 0.05, y: 0.60, w: 0.9, h: 0.30, scale: 1, rot: 0 },
-  logo:  { x: 0.55, y: 0.88, w: 0.4, h: 0.07, scale: 1, rot: 0 },
+  logo:  { x: 0.52, y: 0.88, w: 0.60, h: 0.07, scale: 1, rot: 0 },
   selected: 'stats',
   // Canvas dimensions
   bgW: 0, bgH: 0,
@@ -4141,17 +4141,16 @@ function _cardEditorRedraw() {
 function _drawRouteEl(ctx, W, H) {
   ctx.clearRect(0, 0, W, H);
   if (_cardEditor.routeCoords && _cardEditor.routeCoords.length >= 2) {
-    _drawRouteOnCanvas(ctx, _cardEditor.routeCoords, 10, 10, W-20, H-20, _cardEditor.meta.color);
+    _drawRouteOnCanvas(ctx, _cardEditor.routeCoords, 10, 10, W-20, H-20, '#43d17a');
   }
   // No-route placeholder (transparent — user can still position it)
 }
 
 function _drawLogoEl(ctx, W, H) {
   ctx.clearRect(0, 0, W, H);
-  const meta = _cardEditor.meta;
-  const fS   = Math.round(H * 0.75);
+  const fS = Math.round(H * 0.75);
   ctx.font        = 'bold ' + fS + 'px -apple-system,Arial,sans-serif';
-  ctx.fillStyle   = meta ? meta.color : '#43d17a';
+  ctx.fillStyle   = '#43d17a';  // always FitFlow green
   ctx.textAlign   = 'left';
   ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 8;
   ctx.fillText('⚡ FitFlow Pro', 4, fS);
@@ -4269,7 +4268,7 @@ function _selectCardEl(key) {
 function _resetCardElPositions() {
   _cardEditor.route = { x: 0.04, y: 0.04, w: 0.42, h: 0.42, scale: 1, rot: 0 };
   _cardEditor.stats = { x: 0.03, y: 0.57, w: 0.94, h: 0.38, scale: 1, rot: 0 };
-  _cardEditor.logo  = { x: 0.55, y: 0.04, w: 0.41, h: 0.06, scale: 1, rot: 0 };
+  _cardEditor.logo  = { x: 0.35, y: 0.04, w: 0.60, h: 0.06, scale: 1, rot: 0 };
   _cardEditorRedraw();
 }
 
