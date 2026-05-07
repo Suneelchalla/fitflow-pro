@@ -3584,8 +3584,9 @@ function _setHcmTheme(t, btn) {
 
 
 function _generateHcmCard() {
+  const log = _hcmLog;  // capture before closeHistoryCardModal() nulls it
   closeHistoryCardModal();
-  setTimeout(() => _initCardEditorFromLog(_hcmLog), 200);
+  setTimeout(() => _initCardEditorFromLog(log), 200);
 }
 
 function _generateHcmCardDirect() {
