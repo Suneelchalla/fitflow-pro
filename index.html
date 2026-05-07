@@ -3367,7 +3367,7 @@ document.addEventListener('DOMContentLoaded', () => {
   <!-- Editor hint -->
   <div id="card-editor-hint" style="text-align:center;padding:6px;font-size:11px;color:#888;
     background:rgba(0,0,0,0.6);flex-shrink:0">
-    Drag elements to reposition · Pinch or use slider to resize
+    Drag to reposition · Pinch to resize &amp; rotate
   </div>
 
   <!-- Editor canvas area -->
@@ -3400,15 +3400,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
   <!-- Bottom controls -->
   <div style="background:rgba(0,0,0,0.85);border-top:1px solid #333;padding:10px 14px;flex-shrink:0">
-    <!-- Selected element controls -->
-    <div id="card-el-controls" style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
-      <div style="font-size:11px;color:#888;flex-shrink:0">Size:</div>
-      <input type="range" id="card-el-size-slider" min="20" max="200" value="100"
-        oninput="_onCardElSizeSlider(this.value)"
-        style="flex:1;accent-color:#43d17a">
-      <div style="font-size:11px;color:#aaa;width:36px;text-align:right"
-        id="card-el-size-label">100%</div>
-    </div>
+    <!-- Size slider hidden — pinch gesture handles resize -->
+    <input type="range" id="card-el-size-slider" min="20" max="200" value="100"
+      oninput="_onCardElSizeSlider(this.value)" style="display:none">
+    <div id="card-el-size-label" style="display:none">100%</div>
     <div style="display:flex;gap:8px">
       <button onclick="_selectCardEl('route')"
         id="card-sel-route-btn"
