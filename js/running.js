@@ -3306,7 +3306,28 @@ function _generateActivityCard() {
   const dlr = document.getElementById('card-dl-row');
   if (!cv) return;
 
-  const W = 1080, H = 1080;
+  // Match canvas size to uploaded photo aspect ratio — no cropping
+  let W = 1080, H = 1080;
+  if (_cardPhotoImg) {
+    const photoW = _cardPhotoImg.naturalWidth  || _cardPhotoImg.width;
+    const photoH = _cardPhotoImg.naturalHeight || _cardPhotoImg.height;
+    if (photoW && photoH) {
+      const ratio = photoW / photoH;
+      if (ratio > 1) {
+        // Landscape photo
+        W = 1080;
+        H = Math.round(1080 / ratio);
+        // Ensure minimum height for stats panel (at least 900px)
+        if (H < 900) { H = 900; W = Math.round(900 * ratio); }
+      } else {
+        // Portrait photo
+        H = 1080;
+        W = Math.round(1080 * ratio);
+        // Ensure minimum width
+        if (W < 720) { W = 720; H = Math.round(720 / ratio); }
+      }
+    }
+  }
   cv.width = W; cv.height = H;
   const ctx = cv.getContext('2d');
   const T   = _CARD_THEMES[_cardTheme] || _CARD_THEMES.dark;
@@ -3329,11 +3350,10 @@ function _generateActivityCard() {
 
   // 2 — photo if uploaded
   if (_cardPhotoImg) {
-    const ir = _cardPhotoImg.width / _cardPhotoImg.height;
-    let iw = W, ih = W / ir;
-    if (ih < H) { ih = H; iw = H * ir; }
-    ctx.drawImage(_cardPhotoImg, (W-iw)/2, (H-ih)/2, iw, ih);
-    const ov = T.overlay.replace('VV', '0.78');
+    // Draw photo to fill entire canvas — no cropping since canvas matches photo ratio
+    ctx.drawImage(_cardPhotoImg, 0, 0, W, H);
+    // Dark overlay for text readability
+    const ov = T.overlay.replace('VV', '0.72');
     ctx.fillStyle = ov;
     ctx.fillRect(0, 0, W, H);
   }
@@ -3437,13 +3457,45 @@ function _generateActivityCard() {
 function _downloadActivityCard() {
   const cv = document.getElementById('activity-card-canvas');
   if (!cv) return;
-  const a = document.createElement('a');
-  const s = APP.runSession;
+  const s    = APP.runSession;
   const meta = ACTIVITY_META[s?.activityType || 'run'] || ACTIVITY_META.run;
-  a.download = 'fitflow-' + (meta.label || 'activity').toLowerCase().replace(/\s+/g,'-') + '-' + Date.now() + '.png';
-  a.href     = cv.toDataURL('image/png');
+  const name = 'fitflow-' + (meta.label || 'activity').toLowerCase().replace(/\s+/g,'-') + '-' + Date.now() + '.png';
+
+  // Use blob URL method — works on mobile Chrome/Android
+  cv.toBlob(blob => {
+    if (!blob) { showToast('Could not generate image', 'error'); return; }
+
+    // Try Web Share API first (native save on Android)
+    const file = new File([blob], name, { type: 'image/png' });
+    if (navigator.share && navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator.share({
+        title: 'FitFlow Pro Activity Card',
+        files: [file],
+      }).then(() => {
+        showToast('Card shared/saved! 📸', 'success');
+      }).catch(() => {
+        // User cancelled share — try direct download
+        _triggerBlobDownload(blob, name);
+      });
+      return;
+    }
+
+    // Fallback: blob URL download
+    _triggerBlobDownload(blob, name);
+  }, 'image/png', 0.95);
+}
+
+function _triggerBlobDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a   = document.createElement('a');
+  a.href     = url;
+  a.download = filename;
+  document.body.appendChild(a);
   a.click();
-  showToast('Card saved to gallery! 📸', 'success');
+  document.body.removeChild(a);
+  // Revoke after short delay
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+  showToast('Card saved! Check your Downloads 📸', 'success');
 }
 
 function _shareActivityCard() {
