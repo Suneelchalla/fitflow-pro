@@ -3661,27 +3661,27 @@ function openHistoryCardModal(log) {
     });
     info.innerHTML = `
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
-        <span style="font-size:28px">\${meta.emoji}</span>
+        <span style="font-size:28px">${meta.emoji}</span>
         <div>
-          <div style="font-size:14px;font-weight:700;color:var(--text)">\${log.title || meta.label}</div>
-          <div style="font-size:12px;color:var(--text3)">\${dateStr}</div>
+          <div style="font-size:14px;font-weight:700;color:var(--text)">${log.title || meta.label}</div>
+          <div style="font-size:12px;color:var(--text3)">${dateStr}</div>
         </div>
       </div>
       <div style="display:flex;gap:12px">
         <div style="text-align:center">
-          <div style="font-size:18px;font-weight:800;color:var(--g5)">\${(log.distance||0).toFixed(2)}</div>
+          <div style="font-size:18px;font-weight:800;color:var(--g5)">${(log.distance||0).toFixed(2)}</div>
           <div style="font-size:10px;color:var(--text3)">km</div>
         </div>
         <div style="text-align:center">
-          <div style="font-size:18px;font-weight:800;color:var(--text)">\${fmtTime(elapsed)}</div>
+          <div style="font-size:18px;font-weight:800;color:var(--text)">${fmtTime(elapsed)}</div>
           <div style="font-size:10px;color:var(--text3)">Duration</div>
         </div>
         <div style="text-align:center">
-          <div style="font-size:18px;font-weight:800;color:var(--text)">\${pace}</div>
+          <div style="font-size:18px;font-weight:800;color:var(--text)">${pace}</div>
           <div style="font-size:10px;color:var(--text3)">Pace/km</div>
         </div>
         <div style="text-align:center">
-          <div style="font-size:18px;font-weight:800;color:var(--text)">\${kcal}</div>
+          <div style="font-size:18px;font-weight:800;color:var(--text)">${kcal}</div>
           <div style="font-size:10px;color:var(--text3)">kcal</div>
         </div>
       </div>
