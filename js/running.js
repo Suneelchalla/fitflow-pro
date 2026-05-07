@@ -3738,9 +3738,10 @@ function _setHcmTheme(t, btn) {
 
 
 function _generateHcmCard() {
-  const log = _hcmLog;  // capture before closeHistoryCardModal() nulls it
+  const log   = _hcmLog;       // capture before closeHistoryCardModal() nulls it
+  const photo = _hcmPhotoImg;  // capture photo before modal close nulls it
   closeHistoryCardModal();
-  setTimeout(() => _initCardEditorFromLog(log), 200);
+  setTimeout(() => _initCardEditorFromLogWithPhoto(log, photo), 200);
 }
 
 function _generateHcmCardDirect() {
@@ -3962,9 +3963,10 @@ var _cardEditor = {
   photoImg:    null,    // uploaded photo
   routeCoords: [],      // GPS coords
   meta:        null,    // ACTIVITY_META
-  // Element states
-  route: { x: 0.05, y: 0.05, w: 0.4, h: 0.4, scale: 1 },
-  stats: { x: 0.05, y: 0.52, w: 0.9, h: 0.22, scale: 1 },
+  // Element states — x/y are 0-1 fractions, scale multiplier, rot degrees
+  route: { x: 0.05, y: 0.05, w: 0.4, h: 0.4, scale: 1, rot: 0 },
+  stats: { x: 0.05, y: 0.52, w: 0.9, h: 0.22, scale: 1, rot: 0 },
+  logo:  { x: 0.55, y: 0.88, w: 0.4, h: 0.07, scale: 1, rot: 0 },
   selected: 'stats',
   // Canvas dimensions
   bgW: 0, bgH: 0,
@@ -4007,6 +4009,10 @@ function _initCardEditor() {
 }
 
 function _initCardEditorFromLog(log) {
+  _initCardEditorFromLogWithPhoto(log, _hcmPhotoImg);
+}
+
+function _initCardEditorFromLogWithPhoto(log, photo) {
   const user = APP.currentUser;
   if (!log || !user) return;
   const meta = ACTIVITY_META[log.activityType || 'run'] || ACTIVITY_META.run;
@@ -4016,11 +4022,11 @@ function _initCardEditorFromLog(log) {
     : coords;
 
   _cardEditor.session     = log;
-  _cardEditor.photoImg    = _hcmPhotoImg;
+  _cardEditor.photoImg    = photo || null;
   _cardEditor.routeCoords = drawCoords;
   _cardEditor.meta        = meta;
 
-  _openCardEditorModal(log, meta, drawCoords, _hcmPhotoImg);
+  _openCardEditorModal(log, meta, drawCoords, photo || null);
 }
 
 function _openCardEditorModal(session, meta, drawCoords, photoImg) {
@@ -4071,13 +4077,16 @@ function _openCardEditorModal(session, meta, drawCoords, photoImg) {
     // Draw route mini canvas
     _renderRouteElement();
 
-    // Draw stats mini canvas
+    // Draw stats mini canvas (no logo inside — logo is separate element)
     _renderStatsElement(session, meta);
+
+    // Draw logo mini canvas
+    _renderLogoElement();
 
     // Position elements
     _positionElements();
 
-    // Attach drag/resize handlers
+    // Attach drag/resize/rotate handlers
     _attachCardEditorHandlers();
 
     // Select stats by default
@@ -4200,22 +4209,40 @@ function _renderStatsElement(session, meta) {
     ctx.fillText(st.lbl, cx + (i > 0 ? 12 : 0), Math.round(178 * fScale));
   });
 
-  // Branding
-  ctx.fillStyle   = meta.color;
-  ctx.font        = `bold ${Math.round(14 * fScale)}px -apple-system, Arial, sans-serif`;
-  ctx.textAlign   = 'right';
-  ctx.shadowColor = 'rgba(0,0,0,0.6)';
-  ctx.shadowBlur  = 4;
-  ctx.fillText('⚡ FitFlow Pro', elW - 16, elH - 10);
-
-  if (user) {
-    ctx.fillStyle = 'rgba(255,255,255,0.5)';
-    ctx.font      = `${Math.round(13 * fScale)}px -apple-system, Arial, sans-serif`;
-    ctx.textAlign = 'left';
-    ctx.fillText(user.name, 16, elH - 10);
-  }
+  // No branding in stats element — logo is a separate draggable element
 
   // Apply display scale
+  const ratio = _cardEditor.ratio;
+  cv.style.width  = Math.round(elW * ratio) + 'px';
+  cv.style.height = Math.round(elH * ratio) + 'px';
+}
+
+function _renderLogoElement() {
+  const cv  = document.getElementById('card-logo-mini');
+  if (!cv) return;
+  const W   = _cardEditor.bgW;
+  const H   = _cardEditor.bgH;
+  const elW = Math.round(W * _cardEditor.logo.w * _cardEditor.logo.scale);
+  const elH = Math.max(32, Math.round(H * _cardEditor.logo.h * _cardEditor.logo.scale));
+  cv.width  = elW;
+  cv.height = elH;
+  const ctx = cv.getContext('2d');
+  ctx.clearRect(0, 0, elW, elH);
+  const meta  = _cardEditor.meta;
+  const user  = APP.currentUser;
+  const fS    = Math.round(elH * 0.52);
+  ctx.font      = 'bold ' + fS + 'px -apple-system,Arial,sans-serif';
+  ctx.fillStyle = meta ? meta.color : '#43d17a';
+  ctx.textAlign = 'left';
+  ctx.shadowColor = 'rgba(0,0,0,0.7)';
+  ctx.shadowBlur  = 6;
+  ctx.fillText('⚡ FitFlow Pro', 0, fS);
+  if (user) {
+    ctx.fillStyle = 'rgba(255,255,255,0.6)';
+    ctx.font      = Math.round(fS * 0.7) + 'px -apple-system,Arial,sans-serif';
+    ctx.shadowBlur = 3;
+    ctx.fillText(user.name, 0, elH - 2);
+  }
   const ratio = _cardEditor.ratio;
   cv.style.width  = Math.round(elW * ratio) + 'px';
   cv.style.height = Math.round(elH * ratio) + 'px';
@@ -4225,33 +4252,34 @@ function _positionElements() {
   const W     = _cardEditor.bgW;
   const H     = _cardEditor.bgH;
   const ratio = _cardEditor.ratio;
-  const wrap  = document.getElementById('card-editor-wrap');
-  const wRect = wrap.getBoundingClientRect();
 
-  ['route', 'stats'].forEach(key => {
-    const el  = document.getElementById('card-editor-el-' + key);
-    const st  = _cardEditor[key];
-    const px  = Math.round(st.x * W * ratio);
-    const py  = Math.round(st.y * H * ratio);
-    el.style.left = px + 'px';
-    el.style.top  = py + 'px';
+  ['route', 'stats', 'logo'].forEach(key => {
+    const el = document.getElementById('card-editor-el-' + key);
+    if (!el) return;
+    const st = _cardEditor[key];
+    el.style.left      = Math.round(st.x * W * ratio) + 'px';
+    el.style.top       = Math.round(st.y * H * ratio) + 'px';
+    el.style.transform = 'rotate(' + (st.rot || 0) + 'deg)';
+    el.style.transformOrigin = '50% 50%';
   });
 }
 
 function _selectCardEl(key) {
   _cardEditor.selected = key;
-  ['route', 'stats'].forEach(k => {
+  ['route', 'stats', 'logo'].forEach(k => {
     const el  = document.getElementById('card-editor-el-' + k);
     const btn = document.getElementById('card-sel-' + k + '-btn');
+    const isLogo = k === 'logo';
+    const activeColor = isLogo ? '#f0c040' : '#43d17a';
     if (k === key) {
-      el.classList.add('selected');
+      if (el) el.classList.add('selected');
       if (btn) {
-        btn.style.border     = '2px solid #43d17a';
-        btn.style.background = 'rgba(67,160,90,0.2)';
-        btn.style.color      = '#43d17a';
+        btn.style.border     = '2px solid ' + activeColor;
+        btn.style.background = isLogo ? 'rgba(240,192,64,0.2)' : 'rgba(67,160,90,0.2)';
+        btn.style.color      = activeColor;
       }
     } else {
-      el.classList.remove('selected');
+      if (el) el.classList.remove('selected');
       if (btn) {
         btn.style.border     = '1px solid #555';
         btn.style.background = 'none';
@@ -4259,12 +4287,6 @@ function _selectCardEl(key) {
       }
     }
   });
-  // Update slider to reflect current element scale
-  const slider = document.getElementById('card-el-size-slider');
-  const label  = document.getElementById('card-el-size-label');
-  const scale  = Math.round(_cardEditor[key].scale * 100);
-  if (slider) slider.value = scale;
-  if (label)  label.textContent = scale + '%';
 }
 
 function _onCardElSizeSlider(val) {
@@ -4279,28 +4301,29 @@ function _onCardElSizeSlider(val) {
 }
 
 function _resetCardElPositions() {
-  _cardEditor.route = { x: 0.05, y: 0.05, w: 0.4,  h: 0.4,  scale: 1 };
-  _cardEditor.stats = { x: 0.05, y: 0.52, w: 0.9,  h: 0.22, scale: 1 };
+  _cardEditor.route = { x: 0.05, y: 0.05, w: 0.4,  h: 0.4,  scale: 1, rot: 0 };
+  _cardEditor.stats = { x: 0.05, y: 0.52, w: 0.9,  h: 0.22, scale: 1, rot: 0 };
+  _cardEditor.logo  = { x: 0.55, y: 0.88, w: 0.4,  h: 0.07, scale: 1, rot: 0 };
   _renderRouteElement();
   _renderStatsElement();
+  _renderLogoElement();
   _positionElements();
   _selectCardEl('stats');
 }
 
+// Per-element touch state for pinch-scale + rotate
+var _ceTouch = {};  // keyed by element key
+
 function _attachCardEditorHandlers() {
-  ['route', 'stats'].forEach(key => {
-    const el     = document.getElementById('card-editor-el-' + key);
+  ['route', 'stats', 'logo'].forEach(key => {
+    const el = document.getElementById('card-editor-el-' + key);
+    if (!el) return;
     const resize = el.querySelector('.card-el-resize');
 
-    // Select on tap
+    // ── Pointer drag (single finger) ─────────────────────────────
     el.addEventListener('pointerdown', e => {
       if (e.target === resize) return;
       _selectCardEl(key);
-    });
-
-    // Drag
-    el.addEventListener('pointerdown', e => {
-      if (e.target === resize) return;
       e.preventDefault();
       _ceIsDragging   = true;
       _ceDragEl       = key;
@@ -4318,42 +4341,90 @@ function _attachCardEditorHandlers() {
       const W     = _cardEditor.bgW;
       const H     = _cardEditor.bgH;
       const ratio = _cardEditor.ratio;
-      _cardEditor[key].x = Math.max(0, Math.min(0.95, _ceDragElStartX + dx / (W * ratio)));
-      _cardEditor[key].y = Math.max(0, Math.min(0.95, _ceDragElStartY + dy / (H * ratio)));
-      const pel = document.getElementById('card-editor-el-' + key);
-      pel.style.left = Math.round(_cardEditor[key].x * W * ratio) + 'px';
-      pel.style.top  = Math.round(_cardEditor[key].y * H * ratio) + 'px';
+      _cardEditor[key].x = Math.max(-0.1, Math.min(1.0, _ceDragElStartX + dx / (W * ratio)));
+      _cardEditor[key].y = Math.max(-0.1, Math.min(1.0, _ceDragElStartY + dy / (H * ratio)));
+      el.style.left = Math.round(_cardEditor[key].x * W * ratio) + 'px';
+      el.style.top  = Math.round(_cardEditor[key].y * H * ratio) + 'px';
     });
 
     el.addEventListener('pointerup', () => { _ceIsDragging = false; _ceDragEl = null; });
 
-    // Resize handle
-    resize.addEventListener('pointerdown', e => {
+    // ── Two-finger pinch-scale + rotate ──────────────────────────
+    _ceTouch[key] = { active: false, startDist: 0, startScale: 1, startAngle: 0, startRot: 0 };
+
+    el.addEventListener('touchstart', e => {
+      if (e.touches.length === 2) {
+        e.preventDefault();
+        const t = _ceTouch[key];
+        t.active     = true;
+        t.startDist  = _tDist(e.touches);
+        t.startScale = _cardEditor[key].scale;
+        t.startAngle = _tAngle(e.touches);
+        t.startRot   = _cardEditor[key].rot || 0;
+        _selectCardEl(key);
+      }
+    }, { passive: false });
+
+    el.addEventListener('touchmove', e => {
+      const t = _ceTouch[key];
+      if (!t.active || e.touches.length !== 2) return;
       e.preventDefault();
-      e.stopPropagation();
-      _ceIsResizing    = true;
-      _ceResizeEl      = key;
-      _ceResizeStartX  = e.clientX;
-      _ceResizeStartY  = e.clientY;
-      _ceResizeStartW  = _cardEditor[key].scale;
-      resize.setPointerCapture(e.pointerId);
-    });
-
-    resize.addEventListener('pointermove', e => {
-      if (!_ceIsResizing || _ceResizeEl !== key) return;
-      const dx      = e.clientX - _ceResizeStartX;
-      const newScale = Math.max(0.2, Math.min(2.5, _ceResizeStartW + dx / 200));
+      // Scale
+      const newDist  = _tDist(e.touches);
+      const newScale = Math.max(0.15, Math.min(3.0, t.startScale * (newDist / t.startDist)));
       _cardEditor[key].scale = newScale;
-      const slider = document.getElementById('card-el-size-slider');
-      const label  = document.getElementById('card-el-size-label');
-      if (slider) slider.value = Math.round(newScale * 100);
-      if (label)  label.textContent = Math.round(newScale * 100) + '%';
+      // Rotate
+      const newAngle = _tAngle(e.touches);
+      _cardEditor[key].rot = t.startRot + (newAngle - t.startAngle);
+      // Re-render canvas + reposition
       if (key === 'route') _renderRouteElement();
-      else                 _renderStatsElement();
-    });
+      else if (key === 'stats') _renderStatsElement();
+      else if (key === 'logo') _renderLogoElement();
+      _positionElements();
+    }, { passive: false });
 
-    resize.addEventListener('pointerup', () => { _ceIsResizing = false; _ceResizeEl = null; });
+    el.addEventListener('touchend', e => {
+      if (e.touches.length < 2) _ceTouch[key].active = false;
+    }, { passive: true });
+
+    // ── Resize handle (drag right to scale up) ───────────────────
+    if (resize) {
+      resize.addEventListener('pointerdown', e => {
+        e.preventDefault();
+        e.stopPropagation();
+        _ceIsResizing   = true;
+        _ceResizeEl     = key;
+        _ceResizeStartX = e.clientX;
+        _ceResizeStartW = _cardEditor[key].scale;
+        resize.setPointerCapture(e.pointerId);
+      });
+
+      resize.addEventListener('pointermove', e => {
+        if (!_ceIsResizing || _ceResizeEl !== key) return;
+        const dx       = e.clientX - _ceResizeStartX;
+        const newScale = Math.max(0.15, Math.min(3.0, _ceResizeStartW + dx / 150));
+        _cardEditor[key].scale = newScale;
+        if (key === 'route') _renderRouteElement();
+        else if (key === 'stats') _renderStatsElement();
+        else if (key === 'logo') _renderLogoElement();
+        _positionElements();
+      });
+
+      resize.addEventListener('pointerup', () => { _ceIsResizing = false; _ceResizeEl = null; });
+    }
   });
+}
+
+function _tDist(touches) {
+  const dx = touches[0].clientX - touches[1].clientX;
+  const dy = touches[0].clientY - touches[1].clientY;
+  return Math.sqrt(dx*dx + dy*dy);
+}
+function _tAngle(touches) {
+  return Math.atan2(
+    touches[1].clientY - touches[0].clientY,
+    touches[1].clientX - touches[0].clientX
+  ) * 180 / Math.PI;
 }
 
 function _closeCardEditor() {
@@ -4363,7 +4434,6 @@ function _closeCardEditor() {
 }
 
 function _exportCardFromEditor() {
-  // Flatten editor elements onto the final high-res canvas
   const W   = _cardEditor.bgW;
   const H   = _cardEditor.bgH;
   const cv  = document.getElementById('activity-card-canvas');
@@ -4382,97 +4452,105 @@ function _exportCardFromEditor() {
     ctx.fillRect(0, 0, W, H);
   }
 
+  // Helper: draw a canvas element with position + rotation transform
+  function _drawEl(key, renderFn) {
+    const st    = _cardEditor[key];
+    const elW   = Math.round(W * st.w * st.scale);
+    const elH   = Math.round(H * st.h * st.scale);
+    const elX   = Math.round(st.x * W);
+    const elY   = Math.round(st.y * H);
+    const rot   = (st.rot || 0) * Math.PI / 180;
+    const tmp   = document.createElement('canvas');
+    tmp.width   = elW;
+    tmp.height  = elH;
+    renderFn(tmp.getContext('2d'), elW, elH);
+    ctx.save();
+    ctx.translate(elX + elW / 2, elY + elH / 2);
+    ctx.rotate(rot);
+    ctx.drawImage(tmp, -elW / 2, -elH / 2);
+    ctx.restore();
+  }
+
   // Route element
-  const routeSt  = _cardEditor.route;
-  const routeCv  = document.getElementById('card-route-mini');
-  const routeElW = Math.round(W * routeSt.w * routeSt.scale);
-  const routeElH = Math.round(H * routeSt.h * routeSt.scale);
-  const routeX   = Math.round(routeSt.x * W);
-  const routeY   = Math.round(routeSt.y * H);
-  // Re-render route at full resolution
-  const tmpRoute = document.createElement('canvas');
-  tmpRoute.width  = routeElW;
-  tmpRoute.height = routeElH;
-  const routeCtx  = tmpRoute.getContext('2d');
-  routeCtx.clearRect(0, 0, routeElW, routeElH);
-  if (_cardEditor.routeCoords.length >= 2) {
-    _drawRouteOnCanvas(routeCtx, _cardEditor.routeCoords, 10, 10,
-      routeElW-20, routeElH-20, _cardEditor.meta.color);
-  }
-  ctx.drawImage(tmpRoute, routeX, routeY);
-
-  // Stats element
-  const statsSt  = _cardEditor.stats;
-  const statsElW = Math.round(W * statsSt.w * statsSt.scale);
-  const statsElH = Math.round(H * statsSt.h * statsSt.scale);
-  const statsX   = Math.round(statsSt.x * W);
-  const statsY   = Math.round(statsSt.y * H);
-  const tmpStats = document.createElement('canvas');
-  tmpStats.width  = statsElW;
-  tmpStats.height = statsElH;
-  // Re-render stats at full resolution
-  const session = _cardEditor.session;
-  const meta    = _cardEditor.meta;
-  const elapsed = session.finalElapsed || session.duration || 0;
-  const dist    = (session.distance || 0).toFixed(2);
-  const kcal    = Math.round((session.distance || 0) * meta.kcalPerKm);
-  const pace    = session.distance > 0 ? fmtPace(session.distance, elapsed) : '--:--';
-  const user    = APP.currentUser;
-  const sCtx    = tmpStats.getContext('2d');
-  const fScale  = statsElH / 240;
-
-  sCtx.fillStyle  = '#ffffff';
-  sCtx.font       = `bold ${Math.round(72*fScale)}px -apple-system,Arial,sans-serif`;
-  sCtx.textAlign  = 'left';
-  sCtx.shadowColor = 'rgba(0,0,0,0.8)'; sCtx.shadowBlur = 12;
-  const _distW = sCtx.measureText(dist).width;
-  sCtx.fillText(dist, 16, Math.round(80*fScale));
-  sCtx.fillStyle = 'rgba(255,255,255,0.7)';
-  sCtx.font      = `bold ${Math.round(22*fScale)}px -apple-system,Arial,sans-serif`;
-  sCtx.fillText('KM', 16 + _distW + 6, Math.round(52*fScale));
-  sCtx.fillStyle = meta.color;
-  sCtx.font      = `bold ${Math.round(18*fScale)}px -apple-system,Arial,sans-serif`;
-  sCtx.fillText(meta.emoji + ' ' + (session.title || meta.label).toUpperCase(), 16, Math.round(104*fScale));
-  sCtx.strokeStyle = 'rgba(255,255,255,0.25)'; sCtx.lineWidth = 1; sCtx.shadowBlur = 0;
-  sCtx.beginPath(); sCtx.moveTo(16, Math.round(116*fScale)); sCtx.lineTo(statsElW-16, Math.round(116*fScale)); sCtx.stroke();
-
-  const statsRow = [{ val: fmtTime(elapsed), lbl: 'TIME'}, { val: pace, lbl: 'PACE/KM'}, { val: kcal+'', lbl: 'KCAL'}];
-  const cw = (statsElW - 32) / 3;
-  statsRow.forEach((st, i) => {
-    const cx = 16 + i * cw;
-    if (i > 0) {
-      sCtx.strokeStyle = 'rgba(255,255,255,0.15)'; sCtx.lineWidth = 1;
-      sCtx.beginPath(); sCtx.moveTo(cx, Math.round(126*fScale)); sCtx.lineTo(cx, Math.round(188*fScale)); sCtx.stroke();
+  _drawEl('route', (rCtx, rW, rH) => {
+    rCtx.clearRect(0, 0, rW, rH);
+    if (_cardEditor.routeCoords.length >= 2) {
+      _drawRouteOnCanvas(rCtx, _cardEditor.routeCoords, 10, 10, rW-20, rH-20, _cardEditor.meta.color);
     }
-    sCtx.fillStyle = '#fff'; sCtx.font = `bold ${Math.round(22*fScale)}px -apple-system,Arial,sans-serif`;
-    sCtx.textAlign = 'left'; sCtx.shadowColor = 'rgba(0,0,0,0.8)'; sCtx.shadowBlur = 6;
-    sCtx.fillText(st.val, cx + (i>0?12:0), Math.round(158*fScale));
-    sCtx.fillStyle = 'rgba(255,255,255,0.55)'; sCtx.shadowBlur = 0;
-    sCtx.font = `${Math.round(13*fScale)}px -apple-system,Arial,sans-serif`;
-    sCtx.fillText(st.lbl, cx + (i>0?12:0), Math.round(178*fScale));
   });
-  sCtx.fillStyle = meta.color; sCtx.font = `bold ${Math.round(14*fScale)}px -apple-system,Arial,sans-serif`;
-  sCtx.textAlign = 'right'; sCtx.shadowColor = 'rgba(0,0,0,0.6)'; sCtx.shadowBlur = 4;
-  sCtx.fillText('⚡ FitFlow Pro', statsElW-16, statsElH-10);
-  if (user) {
-    sCtx.fillStyle = 'rgba(255,255,255,0.5)'; sCtx.font = `${Math.round(13*fScale)}px -apple-system,Arial,sans-serif`;
-    sCtx.textAlign = 'left'; sCtx.shadowBlur = 0;
-    sCtx.fillText(user.name, 16, statsElH-10);
-  }
-  ctx.drawImage(tmpStats, statsX, statsY);
 
-  // Close editor and show save/share buttons
+  // Stats element (no logo/branding — separate element)
+  _drawEl('stats', (sCtx, sW, sH) => {
+    const session = _cardEditor.session;
+    const meta    = _cardEditor.meta;
+    const elapsed = session.finalElapsed || session.duration || 0;
+    const dist    = (session.distance || 0).toFixed(2);
+    const kcal    = Math.round((session.distance || 0) * meta.kcalPerKm);
+    const pace    = session.distance > 0 ? fmtPace(session.distance, elapsed) : '--:--';
+    const fScale  = sH / 240;
+
+    sCtx.clearRect(0, 0, sW, sH);
+    sCtx.fillStyle  = '#ffffff';
+    sCtx.font       = 'bold ' + Math.round(72*fScale) + 'px -apple-system,Arial,sans-serif';
+    sCtx.textAlign  = 'left';
+    sCtx.shadowColor = 'rgba(0,0,0,0.8)'; sCtx.shadowBlur = 12;
+    const dW = sCtx.measureText(dist).width;
+    sCtx.fillText(dist, 16, Math.round(80*fScale));
+    sCtx.fillStyle = 'rgba(255,255,255,0.7)';
+    sCtx.font      = 'bold ' + Math.round(22*fScale) + 'px -apple-system,Arial,sans-serif';
+    sCtx.fillText('KM', 16 + dW + 6, Math.round(52*fScale));
+    sCtx.fillStyle = meta.color;
+    sCtx.font      = 'bold ' + Math.round(18*fScale) + 'px -apple-system,Arial,sans-serif';
+    sCtx.fillText(meta.emoji + ' ' + (session.title || meta.label).toUpperCase(), 16, Math.round(104*fScale));
+    sCtx.strokeStyle = 'rgba(255,255,255,0.25)'; sCtx.lineWidth = 1; sCtx.shadowBlur = 0;
+    sCtx.beginPath(); sCtx.moveTo(16, Math.round(116*fScale)); sCtx.lineTo(sW-16, Math.round(116*fScale)); sCtx.stroke();
+    const statsRow = [{ val: fmtTime(elapsed), lbl: 'TIME'}, { val: pace, lbl: 'PACE/KM'}, { val: kcal+'', lbl: 'KCAL'}];
+    const cw = (sW - 32) / 3;
+    statsRow.forEach((st, i) => {
+      const cx = 16 + i * cw;
+      if (i > 0) {
+        sCtx.strokeStyle = 'rgba(255,255,255,0.15)'; sCtx.lineWidth = 1;
+        sCtx.beginPath(); sCtx.moveTo(cx, Math.round(126*fScale)); sCtx.lineTo(cx, Math.round(188*fScale)); sCtx.stroke();
+      }
+      sCtx.fillStyle = '#fff'; sCtx.font = 'bold ' + Math.round(22*fScale) + 'px -apple-system,Arial,sans-serif';
+      sCtx.textAlign = 'left'; sCtx.shadowColor = 'rgba(0,0,0,0.8)'; sCtx.shadowBlur = 6;
+      sCtx.fillText(st.val, cx + (i>0?12:0), Math.round(158*fScale));
+      sCtx.fillStyle = 'rgba(255,255,255,0.55)'; sCtx.shadowBlur = 0;
+      sCtx.font = Math.round(13*fScale) + 'px -apple-system,Arial,sans-serif';
+      sCtx.fillText(st.lbl, cx + (i>0?12:0), Math.round(178*fScale));
+    });
+  });
+
+  // Logo element
+  _drawEl('logo', (lCtx, lW, lH) => {
+    const meta = _cardEditor.meta;
+    const user = APP.currentUser;
+    const fS   = Math.round(lH * 0.52);
+    lCtx.clearRect(0, 0, lW, lH);
+    lCtx.font      = 'bold ' + fS + 'px -apple-system,Arial,sans-serif';
+    lCtx.fillStyle = meta ? meta.color : '#43d17a';
+    lCtx.textAlign = 'left';
+    lCtx.shadowColor = 'rgba(0,0,0,0.7)'; lCtx.shadowBlur = 6;
+    lCtx.fillText('⚡ FitFlow Pro', 0, fS);
+    if (user) {
+      lCtx.fillStyle = 'rgba(255,255,255,0.6)';
+      lCtx.font      = Math.round(fS * 0.7) + 'px -apple-system,Arial,sans-serif';
+      lCtx.shadowBlur = 3;
+      lCtx.fillText(user.name, 0, lH - 2);
+    }
+  });
+
+  // Close editor and show share sheet directly
   _closeCardEditor();
-  const dlr = document.getElementById('card-dl-row');
-  if (dlr) { dlr.style.display = 'flex'; }
-  showToast('Card ready! Tap Save or Share 🎴', 'success');
 
-  // Scroll to save buttons
-  setTimeout(() => {
-    const dlrEl = document.getElementById('card-dl-row');
-    if (dlrEl) dlrEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  }, 300);
+  // Share/save the card immediately
+  const name = 'fitflow-activity-' + Date.now() + '.png';
+  cv.toBlob(blob => {
+    if (!blob) { showToast('Could not export card', 'error'); return; }
+    _saveOrShareBlob(blob, name);
+  }, 'image/png', 0.95);
 }
+
 
 // ── Also update _generateActivityCard to open editor ──────────────
 function _generateActivityCard() {
