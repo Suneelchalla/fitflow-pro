@@ -3506,7 +3506,7 @@ function _drawRouteOnCanvas(ctx, coords, x, y, w, h, color) {
 
   ctx.save();
   ctx.strokeStyle = color;
-  ctx.lineWidth   = 4;
+  ctx.lineWidth   = 5;
   ctx.lineCap     = 'round';
   ctx.lineJoin    = 'round';
   ctx.globalAlpha = 1;
@@ -3516,24 +3516,6 @@ function _drawRouteOnCanvas(ctx, coords, x, y, w, h, color) {
     const px = toX(c.lon), py = toY(c.lat);
     i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
   });
-  ctx.stroke();
-
-  // Start dot — green
-  ctx.globalAlpha = 1;
-  ctx.fillStyle   = '#43d17a';
-  ctx.beginPath();
-  ctx.arc(toX(coords[0].lon), toY(coords[0].lat), 8, 0, Math.PI*2);
-  ctx.fill();
-  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // End dot — red
-  const last = coords[coords.length - 1];
-  ctx.fillStyle = '#ef5350';
-  ctx.beginPath();
-  ctx.arc(toX(last.lon), toY(last.lat), 8, 0, Math.PI*2);
-  ctx.fill();
-  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
   ctx.stroke();
   ctx.restore();
 }
