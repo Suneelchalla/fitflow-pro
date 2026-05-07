@@ -495,12 +495,6 @@ function _loadLeaflet(cb) {
   document.head.appendChild(s);
 }
 
-// ── ZOOM HELPER (called by +/− buttons) ───────────────────────────
-function _liveMapZoom(delta) {
-  if (!_liveMap) return;
-  if (delta > 0) _liveMap.zoomIn(); else _liveMap.zoomOut();
-}
-
 // ── LIVE MAP (during active run) ──────────────────────────────────
 function _initLiveMap() {
   _loadLeaflet(() => {
@@ -508,15 +502,14 @@ function _initLiveMap() {
     if (!container) return;
 
     if (_liveMap) { _liveMap.remove(); _liveMap = null; _livePolyline = null; _liveMarker = null; }
-    _userPanned = false;
+    _userPanned = false;  // always reset pan lock so auto-center works from first fix
 
-    // Use last known GPS coord if available, otherwise get real location
-    // NEVER use a hardcoded fallback — that showed Nagpur for users in Andhra Pradesh
+    // Use last known GPS coord if available, otherwise placeholder until real fix arrives
     const lastCoord = APP.gpsCoords.length > 0
       ? [APP.gpsCoords[APP.gpsCoords.length - 1].lat, APP.gpsCoords[APP.gpsCoords.length - 1].lon]
       : null;
 
-    // Initialize map at a neutral zoom first, then fly to real location
+    // Start map at last known coord or placeholder — will fly to real location immediately
     const startCoord = lastCoord || [0, 0];
 
     _liveMap = L.map(container, {
@@ -620,23 +613,28 @@ function _initLiveMap() {
 
     if (APP.gpsCoords.length > 0) _redrawLivePolyline();
 
-    // If no GPS coords yet, get real current position and fly map there
-    if (!lastCoord) {
-      navigator.geolocation.getCurrentPosition(
-        pos => {
-          const { latitude: lat, longitude: lon } = pos.coords;
-          if (_liveMap) {
-            _liveMap.setView([lat, lon], 17, { animate: false });
-            if (_liveMarker) _liveMarker.setLatLng([lat, lon]);
+    // Always get real current position to centre map correctly on start
+    // Even if we have cached coords (resumed session), re-centre to latest location
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const { latitude: lat, longitude: lon } = pos.coords;
+        if (_liveMap) {
+          _liveMap.setView([lat, lon], 17, { animate: false });
+          if (_liveMarker) _liveMarker.setLatLng([lat, lon]);
+          _userPanned = false;  // ensure auto-center re-engages after map set
+        }
+      },
+      () => {
+        // GPS unavailable — if we have a known coord use it, else fallback view
+        if (_liveMap) {
+          if (lastCoord) {
+            _liveMap.setView(lastCoord, 17, { animate: false });
           }
-        },
-        () => {
-          // GPS denied/unavailable — show India overview so at least map is visible
-          if (_liveMap) _liveMap.setView([20.5937, 78.9629], 5, { animate: false });
-        },
-        { enableHighAccuracy: true, timeout: 8000, maximumAge: 10000 }
-      );
-    }
+          // If no coord at all, watchPosition will centre once it gets a fix
+        }
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 5000 }
+    );
   });
 }
 
@@ -901,6 +899,7 @@ function _doStartRun() {
   _gpsWarmupCount  = 0;
   _gpsLastGoodFix  = null;
   _currentGpsSpeed = null;
+  _userPanned      = false;  // reset pan lock so map auto-centers from first GPS fix
   _kalman.reset();   // fresh Kalman state for new run
   _saveRunSession();
 
