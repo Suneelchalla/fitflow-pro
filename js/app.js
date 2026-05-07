@@ -641,6 +641,13 @@ document.addEventListener('DOMContentLoaded', () => {
   const session = Store.getSession();
   if (session) {
     APP.currentUser = session;
+    // Validate session in background — check if logged in elsewhere
+    if (typeof validateCurrentSession === 'function') {
+      setTimeout(() => {
+        validateCurrentSession();
+        if (typeof _startSessionValidation === 'function') _startSessionValidation();
+      }, 3000); // Wait 3s for page to load before checking
+    }
 
     // Clear stale last-page values that restore badly
     const _stalePage = Store.get('ff_last_page_' + session.id);
