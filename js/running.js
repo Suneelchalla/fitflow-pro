@@ -3965,7 +3965,7 @@ var _cardEditor = {
   meta:        null,    // ACTIVITY_META
   // Element states — x/y are 0-1 fractions, scale multiplier, rot degrees
   route: { x: 0.05, y: 0.05, w: 0.4, h: 0.4, scale: 1, rot: 0 },
-  stats: { x: 0.05, y: 0.52, w: 0.9, h: 0.22, scale: 1, rot: 0 },
+  stats: { x: 0.05, y: 0.60, w: 0.9, h: 0.30, scale: 1, rot: 0 },
   logo:  { x: 0.55, y: 0.88, w: 0.4, h: 0.07, scale: 1, rot: 0 },
   selected: 'stats',
   // Canvas dimensions
@@ -4129,87 +4129,98 @@ function _renderStatsElement(session, meta) {
   if (!session) session = _cardEditor.session;
   if (!meta)    meta    = _cardEditor.meta;
   const cv  = document.getElementById('card-stats-mini');
+  if (!cv) return;
   const W   = _cardEditor.bgW;
   const H   = _cardEditor.bgH;
+  // stats element: full width, fixed height proportion
   const elW = Math.round(W * _cardEditor.stats.w * _cardEditor.stats.scale);
   const elH = Math.round(H * _cardEditor.stats.h * _cardEditor.stats.scale);
 
   cv.width  = elW;
   cv.height = elH;
   const ctx = cv.getContext('2d');
-
-  // Transparent background
   ctx.clearRect(0, 0, elW, elH);
 
-  const elapsed = session.finalElapsed || session.duration || _calcElapsed?.(session) || 0;
+  const elapsed = session.finalElapsed || session.duration || (_calcElapsed ? _calcElapsed(session) : 0) || 0;
   const dist    = (session.distance || 0).toFixed(2);
   const kcal    = Math.round((session.distance || 0) * meta.kcalPerKm);
   const pace    = session.distance > 0 ? fmtPace(session.distance, elapsed) : '--:--';
-  const user    = APP.currentUser;
+  const speed   = elapsed > 0 ? ((session.distance || 0) / elapsed * 3600).toFixed(1) : '0.0';
 
-  // Scale fonts to element size
-  const fScale = elH / 240;
+  // ── Strava-style layout (label small ABOVE value large) ─────────
+  // Four stat columns: Distance | Time | Pace | Kcal
+  // Each column: label (grey small) on top line, value (white bold) on bottom line
+  // Padding around whole block
+  const pad   = Math.round(elW * 0.03);
+  const cols  = [
+    { lbl: 'Distance',  val: dist,            unit: 'km'   },
+    { lbl: 'Time',      val: fmtTime(elapsed),unit: ''     },
+    { lbl: 'Pace /km',  val: pace,            unit: ''     },
+    { lbl: 'Calories',  val: kcal + '',       unit: 'kcal' },
+  ];
+  const numCols = cols.length;
+  const colW    = (elW - pad * 2) / numCols;
 
-  // Big distance — measure width BEFORE changing font
-  const bigFont = `bold ${Math.round(72 * fScale)}px -apple-system, Arial, sans-serif`;
-  ctx.font      = bigFont;
+  // Activity header row
+  const headerH  = Math.round(elH * 0.30);
+  const statsH   = elH - headerH;
+
+  // ── Header: emoji + activity name ──────────────────────────────
+  ctx.shadowColor = 'rgba(0,0,0,0.8)'; ctx.shadowBlur = 6;
+  const hFont = Math.round(headerH * 0.55);
+  ctx.font      = 'bold ' + hFont + 'px -apple-system,Arial,sans-serif';
   ctx.fillStyle = '#ffffff';
   ctx.textAlign = 'left';
-  ctx.shadowColor = 'rgba(0,0,0,0.8)';
-  ctx.shadowBlur  = 8;
-  const distW = ctx.measureText(dist).width;
-  ctx.fillText(dist, 16, Math.round(80 * fScale));
+  ctx.fillText(meta.emoji + '  ' + (session.title || meta.label).toUpperCase(),
+    pad, Math.round(headerH * 0.72));
 
-  // KM superscript — use the big font width measured above
-  ctx.fillStyle = 'rgba(255,255,255,0.7)';
-  ctx.font      = `bold ${Math.round(22 * fScale)}px -apple-system, Arial, sans-serif`;
-  ctx.fillText('KM', 16 + distW + 6, Math.round(52 * fScale));
-
-  // Activity type
-  ctx.fillStyle = meta.color;
-  ctx.font      = `bold ${Math.round(18 * fScale)}px -apple-system, Arial, sans-serif`;
-  ctx.fillText(meta.emoji + ' ' + (session.title || meta.label).toUpperCase(),
-               16, Math.round(104 * fScale));
-
-  // Separator
-  ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-  ctx.lineWidth   = 1;
+  // thin divider under header
   ctx.shadowBlur  = 0;
+  ctx.strokeStyle = 'rgba(255,255,255,0.2)';
+  ctx.lineWidth   = 1;
   ctx.beginPath();
-  ctx.moveTo(16, Math.round(116 * fScale));
-  ctx.lineTo(elW - 16, Math.round(116 * fScale));
+  ctx.moveTo(pad, headerH);
+  ctx.lineTo(elW - pad, headerH);
   ctx.stroke();
 
-  // Stats row
-  const stats = [
-    { val: fmtTime(elapsed), lbl: 'TIME'    },
-    { val: pace,             lbl: 'PACE/KM' },
-    { val: kcal + '',        lbl: 'KCAL'    },
-  ];
-  const cw = (elW - 32) / 3;
-  stats.forEach((st, i) => {
-    const cx = 16 + i * cw;
+  // ── Stat columns ────────────────────────────────────────────────
+  const lblFont = Math.round(statsH * 0.28);
+  const valFont = Math.round(statsH * 0.50);
+  const lblY    = headerH + Math.round(statsH * 0.32);  // label baseline
+  const valY    = headerH + Math.round(statsH * 0.88);  // value baseline
+
+  cols.forEach((col, i) => {
+    const cx = pad + i * colW;
+
+    // Vertical divider between columns (not before first)
     if (i > 0) {
       ctx.strokeStyle = 'rgba(255,255,255,0.15)';
       ctx.lineWidth   = 1;
       ctx.beginPath();
-      ctx.moveTo(cx, Math.round(126 * fScale));
-      ctx.lineTo(cx, Math.round(188 * fScale));
+      ctx.moveTo(cx, headerH + Math.round(statsH * 0.08));
+      ctx.lineTo(cx, elH - Math.round(statsH * 0.05));
       ctx.stroke();
     }
-    ctx.fillStyle  = '#ffffff';
-    ctx.font       = `bold ${Math.round(22 * fScale)}px -apple-system, Arial, sans-serif`;
-    ctx.textAlign  = 'left';
+
+    const textX = cx + Math.round(colW * 0.08);
+
+    // Label (small grey, on top)
+    ctx.fillStyle = 'rgba(255,255,255,0.55)';
+    ctx.font      = lblFont + 'px -apple-system,Arial,sans-serif';
+    ctx.textAlign = 'left';
+    ctx.shadowBlur = 0;
+    ctx.fillText(col.lbl, textX, lblY);
+
+    // Value (large white, below)
+    ctx.fillStyle   = '#ffffff';
+    ctx.font        = 'bold ' + valFont + 'px -apple-system,Arial,sans-serif';
     ctx.shadowColor = 'rgba(0,0,0,0.8)';
     ctx.shadowBlur  = 6;
-    ctx.fillText(st.val, cx + (i > 0 ? 12 : 0), Math.round(158 * fScale));
-    ctx.fillStyle  = 'rgba(255,255,255,0.55)';
-    ctx.shadowBlur = 0;
-    ctx.font       = `${Math.round(13 * fScale)}px -apple-system, Arial, sans-serif`;
-    ctx.fillText(st.lbl, cx + (i > 0 ? 12 : 0), Math.round(178 * fScale));
+    const valText = col.unit ? col.val + ' ' + col.unit : col.val;
+    ctx.fillText(valText, textX, valY);
   });
 
-  // No branding in stats element — logo is a separate draggable element
+  ctx.shadowBlur = 0;
 
   // Apply display scale
   const ratio = _cardEditor.ratio;
@@ -4256,11 +4267,18 @@ function _positionElements() {
   ['route', 'stats', 'logo'].forEach(key => {
     const el = document.getElementById('card-editor-el-' + key);
     if (!el) return;
-    const st = _cardEditor[key];
+    const st  = _cardEditor[key];
+    // Position the wrapper div
     el.style.left      = Math.round(st.x * W * ratio) + 'px';
     el.style.top       = Math.round(st.y * H * ratio) + 'px';
     el.style.transform = 'rotate(' + (st.rot || 0) + 'deg)';
     el.style.transformOrigin = '50% 50%';
+    // Size the wrapper to match its canvas so it is visible immediately
+    const cv = el.querySelector('canvas');
+    if (cv) {
+      el.style.width  = cv.style.width  || cv.width  + 'px';
+      el.style.height = cv.style.height || cv.height + 'px';
+    }
   });
 }
 
@@ -4302,7 +4320,7 @@ function _onCardElSizeSlider(val) {
 
 function _resetCardElPositions() {
   _cardEditor.route = { x: 0.05, y: 0.05, w: 0.4,  h: 0.4,  scale: 1, rot: 0 };
-  _cardEditor.stats = { x: 0.05, y: 0.52, w: 0.9,  h: 0.22, scale: 1, rot: 0 };
+  _cardEditor.stats = { x: 0.05, y: 0.60, w: 0.9,  h: 0.30, scale: 1, rot: 0 };
   _cardEditor.logo  = { x: 0.55, y: 0.88, w: 0.4,  h: 0.07, scale: 1, rot: 0 };
   _renderRouteElement();
   _renderStatsElement();
@@ -4518,66 +4536,68 @@ function _exportCardFromEditor() {
     }
   });
 
-  // Stats
+  // Stats — Strava-style: label ABOVE value, four columns side-by-side
   _drawEl('stats', (sCtx, sW, sH) => {
-    const session = _cardEditor.session;
-    const meta    = _cardEditor.meta;
-    const elapsed = session.finalElapsed || session.duration || 0;
-    const dist    = (session.distance || 0).toFixed(2);
-    const kcal    = Math.round((session.distance || 0) * meta.kcalPerKm);
-    const pace    = session.distance > 0 ? fmtPace(session.distance, elapsed) : '--:--';
-    const fS      = sH / 240;
+    const session  = _cardEditor.session;
+    const meta     = _cardEditor.meta;
+    const elapsed  = session.finalElapsed || session.duration || 0;
+    const dist     = (session.distance || 0).toFixed(2);
+    const kcal     = Math.round((session.distance || 0) * meta.kcalPerKm);
+    const pace     = session.distance > 0 ? fmtPace(session.distance, elapsed) : '--:--';
+
     sCtx.clearRect(0, 0, sW, sH);
 
-    // Big distance number
-    sCtx.fillStyle = '#fff';
-    sCtx.font = 'bold ' + Math.round(72 * fS) + 'px -apple-system,Arial,sans-serif';
-    sCtx.textAlign = 'left';
-    sCtx.shadowColor = 'rgba(0,0,0,0.8)'; sCtx.shadowBlur = 12;
-    const dW = sCtx.measureText(dist).width;
-    sCtx.fillText(dist, 16, Math.round(80 * fS));
+    const pad     = Math.round(sW * 0.03);
+    const cols    = [
+      { lbl: 'Distance', val: dist,             unit: 'km'   },
+      { lbl: 'Time',     val: fmtTime(elapsed), unit: ''     },
+      { lbl: 'Pace /km', val: pace,             unit: ''     },
+      { lbl: 'Calories', val: kcal + '',        unit: 'kcal' },
+    ];
+    const colW    = (sW - pad * 2) / cols.length;
+    const headerH = Math.round(sH * 0.30);
+    const statsH  = sH - headerH;
 
-    // KM superscript
-    sCtx.fillStyle = 'rgba(255,255,255,0.7)';
-    sCtx.font = 'bold ' + Math.round(22 * fS) + 'px -apple-system,Arial,sans-serif';
-    sCtx.fillText('KM', 16 + dW + 6, Math.round(52 * fS));
+    // Header: activity emoji + name
+    sCtx.shadowColor = 'rgba(0,0,0,0.8)'; sCtx.shadowBlur = 8;
+    sCtx.font      = 'bold ' + Math.round(headerH * 0.55) + 'px -apple-system,Arial,sans-serif';
+    sCtx.fillStyle = '#ffffff'; sCtx.textAlign = 'left';
+    sCtx.fillText(meta.emoji + '  ' + (session.title || meta.label).toUpperCase(),
+      pad, Math.round(headerH * 0.72));
 
-    // Activity label
-    sCtx.fillStyle = meta.color;
-    sCtx.font = 'bold ' + Math.round(18 * fS) + 'px -apple-system,Arial,sans-serif';
-    sCtx.fillText(meta.emoji + ' ' + (session.title || meta.label).toUpperCase(),
-      16, Math.round(104 * fS));
-
-    // Divider
-    sCtx.strokeStyle = 'rgba(255,255,255,0.25)'; sCtx.lineWidth = 1; sCtx.shadowBlur = 0;
+    sCtx.shadowBlur = 0;
+    sCtx.strokeStyle = 'rgba(255,255,255,0.2)'; sCtx.lineWidth = 1;
     sCtx.beginPath();
-    sCtx.moveTo(16, Math.round(116 * fS));
-    sCtx.lineTo(sW - 16, Math.round(116 * fS));
-    sCtx.stroke();
+    sCtx.moveTo(pad, headerH); sCtx.lineTo(sW - pad, headerH); sCtx.stroke();
 
-    // Stats row: TIME · PACE/KM · KCAL
-    const cols = [{ val: fmtTime(elapsed), lbl: 'TIME' },
-                  { val: pace,             lbl: 'PACE/KM' },
-                  { val: kcal + '',        lbl: 'KCAL' }];
-    const cw = (sW - 32) / 3;
+    const lblY = headerH + Math.round(statsH * 0.32);
+    const valY = headerH + Math.round(statsH * 0.88);
+
     cols.forEach((col, i) => {
-      const cx = 16 + i * cw;
+      const cx    = pad + i * colW;
+      const textX = cx + Math.round(colW * 0.08);
+
       if (i > 0) {
         sCtx.strokeStyle = 'rgba(255,255,255,0.15)'; sCtx.lineWidth = 1;
         sCtx.beginPath();
-        sCtx.moveTo(cx, Math.round(126 * fS));
-        sCtx.lineTo(cx, Math.round(188 * fS));
+        sCtx.moveTo(cx, headerH + Math.round(statsH * 0.08));
+        sCtx.lineTo(cx, sH - Math.round(statsH * 0.05));
         sCtx.stroke();
       }
-      sCtx.fillStyle = '#fff';
-      sCtx.font = 'bold ' + Math.round(22 * fS) + 'px -apple-system,Arial,sans-serif';
-      sCtx.textAlign = 'left';
+
+      // Label (small, grey)
+      sCtx.fillStyle = 'rgba(255,255,255,0.55)';
+      sCtx.font      = Math.round(statsH * 0.28) + 'px -apple-system,Arial,sans-serif';
+      sCtx.textAlign = 'left'; sCtx.shadowBlur = 0;
+      sCtx.fillText(col.lbl, textX, lblY);
+
+      // Value (large, white)
+      sCtx.fillStyle   = '#ffffff';
+      sCtx.font        = 'bold ' + Math.round(statsH * 0.50) + 'px -apple-system,Arial,sans-serif';
       sCtx.shadowColor = 'rgba(0,0,0,0.8)'; sCtx.shadowBlur = 6;
-      sCtx.fillText(col.val, cx + (i > 0 ? 12 : 0), Math.round(158 * fS));
-      sCtx.fillStyle = 'rgba(255,255,255,0.55)'; sCtx.shadowBlur = 0;
-      sCtx.font = Math.round(13 * fS) + 'px -apple-system,Arial,sans-serif';
-      sCtx.fillText(col.lbl, cx + (i > 0 ? 12 : 0), Math.round(178 * fS));
+      sCtx.fillText(col.unit ? col.val + ' ' + col.unit : col.val, textX, valY);
     });
+    sCtx.shadowBlur = 0;
   });
 
   // Logo
