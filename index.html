@@ -3366,36 +3366,9 @@ document.addEventListener('DOMContentLoaded', () => {
   <!-- Editor canvas area -->
   <div style="flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;
     padding:12px;background:#111">
-    <div id="card-editor-wrap" style="position:relative;display:inline-block;
-      touch-action:none;user-select:none">
-      <!-- Photo/background canvas -->
-      <canvas id="card-editor-bg-canvas"
-        style="display:block;max-width:calc(100vw - 24px);max-height:calc(100vh - 200px);
-          border-radius:8px"></canvas>
-      <!-- Draggable overlay elements rendered as divs -->
-      <div id="card-editor-el-route" class="card-editor-el"
-        style="position:absolute;cursor:move;touch-action:none">
-        <canvas id="card-route-mini" style="display:block;border-radius:6px;
-          border:2px solid rgba(255,255,255,0.3)"></canvas>
-        <div class="card-el-resize" style="position:absolute;bottom:-6px;right:-6px;
-          width:18px;height:18px;background:#43d17a;border-radius:50%;cursor:se-resize;
-          border:2px solid #fff;touch-action:none"></div>
-      </div>
-      <div id="card-editor-el-stats" class="card-editor-el"
-        style="position:absolute;cursor:move;touch-action:none">
-        <canvas id="card-stats-mini" style="display:block;border-radius:6px"></canvas>
-        <div class="card-el-resize" style="position:absolute;bottom:-6px;right:-6px;
-          width:18px;height:18px;background:#43d17a;border-radius:50%;cursor:se-resize;
-          border:2px solid #fff;touch-action:none"></div>
-      </div>
-      <div id="card-editor-el-logo" class="card-editor-el"
-        style="position:absolute;cursor:move;touch-action:none">
-        <canvas id="card-logo-mini" style="display:block;border-radius:4px"></canvas>
-        <div class="card-el-resize" style="position:absolute;bottom:-6px;right:-6px;
-          width:18px;height:18px;background:#f0c040;border-radius:50%;cursor:se-resize;
-          border:2px solid #fff;touch-action:none"></div>
-      </div>
-    </div>
+    <!-- Single canvas — bg + elements drawn together -->
+    <canvas id="card-editor-main-canvas"
+      style="display:block;max-width:calc(100vw - 28px);border-radius:8px;touch-action:none;user-select:none"></canvas>
   </div>
 
   <!-- Bottom controls -->
@@ -3407,14 +3380,14 @@ document.addEventListener('DOMContentLoaded', () => {
     <div style="display:flex;gap:8px">
       <button onclick="_selectCardEl('route')"
         id="card-sel-route-btn"
-        style="flex:1;padding:8px;border-radius:8px;border:2px solid #43d17a;
-          background:rgba(67,160,90,0.2);color:#43d17a;font-size:11px;font-weight:700;cursor:pointer">
+        style="flex:1;padding:8px;border-radius:8px;border:1px solid #555;
+          background:none;color:#aaa;font-size:11px;font-weight:700;cursor:pointer">
         🗺 Route
       </button>
       <button onclick="_selectCardEl('stats')"
         id="card-sel-stats-btn"
-        style="flex:1;padding:8px;border-radius:8px;border:1px solid #555;
-          background:none;color:#aaa;font-size:11px;font-weight:700;cursor:pointer">
+        style="flex:1;padding:8px;border-radius:8px;border:2px solid #43d17a;
+          background:rgba(67,160,90,0.2);color:#43d17a;font-size:11px;font-weight:700;cursor:pointer">
         📊 Stats
       </button>
       <button onclick="_selectCardEl('logo')"
