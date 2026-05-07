@@ -2588,17 +2588,17 @@ function _renderHistoryRunPBInfo(r) {
 
 
 function openHistoryCardFromDetail() {
-  // Get the currently open run log from detail modal
-  const user = APP.currentUser;
-  if (!user) return;
-  const logs = Store.getUserRunLogs(user.id);
-  const log  = logs.find(r => (r.id || r.timestamp) === window._currentRunDetailId);
+  // Use the stored full log object directly — no ID lookup needed
+  const log = window._currentRunDetailLog;
   if (!log) {
     showToast('Activity data not found', 'error');
     return;
   }
   closeModal('modal-run-detail');
-  setTimeout(() => openHistoryCardModal(log), 200);
+  // Store log for HCM editor and open editor
+  _hcmLog      = log;
+  _hcmPhotoImg = null;
+  setTimeout(() => _initCardEditorFromLog(log), 300);
 }
 
 function _showRunDetail(idx) {
@@ -2610,8 +2610,9 @@ function _showRunDetail(idx) {
   // Track which run is open so delete knows which one to remove
   _currentDetailRunId = r.id || r.timestamp || null;
 
-  // Store logId so the Delete button knows which run to delete
-  window._currentRunDetailId = r.id;
+  // Store full log for card generation
+  window._currentRunDetailId  = r.id;
+  window._currentRunDetailLog = r;  // Store full log object
 
   const type     = r.activityType || 'run';
   const meta     = ACTIVITY_META[type] || ACTIVITY_META.run;
