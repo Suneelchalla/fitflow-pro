@@ -176,6 +176,75 @@ const SILENT_WAV_B64 = (() => {
   return 'data:audio/wav;base64,' + b64;
 })();
 
+
+// ════════════════════════════════════════════════════════════════
+// LIVE ACTIVITY NOTIFICATION (via Service Worker)
+// Shows persistent notification on lock screen + notification bar
+// Updates every 3 seconds with real distance/time/pace/kcal
+// ════════════════════════════════════════════════════════════════
+
+var _activityNotifInterval = null;
+
+function _swPost(data) {
+  if (!navigator.serviceWorker?.controller) return;
+  navigator.serviceWorker.controller.postMessage(data);
+}
+
+function _activityNotifPayload(type) {
+  const s    = APP.runSession;
+  if (!s) return null;
+  const elapsed = _calcElapsed(s);
+  const meta    = ACTIVITY_META[s.activityType || _activityType] || ACTIVITY_META.run;
+  return {
+    type,
+    emoji:    meta.emoji,
+    label:    meta.label,
+    distance: s.distance.toFixed(2),
+    time:     fmtTime(elapsed),
+    pace:     fmtPace(s.distance, elapsed),
+    kcal:     Math.round(s.distance * meta.kcalPerKm),
+    paused:   !!s.paused,
+  };
+}
+
+function startActivityNotification() {
+  // Request notification permission if not granted
+  if (Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+  if (Notification.permission !== 'granted') return;
+
+  // Send initial notification immediately
+  const payload = _activityNotifPayload('ACTIVITY_START');
+  if (payload) _swPost(payload);
+
+  // Update every 3 seconds
+  if (_activityNotifInterval) clearInterval(_activityNotifInterval);
+  _activityNotifInterval = setInterval(() => {
+    const p = _activityNotifPayload('ACTIVITY_UPDATE');
+    if (p) _swPost(p);
+  }, 3000);
+
+  // Listen for SW pause toggle commands
+  navigator.serviceWorker?.addEventListener('message', e => {
+    if (e.data?.type === 'SW_TOGGLE_PAUSE') togglePauseRun();
+  });
+}
+
+function stopActivityNotification() {
+  if (_activityNotifInterval) {
+    clearInterval(_activityNotifInterval);
+    _activityNotifInterval = null;
+  }
+  _swPost({ type: 'ACTIVITY_STOP' });
+}
+
+function refreshActivityNotification() {
+  if (!_activityNotifInterval) return;
+  const p = _activityNotifPayload('ACTIVITY_UPDATE');
+  if (p) _swPost(p);
+}
+
 const LockScreen = {
   _audio:        null,
   _metaInterval: null,
@@ -802,7 +871,7 @@ function _startRunTimerLoop() {
     const elapsed = _calcElapsed(APP.runSession);
     // FIX #3: save every 3 s (was 5 s — more reliable on throttled bg timers)
     if (elapsed % 3  === 0) _saveRunSession();
-    if (elapsed % 10 === 0) LockScreen.refresh();
+    if (elapsed % 10 === 0) { LockScreen.refresh(); refreshActivityNotification(); }
   }, 1000);
 }
 
@@ -1136,6 +1205,7 @@ function saveRun() {
 
   _clearRunSession();
   LockScreen.stop();
+  stopActivityNotification();
   showToast('Run saved! Great effort! 🏃', 'success');
   discardRun();
 
