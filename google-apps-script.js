@@ -1,7 +1,11 @@
 // ════════════════════════════════════════════════════════════════
-// FITFLOW PRO — Google Apps Script Backend v8
+// FITFLOW PRO — Google Apps Script Backend v9
 // Complete file — paste ALL contents into Apps Script editor
 // ════════════════════════════════════════════════════════════════
+// v9 changes vs v8:
+// • Passwords now hashed with SHA-256 before storing in Sheets
+// • Backward compatible — plain text passwords still work during transition
+// • On successful plain text login, password is auto-upgraded to hash
 // v8 changes vs v7:
 // • Fixed broken submitFeedback (duplicate sh declaration + split appendRow)
 // • Fixed getFeedback dead code after return statement
@@ -42,6 +46,37 @@ const RCOL = {
   DISTANCE: 4, DURATION: 5, PACE: 6, PLAN_TYPE: 7,
   TIMESTAMP: 8, ACTIVITY_TYPE: 9, COORDS_JSON: 10,
 };
+
+// ── PASSWORD HASHING ──────────────────────────────────────────────
+// Uses SHA-256 via Utilities.computeDigest (built into Google Apps Script)
+// Hashed passwords stored as hex strings prefixed with "sha256:"
+// Plain text passwords still work for backward compatibility
+// On successful plain text login, password is auto-upgraded to hash
+
+function _hashPassword(password) {
+  var bytes = Utilities.computeDigest(
+    Utilities.DigestAlgorithm.SHA_256,
+    password.toString(),
+    Utilities.Charset.UTF_8
+  );
+  var hex = bytes.map(function(b) { return ('0' + (b & 0xff).toString(16)).slice(-2); }).join('');
+  return 'sha256:' + hex;
+}
+
+function _isHashed(password) {
+  return password && password.toString().startsWith('sha256:');
+}
+
+function _passwordMatches(entered, stored) {
+  if (!entered || !stored) return false;
+  var enteredStr = entered.toString().trim();
+  var storedStr  = stored.toString().trim();
+  if (_isHashed(storedStr)) {
+    return _hashPassword(enteredStr) === storedStr;
+  } else {
+    return enteredStr === storedStr;
+  }
+}
 
 // ── DATE HELPERS ──────────────────────────────────────────────────
 function toYMD(v) {
@@ -343,8 +378,17 @@ function handleLogin(email, password) {
     const storedPass = (row[COL.PASSWORD]||'').toString().trim();
     const tempPass   = (row[COL.TEMP_PASSWORD]||'').toString().trim();
     const entered    = (password||'').toString().trim();
-    if (!(storedPass&&storedPass===entered) && !(tempPass&&tempPass===entered))
+    const mainMatch  = storedPass && _passwordMatches(entered, storedPass);
+    const tempMatch  = tempPass   && _passwordMatches(entered, tempPass);
+    if (!mainMatch && !tempMatch)
       return { success:false, error:'Invalid email or password.' };
+    // Auto-upgrade plain text password to hash on successful login
+    if (mainMatch && !_isHashed(storedPass)) {
+      try {
+        sh.getRange(i+1, COL.PASSWORD+1).setValue(_hashPassword(entered));
+        SpreadsheetApp.flush();
+      } catch(e) { Logger.log('Password upgrade skipped: ' + e.message); }
+    }
     const firstLoginRaw = row[COL.IS_FIRST_LOGIN];
     const isFirstLogin  = firstLoginRaw===true||String(firstLoginRaw).toUpperCase().trim()==='TRUE';
     try {
@@ -419,7 +463,7 @@ function completeGoogleSetup(body) {
   for (let i = 1; i < data.length; i++) {
     if ((data[i][COL.ID]||'').toString() !== userId.toString()) continue;
     sh.getRange(i+1, COL.NAME+1).setValue(name.trim());
-    sh.getRange(i+1, COL.PASSWORD+1).setValue(password);
+    sh.getRange(i+1, COL.PASSWORD+1).setValue(_hashPassword(password));
     sh.getRange(i+1, COL.IS_FIRST_LOGIN+1).setValue(false);
     SpreadsheetApp.flush();
     return { success:true };
@@ -435,7 +479,7 @@ function changePassword(body) {
   const data = sh.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
     if ((data[i][COL.ID]||'').toString()===userId.toString()) {
-      sh.getRange(i+1,COL.PASSWORD+1).setValue(newPassword);
+      sh.getRange(i+1,COL.PASSWORD+1).setValue(_hashPassword(newPassword));
       sh.getRange(i+1,COL.TEMP_PASSWORD+1).setValue('');
       sh.getRange(i+1,COL.IS_FIRST_LOGIN+1).setValue(false);
       SpreadsheetApp.flush();
@@ -453,7 +497,7 @@ function setTempPassword(body) {
   const data = sh.getDataRange().getValues();
   for (let i = 1; i < data.length; i++) {
     if ((data[i][COL.ID]||'').toString()===userId.toString()) {
-      sh.getRange(i+1,COL.TEMP_PASSWORD+1).setValue(tempPassword);
+      sh.getRange(i+1,COL.TEMP_PASSWORD+1).setValue(_hashPassword(tempPassword));
       sh.getRange(i+1,COL.IS_FIRST_LOGIN+1).setValue(true);
       SpreadsheetApp.flush();
       return { success:true };
