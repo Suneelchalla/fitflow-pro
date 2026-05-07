@@ -708,9 +708,9 @@ function _initLiveMap() {
     _liveMapTileLayer.addTo(_liveMap);
 
     _livePolyline = L.polyline([], {
-      color:   '#43d17a',
-      weight:  5,
-      opacity: 0.95,
+      color:   '#2d9e5a',
+      weight:  4,
+      opacity: 1.0,
       lineCap: 'round',
       lineJoin:'round',
     }).addTo(_liveMap);
@@ -721,8 +721,8 @@ function _initLiveMap() {
         width:0;height:0;
         border-left:9px solid transparent;
         border-right:9px solid transparent;
-        border-bottom:26px solid #43d17a;
-        filter:drop-shadow(0 0 6px rgba(67,209,122,0.9)) drop-shadow(0 2px 6px rgba(0,0,0,0.5));
+        border-bottom:26px solid #2d9e5a;
+        filter:drop-shadow(0 2px 4px rgba(0,0,0,0.6));
         transform-origin:50% 70%;
       "></div>`,
       iconSize:   [18, 26],
@@ -3506,36 +3506,34 @@ function _drawRouteOnCanvas(ctx, coords, x, y, w, h, color) {
 
   ctx.save();
   ctx.strokeStyle = color;
-  ctx.lineWidth   = 8;
+  ctx.lineWidth   = 4;
   ctx.lineCap     = 'round';
   ctx.lineJoin    = 'round';
-  ctx.globalAlpha = 0.9;
-  ctx.shadowColor = color;
-  ctx.shadowBlur  = 18;
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur  = 0;
   ctx.beginPath();
   coords.forEach((c, i) => {
     const px = toX(c.lon), py = toY(c.lat);
     i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
   });
   ctx.stroke();
-  ctx.shadowBlur = 0;
 
   // Start dot — green
   ctx.globalAlpha = 1;
   ctx.fillStyle   = '#43d17a';
   ctx.beginPath();
-  ctx.arc(toX(coords[0].lon), toY(coords[0].lat), 14, 0, Math.PI*2);
+  ctx.arc(toX(coords[0].lon), toY(coords[0].lat), 8, 0, Math.PI*2);
   ctx.fill();
-  ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
   ctx.stroke();
 
   // End dot — red
   const last = coords[coords.length - 1];
   ctx.fillStyle = '#ef5350';
   ctx.beginPath();
-  ctx.arc(toX(last.lon), toY(last.lat), 14, 0, Math.PI*2);
+  ctx.arc(toX(last.lon), toY(last.lat), 8, 0, Math.PI*2);
   ctx.fill();
-  ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
   ctx.stroke();
   ctx.restore();
 }
@@ -4088,19 +4086,26 @@ function _cardEditorRedraw() {
     ctx.fillRect(0, 0, W, H);
   }
 
-  // Username watermark — fixed bottom-left
-  const u = APP.currentUser;
-  if (u) {
-    ctx.font        = Math.round(W * 0.032) + 'px -apple-system,Arial,sans-serif';
+  // Username bottom-left + Logo bottom-right — same size, same style
+  {
+    const u    = APP.currentUser;
+    const fPx  = Math.round(W * 0.032);
+    ctx.font        = fPx + 'px -apple-system,Arial,sans-serif';
     ctx.fillStyle   = 'rgba(255,255,255,0.65)';
-    ctx.textAlign   = 'left';
     ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 8;
-    ctx.fillText(u.name, Math.round(W * 0.035), H - Math.round(H * 0.028));
+    const baseY = H - Math.round(H * 0.028);
+    if (u) {
+      ctx.textAlign = 'left';
+      ctx.fillText(u.name, Math.round(W * 0.035), baseY);
+    }
+    // Logo same size, same colour, right-aligned
+    ctx.textAlign = 'right';
+    ctx.fillText('\u26a1 FitFlow Pro', W - Math.round(W * 0.035), baseY);
     ctx.shadowBlur = 0;
   }
 
-  // Draw each element
-  for (const key of ['route', 'stats', 'logo']) {
+  // Draw each element (logo is now fixed text, not a draggable element)
+  for (const key of ['route', 'stats']) {
     const st  = _cardEditor[key];
     const elW = Math.max(1, Math.round(W * st.w * st.scale));
     const elH = Math.max(1, Math.round(H * st.h * st.scale));
@@ -4141,7 +4146,7 @@ function _cardEditorRedraw() {
 function _drawRouteEl(ctx, W, H) {
   ctx.clearRect(0, 0, W, H);
   if (_cardEditor.routeCoords && _cardEditor.routeCoords.length >= 2) {
-    _drawRouteOnCanvas(ctx, _cardEditor.routeCoords, 10, 10, W-20, H-20, '#43d17a');
+    _drawRouteOnCanvas(ctx, _cardEditor.routeCoords, 10, 10, W-20, H-20, '#2d9e5a');
   }
   // No-route placeholder (transparent — user can still position it)
 }
@@ -4180,7 +4185,7 @@ function _drawStatsEl(ctx, elW, elH, session, meta) {
   ctx.fillStyle = '#fff'; ctx.textAlign = 'left';
   ctx.fillText(meta.emoji + '  ' + (session.title || meta.label), pad, Math.round(titleH * 0.68));
   ctx.font = dateFont + 'px -apple-system,Arial,sans-serif';
-  ctx.fillStyle = 'rgba(255,255,255,0.50)'; ctx.shadowBlur = 4;
+  ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.shadowBlur = 4;
   try {
     const ds = new Date(session.date || session.timestamp).toLocaleDateString('en-IN',
       { weekday:'long', day:'numeric', month:'long', year:'numeric' });
@@ -4197,7 +4202,7 @@ function _drawStatsEl(ctx, elW, elH, session, meta) {
   const unitF = Math.round(bodyH * 0.22), smVF = Math.round(bodyH * 0.28), smLF = Math.round(bodyH * 0.16);
 
   ctx.font = lblF + 'px -apple-system,Arial,sans-serif';
-  ctx.fillStyle = 'rgba(255,255,255,0.50)'; ts(4);
+  ctx.fillStyle = 'rgba(255,255,255,0.82)'; ts(4);
   ctx.fillText('Distance', pad, bodyY + Math.round(bodyH * 0.18));
 
   ctx.font = 'bold ' + bigF + 'px -apple-system,Arial,sans-serif';
@@ -4206,7 +4211,7 @@ function _drawStatsEl(ctx, elW, elH, session, meta) {
   const dw = ctx.measureText(dist).width;
 
   ctx.font = 'bold ' + unitF + 'px -apple-system,Arial,sans-serif';
-  ctx.fillStyle = 'rgba(255,255,255,0.70)'; ts(6);
+  ctx.fillStyle = 'rgba(255,255,255,0.90)'; ts(6);
   ctx.fillText('km', pad + dw + 6, bodyY + Math.round(bodyH * 0.50));
 
   ctx.shadowBlur = 0;
@@ -4218,7 +4223,7 @@ function _drawStatsEl(ctx, elW, elH, session, meta) {
   const rx = leftW + Math.round(elW * 0.05), halfH = Math.round(bodyH * 0.50);
   [[fmtTime(elapsed), 'Time', 0], [pace, 'Pace /km', halfH]].forEach(([val, lbl, oy]) => {
     ctx.font = smLF + 'px -apple-system,Arial,sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.50)'; ts(4);
+    ctx.fillStyle = 'rgba(255,255,255,0.82)'; ts(4);
     ctx.fillText(lbl, rx, bodyY + oy + Math.round(halfH * 0.26));
     ctx.font = 'bold ' + smVF + 'px -apple-system,Arial,sans-serif';
     ctx.fillStyle = '#fff'; ts(10);
@@ -4231,7 +4236,7 @@ function _drawStatsEl(ctx, elW, elH, session, meta) {
   ctx.beginPath(); ctx.moveTo(pad, calY); ctx.lineTo(elW - pad, calY); ctx.stroke();
   const calF = Math.round(elH * 0.08);
   ctx.font = calF + 'px -apple-system,Arial,sans-serif';
-  ctx.fillStyle = 'rgba(255,255,255,0.45)'; ts(4);
+  ctx.fillStyle = 'rgba(255,255,255,0.82)'; ts(4);
   ctx.fillText('Calories', pad, calY + Math.round(elH * 0.085));
   ctx.font = 'bold ' + calF + 'px -apple-system,Arial,sans-serif';
   ctx.fillStyle = 'rgba(255,255,255,0.80)';
@@ -4396,12 +4401,13 @@ function _exportCardFromEditor() {
   const aspRat = dispW / dispH;
   const EW     = aspRat >= 1 ? 1080 : Math.round(1080 * aspRat);
   const EH     = aspRat >= 1 ? Math.round(1080 / aspRat) : 1080;
-  const scale  = EW / dispW;  // how much to scale element positions/sizes
 
   const cv  = document.getElementById('activity-card-canvas');
   if (!cv) { showToast('Canvas not found', 'error'); return; }
   cv.width  = EW; cv.height = EH;
   const ctx = cv.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
 
   // Background
   ctx.fillStyle = '#0d1a10'; ctx.fillRect(0, 0, EW, EH);
@@ -4410,27 +4416,18 @@ function _exportCardFromEditor() {
     ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fillRect(0, 0, EW, EH);
   }
 
-  // Username watermark
-  const u = APP.currentUser;
-  if (u) {
-    ctx.font        = Math.round(EW * 0.032) + 'px -apple-system,Arial,sans-serif';
-    ctx.fillStyle   = 'rgba(255,255,255,0.65)'; ctx.textAlign = 'left';
-    ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 10;
-    ctx.fillText(u.name, Math.round(EW * 0.035), EH - Math.round(EH * 0.028));
-    ctx.shadowBlur = 0;
-  }
-
-  // Draw elements scaled to export resolution
-  ['route', 'stats', 'logo'].forEach(key => {
+  // Draw elements (route + stats only — logo is fixed text below)
+  ['route', 'stats'].forEach(key => {
     const st  = _cardEditor[key];
     const elW = Math.max(1, Math.round(EW * st.w * st.scale));
     const elH = Math.max(1, Math.round(EH * st.h * st.scale));
     const tmp = document.createElement('canvas');
     tmp.width = elW; tmp.height = elH;
     const tc  = tmp.getContext('2d');
+    tc.imageSmoothingEnabled = true;
+    tc.imageSmoothingQuality = 'high';
     if (key === 'route') _drawRouteEl(tc, elW, elH);
-    else if (key === 'stats') _drawStatsEl(tc, elW, elH, _cardEditor.session, _cardEditor.meta);
-    else if (key === 'logo')  _drawLogoEl(tc, elW, elH);
+    else _drawStatsEl(tc, elW, elH, _cardEditor.session, _cardEditor.meta);
     const cx  = (st.x + st.w * st.scale / 2) * EW;
     const cy  = (st.y + st.h * st.scale / 2) * EH;
     ctx.save();
@@ -4440,12 +4437,26 @@ function _exportCardFromEditor() {
     ctx.restore();
   });
 
+  // Username bottom-left + Logo bottom-right — fixed, same size, same colour
+  {
+    const u   = APP.currentUser;
+    const fPx = Math.round(EW * 0.032);
+    ctx.font        = fPx + 'px -apple-system,Arial,sans-serif';
+    ctx.fillStyle   = 'rgba(255,255,255,0.65)';
+    ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 10;
+    const baseY = EH - Math.round(EH * 0.028);
+    if (u) { ctx.textAlign = 'left';  ctx.fillText(u.name, Math.round(EW * 0.035), baseY); }
+    ctx.textAlign = 'right';
+    ctx.fillText('⚡ FitFlow Pro', EW - Math.round(EW * 0.035), baseY);
+    ctx.shadowBlur = 0;
+  }
+
   _closeCardEditor();
   const fname = 'fitflow-activity-' + Date.now() + '.png';
   cv.toBlob(blob => {
     if (!blob) { showToast('Export failed', 'error'); return; }
     _saveOrShareBlob(blob, fname);
-  }, 'image/png', 0.95);
+  }, 'image/png', 1.0);
 }
 
 // ── Also update _generateActivityCard to open editor ──────────────
