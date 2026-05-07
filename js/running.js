@@ -127,6 +127,68 @@ let _livePolyline = null;
 let _liveMarker   = null;
 let _sumMap       = null;
 let _userPanned   = false;   // true when user has manually panned — stops auto-recentering
+let _mapBearing   = 0;       // current map rotation angle in degrees (0 = north up)
+let _bearingHistory = [];    // rolling window of recent bearings for smoothing
+let _rotationEnabled = true; // false when user has manually panned (disables auto-rotate)
+
+// ── BEARING HELPERS ───────────────────────────────────────────────
+// Calculate bearing in degrees (0=N, 90=E, 180=S, 270=W) between two coords
+function _calcBearing(lat1, lon1, lat2, lon2) {
+  const toRad = d => d * Math.PI / 180;
+  const toDeg = r => r * 180 / Math.PI;
+  const dLon  = toRad(lon2 - lon1);
+  const y     = Math.sin(dLon) * Math.cos(toRad(lat2));
+  const x     = Math.cos(toRad(lat1)) * Math.sin(toRad(lat2))
+              - Math.sin(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.cos(dLon);
+  return (toDeg(Math.atan2(y, x)) + 360) % 360;
+}
+
+// Smooth bearing using circular mean over last N readings (avoids 359→1 wrap issues)
+function _smoothBearing(newBearing) {
+  _bearingHistory.push(newBearing);
+  if (_bearingHistory.length > 6) _bearingHistory.shift();
+  // Circular mean
+  let sinSum = 0, cosSum = 0;
+  _bearingHistory.forEach(b => {
+    sinSum += Math.sin(b * Math.PI / 180);
+    cosSum += Math.cos(b * Math.PI / 180);
+  });
+  return ((Math.atan2(sinSum, cosSum) * 180 / Math.PI) + 360) % 360;
+}
+
+// Apply bearing rotation to live map — rotates tiles+polyline, counter-rotates marker
+function _applyMapRotation(bearing) {
+  if (!_liveMap || !_rotationEnabled || _userPanned) return;
+  _mapBearing = bearing;
+
+  // Rotate the entire map pane (tiles + polyline) around the centre
+  const pane = _liveMap.getPanes().mapPane;
+  if (pane) {
+    // Get map container centre so rotation is around the user dot
+    const size = _liveMap.getSize();
+    pane.style.transformOrigin = size.x / 2 + 'px ' + size.y / 2 + 'px';
+    pane.style.transform = 'rotate(' + (-bearing) + 'deg)';
+    pane.style.willChange = 'transform';
+  }
+
+  // Counter-rotate marker so the arrow always points in direction of travel (up on screen)
+  if (_liveMarker && _liveMarker._icon) {
+    _liveMarker._icon.style.transform =
+      (_liveMarker._icon.style.transform || '').replace(/\s*rotate\([^)]*\)/g, '')
+      + ' rotate(' + bearing + 'deg)';
+  }
+}
+
+// Reset map rotation to north-up
+function _resetMapRotation() {
+  _mapBearing = 0;
+  _bearingHistory = [];
+  const pane = _liveMap?.getPanes()?.mapPane;
+  if (pane) {
+    pane.style.transform = '';
+    pane.style.transformOrigin = '';
+  }
+}
 
 // ── SCREEN WAKE LOCK + GPS KEEP-ALIVE (multi-layer) ───────────────
 // Android Chrome throttles GPS when screen locks. We use 4 strategies:
@@ -495,6 +557,51 @@ function _loadLeaflet(cb) {
   document.head.appendChild(s);
 }
 
+// ── TWO-FINGER MAP ROTATION GESTURE ──────────────────────────────
+// Intercepts two-touch events on the map container to let user manually rotate
+var _gestureStartAngle = null;
+var _gestureStartBearing = 0;
+
+function _attachMapRotationGesture(container) {
+  function _getTouchAngle(t1, t2) {
+    return Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX) * 180 / Math.PI;
+  }
+
+  container.addEventListener('touchstart', e => {
+    if (e.touches.length === 2) {
+      _gestureStartAngle  = _getTouchAngle(e.touches[0], e.touches[1]);
+      _gestureStartBearing = _mapBearing;
+    }
+  }, { passive: true });
+
+  container.addEventListener('touchmove', e => {
+    if (e.touches.length === 2 && _gestureStartAngle !== null) {
+      const currentAngle = _getTouchAngle(e.touches[0], e.touches[1]);
+      const delta        = _gestureStartAngle - currentAngle;
+      const newBearing   = ((_gestureStartBearing + delta) + 360) % 360;
+      _mapBearing        = newBearing;
+      // Apply rotation directly without smoothing (user is controlling it)
+      const pane = _liveMap?.getPanes()?.mapPane;
+      if (pane) {
+        const size = _liveMap.getSize();
+        pane.style.transformOrigin = size.x / 2 + 'px ' + size.y / 2 + 'px';
+        pane.style.transform = 'rotate(' + (-newBearing) + 'deg)';
+      }
+      if (_liveMarker && _liveMarker._icon) {
+        _liveMarker._icon.style.transform =
+          (_liveMarker._icon.style.transform || '').replace(/\s*rotate\([^)]*\)/g, '')
+          + ' rotate(' + newBearing + 'deg)';
+      }
+    }
+  }, { passive: true });
+
+  container.addEventListener('touchend', e => {
+    if (e.touches.length < 2) {
+      _gestureStartAngle = null;
+    }
+  }, { passive: true });
+}
+
 // ── LIVE MAP (during active run) ──────────────────────────────────
 function _initLiveMap() {
   _loadLeaflet(() => {
@@ -523,12 +630,19 @@ function _initLiveMap() {
       bounceAtZoomLimits: false,
     }).setView(startCoord, 17);
 
-    // Detect when user manually pans — stop auto-recentering
-    _liveMap.on('dragstart', () => { _userPanned = true; });
-    // After 8s of no pan, re-enable auto-center
+    // Detect when user manually pans — stop auto-recentering AND rotation
+    _liveMap.on('dragstart', () => {
+      _userPanned      = true;
+      _rotationEnabled = false;
+      _resetMapRotation();   // snap back to north-up when user takes control
+    });
+    // After 8s of no pan, re-enable auto-center (rotation re-enables on next GPS fix)
     _liveMap.on('dragend', () => {
       clearTimeout(_liveMap._recenterTimer);
-      _liveMap._recenterTimer = setTimeout(() => { _userPanned = false; }, 8000);
+      _liveMap._recenterTimer = setTimeout(() => {
+        _userPanned      = false;
+        _rotationEnabled = true;
+      }, 8000);
     });
 
     // Re-center button (shown when user has panned away)
@@ -545,7 +659,9 @@ function _initLiveMap() {
         touch-action:manipulation;
       `;
       L.DomEvent.on(btn, 'click', () => {
-        _userPanned = false;
+        _userPanned      = false;
+        _rotationEnabled = true;
+        _bearingHistory  = [];  // reset smoothing so rotation snaps back cleanly
         if (_gpsLastGoodFix) {
           _liveMap.setView([_gpsLastGoodFix.lat, _gpsLastGoodFix.lon], _liveMap.getZoom(), { animate: true });
         }
@@ -602,16 +718,22 @@ function _initLiveMap() {
     const icon = L.divIcon({
       className: '',
       html: `<div style="
-        width:18px;height:18px;border-radius:50%;
-        background:#4285f4;border:3px solid #fff;
-        box-shadow:0 0 0 6px rgba(66,133,244,0.25);
+        width:0;height:0;
+        border-left:9px solid transparent;
+        border-right:9px solid transparent;
+        border-bottom:26px solid #4285f4;
+        filter:drop-shadow(0 0 4px rgba(66,133,244,0.8)) drop-shadow(0 2px 6px rgba(0,0,0,0.5));
+        transform-origin:50% 70%;
       "></div>`,
-      iconSize:   [18, 18],
-      iconAnchor: [9, 9],
+      iconSize:   [18, 26],
+      iconAnchor: [9, 18],
     });
     _liveMarker = L.marker(startCoord[0] !== 0 ? startCoord : [0,0], { icon, zIndexOffset: 1000, interactive: false }).addTo(_liveMap);
 
     if (APP.gpsCoords.length > 0) _redrawLivePolyline();
+
+    // Attach two-finger rotation gesture to map container
+    _attachMapRotationGesture(container);
 
     // Always get real current position to centre map correctly on start
     // Even if we have cached coords (resumed session), re-centre to latest location
@@ -647,18 +769,51 @@ function _redrawLivePolyline() {
 function _updateLiveMap(lat, lon) {
   if (!_liveMap) return;
   const pos = [lat, lon];
-  if (_liveMarker) _liveMarker.setLatLng(pos);
-  // Only auto-center if user hasn't manually panned away
-  if (!_userPanned) {
-    _liveMap.setView(pos, _liveMap.getZoom(), { animate: true, duration: 0.6 });
+
+  // Calculate bearing from previous fix and apply map rotation
+  const coords = APP.gpsCoords;
+  if (coords.length >= 2 && !_userPanned) {
+    const prev = coords[coords.length - 2];
+    const rawBearing = _calcBearing(prev.lat, prev.lon, lat, lon);
+    // Only update bearing if we actually moved (avoids jitter when stationary)
+    const distMoved = haversine(prev.lat, prev.lon, lat, lon);
+    if (distMoved > 0.003) {  // only rotate after moving 3m+
+      const smoothed = _smoothBearing(rawBearing);
+      _applyMapRotation(smoothed);
+    }
   }
+
+  // Update marker position
+  if (_liveMarker) _liveMarker.setLatLng(pos);
+
+  // Auto-center: keep user dot in lower-third of screen (like Google Maps / Strava)
+  // offset centre point slightly below middle so more road ahead is visible
+  if (!_userPanned) {
+    if (_rotationEnabled) {
+      // In rotation mode: use panTo with offset so user dot sits at 65% down screen
+      const size    = _liveMap.getSize();
+      const mapCentre = _liveMap.project(pos, _liveMap.getZoom());
+      // Shift centre point up by 15% of map height so user dot is lower on screen
+      const offsetCentre = _liveMap.unproject(
+        [mapCentre.x, mapCentre.y + size.y * 0.15],
+        _liveMap.getZoom()
+      );
+      _liveMap.setView(offsetCentre, _liveMap.getZoom(), { animate: true, duration: 0.5, noMoveStart: true });
+    } else {
+      _liveMap.setView(pos, _liveMap.getZoom(), { animate: true, duration: 0.6 });
+    }
+  }
+
   if (_livePolyline) _livePolyline.addLatLng(pos);
 }
 
 function _destroyLiveMap() {
   if (_liveMap) { _liveMap.remove(); _liveMap = null; }
-  _livePolyline = null;
-  _liveMarker   = null;
+  _livePolyline    = null;
+  _liveMarker      = null;
+  _mapBearing      = 0;
+  _bearingHistory  = [];
+  _rotationEnabled = true;
 }
 
 // ── GPS BADGE UPDATE ──────────────────────────────────────────────
@@ -900,6 +1055,9 @@ function _doStartRun() {
   _gpsLastGoodFix  = null;
   _currentGpsSpeed = null;
   _userPanned      = false;  // reset pan lock so map auto-centers from first GPS fix
+  _rotationEnabled = true;   // re-enable rotation for new activity
+  _mapBearing      = 0;
+  _bearingHistory  = [];     // clear bearing history so rotation starts fresh
   _kalman.reset();   // fresh Kalman state for new run
   _saveRunSession();
 
