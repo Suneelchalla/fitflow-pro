@@ -3388,6 +3388,13 @@ document.addEventListener('DOMContentLoaded', () => {
           width:18px;height:18px;background:#43d17a;border-radius:50%;cursor:se-resize;
           border:2px solid #fff;touch-action:none"></div>
       </div>
+      <div id="card-editor-el-logo" class="card-editor-el"
+        style="position:absolute;cursor:move;touch-action:none">
+        <canvas id="card-logo-mini" style="display:block;border-radius:4px"></canvas>
+        <div class="card-el-resize" style="position:absolute;bottom:-6px;right:-6px;
+          width:18px;height:18px;background:#f0c040;border-radius:50%;cursor:se-resize;
+          border:2px solid #fff;touch-action:none"></div>
+      </div>
     </div>
   </div>
 
@@ -3401,18 +3408,24 @@ document.addEventListener('DOMContentLoaded', () => {
       <button onclick="_selectCardEl('route')"
         id="card-sel-route-btn"
         style="flex:1;padding:8px;border-radius:8px;border:2px solid #43d17a;
-          background:rgba(67,160,90,0.2);color:#43d17a;font-size:12px;font-weight:700;cursor:pointer">
+          background:rgba(67,160,90,0.2);color:#43d17a;font-size:11px;font-weight:700;cursor:pointer">
         🗺 Route
       </button>
       <button onclick="_selectCardEl('stats')"
         id="card-sel-stats-btn"
         style="flex:1;padding:8px;border-radius:8px;border:1px solid #555;
-          background:none;color:#aaa;font-size:12px;font-weight:700;cursor:pointer">
+          background:none;color:#aaa;font-size:11px;font-weight:700;cursor:pointer">
         📊 Stats
       </button>
+      <button onclick="_selectCardEl('logo')"
+        id="card-sel-logo-btn"
+        style="flex:1;padding:8px;border-radius:8px;border:1px solid #555;
+          background:none;color:#aaa;font-size:11px;font-weight:700;cursor:pointer">
+        ⚡ Logo
+      </button>
       <button onclick="_resetCardElPositions()"
-        style="padding:8px 12px;border-radius:8px;border:1px solid #555;
-          background:none;color:#aaa;font-size:12px;cursor:pointer">
+        style="padding:8px 10px;border-radius:8px;border:1px solid #555;
+          background:none;color:#aaa;font-size:11px;cursor:pointer">
         Reset
       </button>
     </div>
