@@ -89,3 +89,72 @@ self.addEventListener('fetch', e => {
 //   2. OneSignal's internal state gets out of sync with the displayed notification
 //   3. Click routing to '/' fails because OneSignal's handler fires first and
 //      the manual one throws an error trying to fire after
+
+// ── ACTIVITY LIVE NOTIFICATION ────────────────────────────────────
+// Handles persistent notification showing live run/walk/cycle stats
+// Posted from running.js via postMessage, updates every 3 seconds
+
+const ACTIVITY_NOTIF_TAG = 'fitflow-activity';
+
+self.addEventListener('message', e => {
+  if (!e.data) return;
+
+  if (e.data.type === 'ACTIVITY_START') {
+    _showActivityNotif(e.data);
+  }
+
+  if (e.data.type === 'ACTIVITY_UPDATE') {
+    _showActivityNotif(e.data);
+  }
+
+  if (e.data.type === 'ACTIVITY_STOP') {
+    self.registration.getNotifications({ tag: ACTIVITY_NOTIF_TAG })
+      .then(notifs => notifs.forEach(n => n.close()));
+  }
+});
+
+function _showActivityNotif(data) {
+  const { emoji, label, distance, time, pace, kcal, paused } = data;
+  const statusIcon = paused ? '⏸' : emoji;
+  const title      = `${statusIcon} ${label}  ·  ${distance} km  ·  ${time}`;
+  const body       = paused
+    ? `Paused — Tap to resume`
+    : `Pace ${pace}/km  ·  ${kcal} kcal burned`;
+
+  self.registration.showNotification(title, {
+    tag:              ACTIVITY_NOTIF_TAG,
+    body,
+    icon:             '/fitflow-pro/icons/icon-192.png',
+    badge:            '/fitflow-pro/icons/icon-192.png',
+    silent:           true,
+    renotify:         false,
+    requireInteraction: true,
+    actions: [
+      { action: 'open',  title: '📱 Open App' },
+      { action: 'pause', title: paused ? '▶ Resume' : '⏸ Pause' },
+    ],
+    data: { url: '/fitflow-pro/#page-running' },
+  });
+}
+
+self.addEventListener('notificationclick', e => {
+  if (e.notification.tag !== ACTIVITY_NOTIF_TAG) return;
+  e.notification.close();
+
+  if (e.action === 'pause') {
+    // Send message to app to toggle pause
+    self.clients.matchAll({ type: 'window' }).then(clients => {
+      clients.forEach(c => c.postMessage({ type: 'SW_TOGGLE_PAUSE' }));
+    });
+    return;
+  }
+
+  // Open/focus the app
+  e.waitUntil(
+    self.clients.matchAll({ type: 'window' }).then(clients => {
+      const match = clients.find(c => c.url.includes('fitflow-pro'));
+      if (match) return match.focus();
+      return self.clients.openWindow('/fitflow-pro/#page-running');
+    })
+  );
+});
