@@ -4312,119 +4312,159 @@ function _resetCardElPositions() {
 }
 
 // Per-element touch state for pinch-scale + rotate
-var _ceTouch = {};  // keyed by element key
-
 function _attachCardEditorHandlers() {
+  // Remove all old elements and re-create them so we never stack duplicate listeners.
+  // This is called every time the editor opens.
   ['route', 'stats', 'logo'].forEach(key => {
-    const el = document.getElementById('card-editor-el-' + key);
-    if (!el) return;
-    const resize = el.querySelector('.card-el-resize');
-
-    // ── Pointer drag (single finger) ─────────────────────────────
-    el.addEventListener('pointerdown', e => {
-      if (e.target === resize) return;
-      _selectCardEl(key);
-      e.preventDefault();
-      _ceIsDragging   = true;
-      _ceDragEl       = key;
-      _ceDragStartX   = e.clientX;
-      _ceDragStartY   = e.clientY;
-      _ceDragElStartX = _cardEditor[key].x;
-      _ceDragElStartY = _cardEditor[key].y;
-      el.setPointerCapture(e.pointerId);
-    });
-
-    el.addEventListener('pointermove', e => {
-      if (!_ceIsDragging || _ceDragEl !== key) return;
-      const dx    = e.clientX - _ceDragStartX;
-      const dy    = e.clientY - _ceDragStartY;
-      const W     = _cardEditor.bgW;
-      const H     = _cardEditor.bgH;
-      const ratio = _cardEditor.ratio;
-      _cardEditor[key].x = Math.max(-0.1, Math.min(1.0, _ceDragElStartX + dx / (W * ratio)));
-      _cardEditor[key].y = Math.max(-0.1, Math.min(1.0, _ceDragElStartY + dy / (H * ratio)));
-      el.style.left = Math.round(_cardEditor[key].x * W * ratio) + 'px';
-      el.style.top  = Math.round(_cardEditor[key].y * H * ratio) + 'px';
-    });
-
-    el.addEventListener('pointerup', () => { _ceIsDragging = false; _ceDragEl = null; });
-
-    // ── Two-finger pinch-scale + rotate ──────────────────────────
-    _ceTouch[key] = { active: false, startDist: 0, startScale: 1, startAngle: 0, startRot: 0 };
-
-    el.addEventListener('touchstart', e => {
-      if (e.touches.length === 2) {
-        e.preventDefault();
-        const t = _ceTouch[key];
-        t.active     = true;
-        t.startDist  = _tDist(e.touches);
-        t.startScale = _cardEditor[key].scale;
-        t.startAngle = _tAngle(e.touches);
-        t.startRot   = _cardEditor[key].rot || 0;
-        _selectCardEl(key);
-      }
-    }, { passive: false });
-
-    el.addEventListener('touchmove', e => {
-      const t = _ceTouch[key];
-      if (!t.active || e.touches.length !== 2) return;
-      e.preventDefault();
-      // Scale
-      const newDist  = _tDist(e.touches);
-      const newScale = Math.max(0.15, Math.min(3.0, t.startScale * (newDist / t.startDist)));
-      _cardEditor[key].scale = newScale;
-      // Rotate
-      const newAngle = _tAngle(e.touches);
-      _cardEditor[key].rot = t.startRot + (newAngle - t.startAngle);
-      // Re-render canvas + reposition
-      if (key === 'route') _renderRouteElement();
-      else if (key === 'stats') _renderStatsElement();
-      else if (key === 'logo') _renderLogoElement();
-      _positionElements();
-    }, { passive: false });
-
-    el.addEventListener('touchend', e => {
-      if (e.touches.length < 2) _ceTouch[key].active = false;
-    }, { passive: true });
-
-    // ── Resize handle (drag right to scale up) ───────────────────
-    if (resize) {
-      resize.addEventListener('pointerdown', e => {
-        e.preventDefault();
-        e.stopPropagation();
-        _ceIsResizing   = true;
-        _ceResizeEl     = key;
-        _ceResizeStartX = e.clientX;
-        _ceResizeStartW = _cardEditor[key].scale;
-        resize.setPointerCapture(e.pointerId);
-      });
-
-      resize.addEventListener('pointermove', e => {
-        if (!_ceIsResizing || _ceResizeEl !== key) return;
-        const dx       = e.clientX - _ceResizeStartX;
-        const newScale = Math.max(0.15, Math.min(3.0, _ceResizeStartW + dx / 150));
-        _cardEditor[key].scale = newScale;
-        if (key === 'route') _renderRouteElement();
-        else if (key === 'stats') _renderStatsElement();
-        else if (key === 'logo') _renderLogoElement();
-        _positionElements();
-      });
-
-      resize.addEventListener('pointerup', () => { _ceIsResizing = false; _ceResizeEl = null; });
-    }
+    const oldEl = document.getElementById('card-editor-el-' + key);
+    if (!oldEl) return;
+    const newEl = oldEl.cloneNode(true);   // cloneNode strips all event listeners
+    oldEl.parentNode.replaceChild(newEl, oldEl);
+    _wireCardEl(key);
   });
+}
+
+function _wireCardEl(key) {
+  const el     = document.getElementById('card-editor-el-' + key);
+  const resize = el ? el.querySelector('.card-el-resize') : null;
+  if (!el) return;
+
+  // ── State for this element ──────────────────────────────────────
+  let dragActive = false, dragStartX = 0, dragStartY = 0, dragElX = 0, dragElY = 0;
+  let pinchActive = false, pinchStartDist = 1, pinchStartScale = 1,
+      pinchStartAngle = 0, pinchStartRot = 0;
+  let resizeActive = false, resizeStartX = 0, resizeStartScale = 1;
+
+  // ── helpers ─────────────────────────────────────────────────────
+  function rerender() {
+    if (key === 'route')      _renderRouteElement();
+    else if (key === 'stats') _renderStatsElement();
+    else if (key === 'logo')  _renderLogoElement();
+    _positionElements();
+  }
+  function tDist(t) {
+    const dx = t[0].clientX - t[1].clientX, dy = t[0].clientY - t[1].clientY;
+    return Math.sqrt(dx*dx + dy*dy) || 1;
+  }
+  function tAngle(t) {
+    return Math.atan2(t[1].clientY - t[0].clientY,
+                      t[1].clientX - t[0].clientX) * 180 / Math.PI;
+  }
+
+  // ── SELECT on any tap/click ──────────────────────────────────────
+  el.addEventListener('pointerdown', e => {
+    _selectCardEl(key);
+  });
+
+  // ── DRAG — only with a single touch or mouse ─────────────────────
+  // We use touch events for drag so we can properly suppress when pinch starts.
+  el.addEventListener('touchstart', e => {
+    if (e.touches.length === 1 && !pinchActive) {
+      const t = e.touches[0];
+      dragActive = true;
+      dragStartX = t.clientX; dragStartY = t.clientY;
+      dragElX    = _cardEditor[key].x; dragElY = _cardEditor[key].y;
+    }
+    if (e.touches.length === 2) {
+      // Pinch starting — cancel any drag
+      dragActive = false;
+      pinchActive      = true;
+      pinchStartDist   = tDist(e.touches);
+      pinchStartScale  = _cardEditor[key].scale || 1;
+      pinchStartAngle  = tAngle(e.touches);
+      pinchStartRot    = _cardEditor[key].rot   || 0;
+      e.preventDefault();  // block scroll / browser zoom
+    }
+  }, { passive: false });
+
+  el.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (pinchActive && e.touches.length === 2) {
+      const newDist   = tDist(e.touches);
+      const newAngle  = tAngle(e.touches);
+      _cardEditor[key].scale = Math.max(0.1, Math.min(4.0,
+        pinchStartScale * (newDist / pinchStartDist)));
+      _cardEditor[key].rot   = pinchStartRot + (newAngle - pinchStartAngle);
+      rerender();
+    } else if (dragActive && e.touches.length === 1) {
+      const t  = e.touches[0];
+      const dx = t.clientX - dragStartX;
+      const dy = t.clientY - dragStartY;
+      const W  = _cardEditor.bgW, H = _cardEditor.bgH, r = _cardEditor.ratio;
+      _cardEditor[key].x = Math.max(-0.2, Math.min(1.1, dragElX + dx / (W * r)));
+      _cardEditor[key].y = Math.max(-0.2, Math.min(1.1, dragElY + dy / (H * r)));
+      el.style.left = Math.round(_cardEditor[key].x * W * r) + 'px';
+      el.style.top  = Math.round(_cardEditor[key].y * H * r) + 'px';
+    }
+  }, { passive: false });
+
+  el.addEventListener('touchend', e => {
+    if (e.touches.length < 2) pinchActive = false;
+    if (e.touches.length === 0) dragActive = false;
+  }, { passive: true });
+
+  // Mouse drag (desktop)
+  el.addEventListener('mousedown', e => {
+    if (resize && (e.target === resize || resize.contains(e.target))) return;
+    dragActive = true;
+    dragStartX = e.clientX; dragStartY = e.clientY;
+    dragElX    = _cardEditor[key].x; dragElY = _cardEditor[key].y;
+    e.preventDefault();
+  });
+  window.addEventListener('mousemove', e => {
+    if (!dragActive) return;
+    const dx = e.clientX - dragStartX, dy = e.clientY - dragStartY;
+    const W  = _cardEditor.bgW, H = _cardEditor.bgH, r = _cardEditor.ratio;
+    _cardEditor[key].x = Math.max(-0.2, Math.min(1.1, dragElX + dx / (W * r)));
+    _cardEditor[key].y = Math.max(-0.2, Math.min(1.1, dragElY + dy / (H * r)));
+    el.style.left = Math.round(_cardEditor[key].x * W * r) + 'px';
+    el.style.top  = Math.round(_cardEditor[key].y * H * r) + 'px';
+  });
+  window.addEventListener('mouseup', () => { dragActive = false; });
+
+  // ── RESIZE handle (corner dot) ───────────────────────────────────
+  if (resize) {
+    resize.addEventListener('touchstart', e => {
+      e.stopPropagation();
+      if (e.touches.length === 1) {
+        resizeActive     = true;
+        resizeStartX     = e.touches[0].clientX;
+        resizeStartScale = _cardEditor[key].scale || 1;
+      }
+    }, { passive: true });
+    resize.addEventListener('touchmove', e => {
+      if (!resizeActive) return;
+      e.preventDefault();
+      const dx = e.touches[0].clientX - resizeStartX;
+      _cardEditor[key].scale = Math.max(0.1, Math.min(4.0, resizeStartScale + dx / 120));
+      rerender();
+    }, { passive: false });
+    resize.addEventListener('touchend', () => { resizeActive = false; }, { passive: true });
+
+    resize.addEventListener('mousedown', e => {
+      e.stopPropagation(); e.preventDefault();
+      resizeActive     = true;
+      resizeStartX     = e.clientX;
+      resizeStartScale = _cardEditor[key].scale || 1;
+    });
+    window.addEventListener('mousemove', e => {
+      if (!resizeActive) return;
+      const dx = e.clientX - resizeStartX;
+      _cardEditor[key].scale = Math.max(0.1, Math.min(4.0, resizeStartScale + dx / 120));
+      rerender();
+    });
+    window.addEventListener('mouseup', () => { resizeActive = false; });
+  }
 }
 
 function _tDist(touches) {
   const dx = touches[0].clientX - touches[1].clientX;
   const dy = touches[0].clientY - touches[1].clientY;
-  return Math.sqrt(dx*dx + dy*dy);
+  return Math.sqrt(dx*dx + dy*dy) || 1;
 }
 function _tAngle(touches) {
-  return Math.atan2(
-    touches[1].clientY - touches[0].clientY,
-    touches[1].clientX - touches[0].clientX
-  ) * 180 / Math.PI;
+  return Math.atan2(touches[1].clientY - touches[0].clientY,
+                    touches[1].clientX - touches[0].clientX) * 180 / Math.PI;
 }
 
 function _closeCardEditor() {
@@ -4434,35 +4474,33 @@ function _closeCardEditor() {
 }
 
 function _exportCardFromEditor() {
-  const W   = _cardEditor.bgW;
-  const H   = _cardEditor.bgH;
-  const cv  = document.getElementById('activity-card-canvas');
+  const W  = _cardEditor.bgW;
+  const H  = _cardEditor.bgH;
+  const cv = document.getElementById('activity-card-canvas');
+  if (!cv) { showToast('Canvas not found', 'error'); return; }
   cv.width  = W;
   cv.height = H;
   const ctx = cv.getContext('2d');
 
-  // Background
+  // Background fill + photo
   ctx.fillStyle = '#0d1a10';
   ctx.fillRect(0, 0, W, H);
-
-  // Photo
   if (_cardEditor.photoImg) {
     ctx.drawImage(_cardEditor.photoImg, 0, 0, W, H);
     ctx.fillStyle = 'rgba(0,0,0,0.25)';
     ctx.fillRect(0, 0, W, H);
   }
 
-  // Helper: draw a canvas element with position + rotation transform
+  // Draw one element: renders to a temp canvas, then composites with rotation
   function _drawEl(key, renderFn) {
-    const st    = _cardEditor[key];
-    const elW   = Math.round(W * st.w * st.scale);
-    const elH   = Math.round(H * st.h * st.scale);
-    const elX   = Math.round(st.x * W);
-    const elY   = Math.round(st.y * H);
-    const rot   = (st.rot || 0) * Math.PI / 180;
-    const tmp   = document.createElement('canvas');
-    tmp.width   = elW;
-    tmp.height  = elH;
+    const st  = _cardEditor[key];
+    const elW = Math.max(1, Math.round(W * st.w * st.scale));
+    const elH = Math.max(1, Math.round(H * st.h * st.scale));
+    const elX = Math.round(st.x * W);
+    const elY = Math.round(st.y * H);
+    const rot = ((st.rot || 0) * Math.PI) / 180;
+    const tmp = document.createElement('canvas');
+    tmp.width = elW; tmp.height = elH;
     renderFn(tmp.getContext('2d'), elW, elH);
     ctx.save();
     ctx.translate(elX + elW / 2, elY + elH / 2);
@@ -4471,15 +4509,16 @@ function _exportCardFromEditor() {
     ctx.restore();
   }
 
-  // Route element
+  // Route
   _drawEl('route', (rCtx, rW, rH) => {
     rCtx.clearRect(0, 0, rW, rH);
     if (_cardEditor.routeCoords.length >= 2) {
-      _drawRouteOnCanvas(rCtx, _cardEditor.routeCoords, 10, 10, rW-20, rH-20, _cardEditor.meta.color);
+      _drawRouteOnCanvas(rCtx, _cardEditor.routeCoords, 10, 10,
+        rW - 20, rH - 20, _cardEditor.meta.color);
     }
   });
 
-  // Stats element (no logo/branding — separate element)
+  // Stats
   _drawEl('stats', (sCtx, sW, sH) => {
     const session = _cardEditor.session;
     const meta    = _cardEditor.meta;
@@ -4487,70 +4526,87 @@ function _exportCardFromEditor() {
     const dist    = (session.distance || 0).toFixed(2);
     const kcal    = Math.round((session.distance || 0) * meta.kcalPerKm);
     const pace    = session.distance > 0 ? fmtPace(session.distance, elapsed) : '--:--';
-    const fScale  = sH / 240;
-
+    const fS      = sH / 240;
     sCtx.clearRect(0, 0, sW, sH);
-    sCtx.fillStyle  = '#ffffff';
-    sCtx.font       = 'bold ' + Math.round(72*fScale) + 'px -apple-system,Arial,sans-serif';
-    sCtx.textAlign  = 'left';
+
+    // Big distance number
+    sCtx.fillStyle = '#fff';
+    sCtx.font = 'bold ' + Math.round(72 * fS) + 'px -apple-system,Arial,sans-serif';
+    sCtx.textAlign = 'left';
     sCtx.shadowColor = 'rgba(0,0,0,0.8)'; sCtx.shadowBlur = 12;
     const dW = sCtx.measureText(dist).width;
-    sCtx.fillText(dist, 16, Math.round(80*fScale));
+    sCtx.fillText(dist, 16, Math.round(80 * fS));
+
+    // KM superscript
     sCtx.fillStyle = 'rgba(255,255,255,0.7)';
-    sCtx.font      = 'bold ' + Math.round(22*fScale) + 'px -apple-system,Arial,sans-serif';
-    sCtx.fillText('KM', 16 + dW + 6, Math.round(52*fScale));
+    sCtx.font = 'bold ' + Math.round(22 * fS) + 'px -apple-system,Arial,sans-serif';
+    sCtx.fillText('KM', 16 + dW + 6, Math.round(52 * fS));
+
+    // Activity label
     sCtx.fillStyle = meta.color;
-    sCtx.font      = 'bold ' + Math.round(18*fScale) + 'px -apple-system,Arial,sans-serif';
-    sCtx.fillText(meta.emoji + ' ' + (session.title || meta.label).toUpperCase(), 16, Math.round(104*fScale));
+    sCtx.font = 'bold ' + Math.round(18 * fS) + 'px -apple-system,Arial,sans-serif';
+    sCtx.fillText(meta.emoji + ' ' + (session.title || meta.label).toUpperCase(),
+      16, Math.round(104 * fS));
+
+    // Divider
     sCtx.strokeStyle = 'rgba(255,255,255,0.25)'; sCtx.lineWidth = 1; sCtx.shadowBlur = 0;
-    sCtx.beginPath(); sCtx.moveTo(16, Math.round(116*fScale)); sCtx.lineTo(sW-16, Math.round(116*fScale)); sCtx.stroke();
-    const statsRow = [{ val: fmtTime(elapsed), lbl: 'TIME'}, { val: pace, lbl: 'PACE/KM'}, { val: kcal+'', lbl: 'KCAL'}];
+    sCtx.beginPath();
+    sCtx.moveTo(16, Math.round(116 * fS));
+    sCtx.lineTo(sW - 16, Math.round(116 * fS));
+    sCtx.stroke();
+
+    // Stats row: TIME · PACE/KM · KCAL
+    const cols = [{ val: fmtTime(elapsed), lbl: 'TIME' },
+                  { val: pace,             lbl: 'PACE/KM' },
+                  { val: kcal + '',        lbl: 'KCAL' }];
     const cw = (sW - 32) / 3;
-    statsRow.forEach((st, i) => {
+    cols.forEach((col, i) => {
       const cx = 16 + i * cw;
       if (i > 0) {
         sCtx.strokeStyle = 'rgba(255,255,255,0.15)'; sCtx.lineWidth = 1;
-        sCtx.beginPath(); sCtx.moveTo(cx, Math.round(126*fScale)); sCtx.lineTo(cx, Math.round(188*fScale)); sCtx.stroke();
+        sCtx.beginPath();
+        sCtx.moveTo(cx, Math.round(126 * fS));
+        sCtx.lineTo(cx, Math.round(188 * fS));
+        sCtx.stroke();
       }
-      sCtx.fillStyle = '#fff'; sCtx.font = 'bold ' + Math.round(22*fScale) + 'px -apple-system,Arial,sans-serif';
-      sCtx.textAlign = 'left'; sCtx.shadowColor = 'rgba(0,0,0,0.8)'; sCtx.shadowBlur = 6;
-      sCtx.fillText(st.val, cx + (i>0?12:0), Math.round(158*fScale));
+      sCtx.fillStyle = '#fff';
+      sCtx.font = 'bold ' + Math.round(22 * fS) + 'px -apple-system,Arial,sans-serif';
+      sCtx.textAlign = 'left';
+      sCtx.shadowColor = 'rgba(0,0,0,0.8)'; sCtx.shadowBlur = 6;
+      sCtx.fillText(col.val, cx + (i > 0 ? 12 : 0), Math.round(158 * fS));
       sCtx.fillStyle = 'rgba(255,255,255,0.55)'; sCtx.shadowBlur = 0;
-      sCtx.font = Math.round(13*fScale) + 'px -apple-system,Arial,sans-serif';
-      sCtx.fillText(st.lbl, cx + (i>0?12:0), Math.round(178*fScale));
+      sCtx.font = Math.round(13 * fS) + 'px -apple-system,Arial,sans-serif';
+      sCtx.fillText(col.lbl, cx + (i > 0 ? 12 : 0), Math.round(178 * fS));
     });
   });
 
-  // Logo element
+  // Logo
   _drawEl('logo', (lCtx, lW, lH) => {
     const meta = _cardEditor.meta;
     const user = APP.currentUser;
     const fS   = Math.round(lH * 0.52);
     lCtx.clearRect(0, 0, lW, lH);
-    lCtx.font      = 'bold ' + fS + 'px -apple-system,Arial,sans-serif';
+    lCtx.font = 'bold ' + fS + 'px -apple-system,Arial,sans-serif';
     lCtx.fillStyle = meta ? meta.color : '#43d17a';
     lCtx.textAlign = 'left';
     lCtx.shadowColor = 'rgba(0,0,0,0.7)'; lCtx.shadowBlur = 6;
-    lCtx.fillText('⚡ FitFlow Pro', 0, fS);
+    lCtx.fillText('\u26a1 FitFlow Pro', 0, fS);
     if (user) {
       lCtx.fillStyle = 'rgba(255,255,255,0.6)';
-      lCtx.font      = Math.round(fS * 0.7) + 'px -apple-system,Arial,sans-serif';
+      lCtx.font = Math.round(fS * 0.7) + 'px -apple-system,Arial,sans-serif';
       lCtx.shadowBlur = 3;
-      lCtx.fillText(user.name, 0, lH - 2);
+      lCtx.fillText(user.name, 0, lH - 4);
     }
   });
 
-  // Close editor and show share sheet directly
+  // Close editor then share
   _closeCardEditor();
-
-  // Share/save the card immediately
-  const name = 'fitflow-activity-' + Date.now() + '.png';
+  const fname = 'fitflow-activity-' + Date.now() + '.png';
   cv.toBlob(blob => {
-    if (!blob) { showToast('Could not export card', 'error'); return; }
-    _saveOrShareBlob(blob, name);
+    if (!blob) { showToast('Export failed', 'error'); return; }
+    _saveOrShareBlob(blob, fname);
   }, 'image/png', 0.95);
 }
-
 
 // ── Also update _generateActivityCard to open editor ──────────────
 function _generateActivityCard() {
