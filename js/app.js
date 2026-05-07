@@ -225,7 +225,7 @@ function showToast(msg, type = 'success') {
 // ROOT_PAGES: swipe-back and goBack() never fire on these pages.
 // page-running is NOT in ROOT_PAGES — instead we check APP.runSession
 // at swipe time so idle running page allows swipe-back but active run doesn't.
-const ROOT_PAGES = ['page-login', 'page-dashboard', 'page-admin', 'page-quote', 'page-onboarding'];
+const ROOT_PAGES = ['page-login', 'page-dashboard', 'page-admin'];
 
 function showPage(id, addToHistory = true) {
   const prev = APP.currentPage;
@@ -249,27 +249,49 @@ function showPage(id, addToHistory = true) {
   }
 }
 
+// Parent page map — defines where each page goes on swipe-back/goBack
+const PAGE_PARENT = {
+  'page-quote':           'page-dashboard',
+  'page-onboarding':      'page-dashboard',
+  'page-history-global':  'page-dashboard',
+  'page-running':         'page-dashboard',
+  'page-module':          'page-dashboard',
+  'page-profile':         'page-dashboard',
+  'page-weekly-report':   'page-dashboard',
+  'page-custom-workouts': 'page-dashboard',
+  'page-calisthenics':    'page-dashboard',
+  'page-my-plan':         'page-dashboard',
+  'page-cw-editor':       'page-custom-workouts',
+  'page-cw-workout':      'page-custom-workouts',
+  'page-admin-editor':    'page-admin',
+};
+
 function goBack() {
   // Never go back if no user session — stay on login
   if (!APP.currentUser) return;
-  // Never go back from root pages
+  // Never go back from root pages (login, dashboard, admin)
   if (ROOT_PAGES.includes(APP.currentPage)) return;
 
+  let target = null;
+
+  // Use page history stack first
   if (APP.pageHistory.length > 0) {
-    const prev = APP.pageHistory.pop();
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    const pg = document.getElementById(prev);
-    if (pg) { pg.classList.add('active'); APP.currentPage = prev; pg.scrollTop = 0; }
-    window.history.pushState({ page: prev }, '', '#' + prev);
-    _syncNav(prev);
-  } else {
-    const home = APP.currentUser?.role === 'ADMIN' ? 'page-admin' : 'page-dashboard';
-    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-    const pg = document.getElementById(home);
-    if (pg) { pg.classList.add('active'); APP.currentPage = home; }
-    window.history.pushState({ page: home }, '', '#' + home);
-    _syncNav(home);
+    target = APP.pageHistory.pop();
   }
+  // Fall back to parent map
+  if (!target) {
+    target = PAGE_PARENT[APP.currentPage] || 'page-dashboard';
+  }
+  // Admin users go to admin, not dashboard
+  if (target === 'page-dashboard' && APP.currentUser?.role === 'ADMIN') {
+    target = 'page-admin';
+  }
+
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const pg = document.getElementById(target);
+  if (pg) { pg.classList.add('active'); APP.currentPage = target; pg.scrollTop = 0; }
+  window.history.pushState({ page: target }, '', '#' + target);
+  _syncNav(target);
 }
 
 function _syncNav(pageId) {
@@ -300,6 +322,8 @@ window.addEventListener('popstate', e => {
     window.history.pushState({ page: APP.currentPage }, '', '#' + APP.currentPage);
     return;
   }
+  // For non-root pages, use goBack which uses PAGE_PARENT map
+  // This prevents falling through to browser back (which exits the app)
   // Block back navigation from running page during an ACTIVE run
   if (APP.currentPage === 'page-running' && APP.runSession) {
     window.history.pushState({ page: APP.currentPage }, '', '#' + APP.currentPage);
