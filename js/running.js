@@ -4084,31 +4084,28 @@ function _openCardEditorModal(session, meta, drawCoords, photoImg) {
     }
   }
 
-  // Get display ratio after CSS sizing
-  setTimeout(() => {
+  // Get display ratio after layout is complete.
+  // Use requestAnimationFrame inside a setTimeout to guarantee the modal
+  // has fully painted and getBoundingClientRect returns real dimensions.
+  function _initEditorElements() {
     const rect = bgCv.getBoundingClientRect();
+    // Fallback: if layout hasn't happened yet (rect.width=0), retry once more
+    if (rect.width < 10) {
+      setTimeout(_initEditorElements, 120);
+      return;
+    }
     _cardEditor.displayW = rect.width;
     _cardEditor.displayH = rect.height;
     _cardEditor.ratio    = rect.width / W;
 
-    // Draw route mini canvas
     _renderRouteElement();
-
-    // Draw stats mini canvas (no logo inside — logo is separate element)
     _renderStatsElement(session, meta);
-
-    // Draw logo mini canvas
     _renderLogoElement();
-
-    // Position elements
     _positionElements();
-
-    // Attach drag/resize/rotate handlers
     _attachCardEditorHandlers();
-
-    // Select stats by default
     _selectCardEl('stats');
-  }, 100);
+  }
+  setTimeout(() => requestAnimationFrame(_initEditorElements), 80);
 }
 
 function _renderRouteElement() {
@@ -4298,11 +4295,11 @@ function _positionElements() {
     el.style.top       = Math.round(st.y * H * ratio) + 'px';
     el.style.transform = 'rotate(' + (st.rot || 0) + 'deg)';
     el.style.transformOrigin = '50% 50%';
-    // Size the wrapper to match its canvas so it is visible immediately
+    // Size the wrapper div to exactly match its canvas display size
     const cv = el.querySelector('canvas');
-    if (cv) {
-      el.style.width  = cv.style.width  || cv.width  + 'px';
-      el.style.height = cv.style.height || cv.height + 'px';
+    if (cv && cv.style.width) {
+      el.style.width  = cv.style.width;
+      el.style.height = cv.style.height;
     }
   });
 }
