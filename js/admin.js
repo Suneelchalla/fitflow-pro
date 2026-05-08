@@ -3471,6 +3471,29 @@ async function renderAdminNotify() {
 
   // Render compose form
   container.innerHTML = `
+
+    <!-- ── FORCE APP REFRESH CARD ── -->
+    <div class="card" style="margin-bottom:16px;background:linear-gradient(135deg,rgba(46,125,70,0.12),rgba(46,125,70,0.04));border-color:rgba(46,125,70,0.3)">
+      <div style="display:flex;align-items:flex-start;gap:14px">
+        <div style="font-size:32px;flex-shrink:0">🔄</div>
+        <div style="flex:1">
+          <div style="font-weight:700;font-size:15px;margin-bottom:4px">Force App Update for All Users</div>
+          <div style="font-size:13px;color:var(--text2);line-height:1.55;margin-bottom:12px">
+            After deploying new files to GitHub, click this to silently refresh all users&#39; apps.
+            They will see a &quot;Refreshing…&quot; toast and the app reloads automatically — no manual cache clearing needed.
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+            <button id="force-refresh-btn" class="btn btn-primary"
+              style="padding:10px 20px;font-size:13px;font-weight:700"
+              onclick="adminForceRefresh()">
+              🔄 Force Refresh All Users
+            </button>
+            <div id="force-refresh-last" style="font-size:12px;color:var(--text3)">Last triggered: never</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="notify-audience-bar" id="notify-audience-bar">
       <span style="display:inline-flex;align-items:center;gap:8px">
         <span style="width:8px;height:8px;background:var(--g4);border-radius:50%;display:inline-block"></span>
@@ -4096,5 +4119,53 @@ async function _loadNotifyHistory() {
     }).join('');
   } catch (e) {
     list.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:14px;text-align:center">Could not load history</div>';
+  }
+}
+
+// ── FORCE APP REFRESH — pushes updates to all users ───────────────
+// Writes a timestamp to Sheets. On each user's next sync, auth.js
+// detects the new timestamp and reloads their app automatically.
+// Use this after deploying new files so users get updates without
+// manually clearing cache.
+async function adminForceRefresh() {
+  const btn = document.getElementById('force-refresh-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+
+  try {
+    const ts  = Date.now();
+    const res = await Sheets.post('saveContent', {
+      key:   'force_reload_ts',
+      value: ts,
+    });
+
+    if (res?.success) {
+      const timeStr = new Date(ts).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
+      if (btn) {
+        btn.textContent    = '✅ Refresh Sent!';
+        btn.style.background   = 'rgba(67,160,90,0.25)';
+        btn.style.borderColor  = 'var(--g4)';
+        btn.style.color        = 'var(--g5)';
+      }
+      // Update the "last triggered" label
+      const lastEl = document.getElementById('force-refresh-last');
+      if (lastEl) lastEl.textContent = 'Last triggered: ' + timeStr;
+      showToast('✅ All users will refresh automatically on next app open', 'success');
+      // Re-enable after 10s
+      setTimeout(() => {
+        if (btn) {
+          btn.disabled       = false;
+          btn.textContent    = '🔄 Force Refresh All Users';
+          btn.style.background   = '';
+          btn.style.borderColor  = '';
+          btn.style.color        = '';
+        }
+      }, 10000);
+    } else {
+      showToast('Failed to send refresh signal. Try again.', 'error');
+      if (btn) { btn.disabled = false; btn.textContent = '🔄 Force Refresh All Users'; }
+    }
+  } catch (e) {
+    showToast('Error: ' + e.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '🔄 Force Refresh All Users'; }
   }
 }
