@@ -521,7 +521,8 @@ function initRunningPage() {
     document.getElementById('run-active')?.classList.remove('hidden');
     document.getElementById('run-summary')?.classList.add('hidden');
     const pauseBtn = document.getElementById('pause-run-btn');
-    if (pauseBtn) pauseBtn.textContent = APP.runSession.paused ? '▶ Resume' : '⏸ Pause';
+    if (pauseBtn) pauseBtn.textContent = '⏸ Pause'; // reset label — controls swap handles state
+    _updateRunControls();
     // Re-init live map with existing coords
     _initLiveMap();
     if (APP.gpsCoords.length > 1) _redrawLivePolyline();
@@ -1242,6 +1243,7 @@ function togglePauseRun() {
   if (!APP.runSession) return;
 
   if (!APP.runSession.paused) {
+    // → PAUSING
     APP.runSession.paused   = true;
     APP.runSession.pausedAt = Date.now();
     if (APP.runWatchId != null) {
@@ -1250,6 +1252,7 @@ function togglePauseRun() {
     }
     _setGpsBadge(false);
   } else {
+    // → RESUMING
     if (APP.runSession.pausedAt) {
       APP.runSession.totalPaused += (Date.now() - APP.runSession.pausedAt);
     }
@@ -1264,9 +1267,17 @@ function togglePauseRun() {
 
   _saveRunSession();
   LockScreen.refresh();
+  _updateRunControls();
+}
 
-  const btn = document.getElementById('pause-run-btn');
-  if (btn) btn.textContent = APP.runSession.paused ? '▶ Resume' : '⏸ Pause';
+// Show correct control row based on paused state
+function _updateRunControls() {
+  const running = document.getElementById('run-controls-running');
+  const paused  = document.getElementById('run-controls-paused');
+  if (!running || !paused) return;
+  const isPaused = APP.runSession && APP.runSession.paused;
+  running.style.display = isPaused ? 'none' : 'flex';
+  paused.style.display  = isPaused ? 'flex' : 'none';
 }
 
 // ── STOP ──────────────────────────────────────────────────────────
@@ -1490,9 +1501,8 @@ document.addEventListener('visibilitychange', () => {
       APP.runSession.paused   = true;
       APP.runSession.pausedAt = Date.now();
       _saveRunSession();
-      // Update pause button UI if visible
-      const btn = document.getElementById('pause-run-btn');
-      if (btn) btn.textContent = '▶ Resume';
+      // Update controls UI if visible
+      _updateRunControls();
     }
     return;
   }
@@ -1509,8 +1519,7 @@ document.addEventListener('visibilitychange', () => {
     APP.runSession.pausedAt = null;
     APP.runSession.paused   = false;
     _saveRunSession();
-    const btn = document.getElementById('pause-run-btn');
-    if (btn) btn.textContent = '⏸ Pause';
+    _updateRunControls();
     showToast('GPS resumed 📍', 'success');
   }
 
