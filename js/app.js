@@ -710,11 +710,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // Render immediately from local data
     initDashboard();
 
-    // Check if user is mid-onboarding — if so resume onboarding instead of dashboard
-    const onboard = Store.get('ff_onboard_' + session.id);
-    const onboardComplete = onboard && onboard.date;
-    if (!onboardComplete && session.role !== 'ADMIN') {
-      // Onboarding not completed — resume it
+    // Check if user needs onboarding — use multiple signals to avoid false positives
+    const onboard      = Store.get('ff_onboard_' + session.id);
+    const hasRunLogs   = Store.getUserRunLogs(session.id).length > 0;
+    const hasWorkouts  = Store.getUserLogs(session.id).length > 0;
+    const hasOnboard   = onboard && (onboard.date || onboard.goal || onboard.modules);
+    const isOldUser    = session.isFirstLogin === false || hasRunLogs || hasWorkouts;
+    // Only send to onboarding if: no onboarding record AND no logs AND not an old user
+    const needsOnboarding = !hasOnboard && !isOldUser;
+    if (needsOnboarding && session.role !== 'ADMIN') {
       if (typeof startOnboarding === 'function') {
         setTimeout(() => startOnboarding(), 100);
       }
