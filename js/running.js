@@ -113,15 +113,95 @@ window.addEventListener('appinstalled', () => {
 function selectActivityType(type, el) {
   _activityType = type;
   document.querySelectorAll('.activity-pill').forEach(p => p.classList.remove('active'));
-  el.classList.add('active');
+  if (el) el.classList.add('active');
+  // Sync pill when called without el (e.g. from swipe)
+  if (!el) {
+    const pill = document.querySelector(`.activity-pill[data-type="${type}"]`);
+    if (pill) pill.classList.add('active');
+  }
   const meta = ACTIVITY_META[type];
   const emojiEl = document.getElementById('run-idle-emoji');
   const labelEl = document.getElementById('run-idle-label');
   if (emojiEl) emojiEl.textContent = meta.emoji;
   if (labelEl) labelEl.textContent = 'START A ' + meta.label.toUpperCase();
+  _syncSwipeDots(type);
 }
 
-// ── LEAFLET MAP INSTANCES ─────────────────────────────────────────
+// ── SWIPE DOTS SYNC ───────────────────────────────────────────────
+const _ACTIVITY_ORDER = ['run', 'walk', 'cycle'];
+
+function _syncSwipeDots(type) {
+  document.querySelectorAll('.run-dot').forEach(dot => {
+    const isActive = dot.dataset.type === type;
+    dot.style.width      = isActive ? '10px' : '6px';
+    dot.style.height     = isActive ? '10px' : '6px';
+    dot.style.background = isActive ? 'var(--g4)' : 'rgba(255,255,255,0.2)';
+  });
+  // Show/hide side arrows based on position
+  const idx = _ACTIVITY_ORDER.indexOf(type);
+  const arrowL = document.getElementById('run-swipe-arrow-l');
+  const arrowR = document.getElementById('run-swipe-arrow-r');
+  if (arrowL) arrowL.style.color = idx > 0 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.08)';
+  if (arrowR) arrowR.style.color = idx < _ACTIVITY_ORDER.length - 1 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.08)';
+}
+
+// ── CARD SWIPE INIT ───────────────────────────────────────────────
+// Attaches touch swipe detection to the start card so users can
+// swipe left (run→walk→cycle) or right (cycle→walk→run) to change
+// the activity type without touching the pills.
+// stopPropagation prevents the global goBack() swipe from firing.
+let _cardSwipeInited = false;
+
+function _initCardSwipe() {
+  if (_cardSwipeInited) return;
+  const card = document.getElementById('run-start-card');
+  if (!card) return;
+  _cardSwipeInited = true;
+
+  let _csx = 0, _csy = 0, _cMaxDy = 0;
+
+  card.addEventListener('touchstart', e => {
+    _csx    = e.touches[0].clientX;
+    _csy    = e.touches[0].clientY;
+    _cMaxDy = 0;
+  }, { passive: true });
+
+  card.addEventListener('touchmove', e => {
+    const dy = Math.abs(e.touches[0].clientY - _csy);
+    if (dy > _cMaxDy) _cMaxDy = dy;
+  }, { passive: true });
+
+  card.addEventListener('touchend', e => {
+    const dx  = e.changedTouches[0].clientX - _csx;
+    const dy  = Math.abs(e.changedTouches[0].clientY - _csy);
+    const adx = Math.abs(dx);
+
+    // Must be clearly horizontal: >50px dx, dx > dy*1.5, max vertical drift <40px
+    if (adx < 50 || _cMaxDy > 40 || adx < dy * 1.5) return;
+
+    // Stop propagation so the global goBack() swipe doesn't also fire
+    e.stopPropagation();
+
+    const idx     = _ACTIVITY_ORDER.indexOf(_activityType);
+    let   nextIdx = idx;
+    if (dx < 0) nextIdx = Math.min(idx + 1, _ACTIVITY_ORDER.length - 1); // swipe left → next
+    else        nextIdx = Math.max(idx - 1, 0);                           // swipe right → prev
+
+    if (nextIdx === idx) return; // already at the edge — do nothing
+
+    // Animate the card: quick slide-fade and back
+    card.style.transition = 'transform .15s ease, opacity .15s ease';
+    card.style.transform  = dx < 0 ? 'translateX(-18px)' : 'translateX(18px)';
+    card.style.opacity    = '0.6';
+    setTimeout(() => {
+      selectActivityType(_ACTIVITY_ORDER[nextIdx], null);
+      card.style.transition = 'transform .15s ease, opacity .15s ease';
+      card.style.transform  = 'translateX(0)';
+      card.style.opacity    = '1';
+      setTimeout(() => { card.style.transition = ''; }, 160);
+    }, 130);
+  });
+}
 let _liveMap      = null;
 let _livePolyline = null;
 let _liveMarker   = null;
@@ -534,6 +614,7 @@ function initRunningPage() {
 
   renderRunningTabs('log');
   renderRunHistory();
+  _initCardSwipe();  // attach swipe-to-change-activity on the start card
 }
 
 function renderRunningTabs(tab) {
@@ -1485,6 +1566,7 @@ function discardRun() {
   const labelEl = document.getElementById('run-idle-label');
   if (emojiEl) emojiEl.textContent = '🏃';
   if (labelEl) labelEl.textContent = 'START A RUN';
+  _syncSwipeDots('run');
 
   document.getElementById('run-summary')?.classList.add('hidden');
   document.getElementById('run-save-screen')?.classList.add('hidden');
