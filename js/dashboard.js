@@ -2372,7 +2372,7 @@ function renderProfilePage() {
       <button class="btn btn-ghost btn-full" style="text-align:left;justify-content:flex-start;gap:12px"
         onclick="openChangePasswordModal()">🔑 Change Password</button>
       <button class="btn btn-ghost btn-full" style="text-align:left;justify-content:flex-start;gap:12px"
-        onclick="openFeedbackModal()">💬 Send Feedback</button>
+        onclick="openFeedbackModal()">💬 Feedback on App</button>
       <button class="btn btn-ghost btn-full" style="text-align:left;justify-content:flex-start;gap:12px;color:#ef9a9a"
         onclick="logout()">🚪 Sign Out</button>
     </div>
@@ -2555,10 +2555,102 @@ function saveBodyStatsFromModal() {
   renderProfilePage();
 }
 
+// ── FEEDBACK MODAL — history + new form ──────────────────────────
 function openFeedbackModal() {
   const menu = document.getElementById('profile-menu');
   if (menu) menu.style.display = 'none';
+  // Always open on history view first
+  _showFeedbackHistory();
   openModal('modal-feedback');
+}
+
+function _showFeedbackHistory() {
+  const histView = document.getElementById('fb-view-history');
+  const formView = document.getElementById('fb-view-form');
+  if (histView) histView.style.display = '';
+  if (formView) formView.style.display = 'none';
+  _loadUserFeedbackHistory();
+}
+
+function _showFeedbackForm() {
+  const histView = document.getElementById('fb-view-history');
+  const formView = document.getElementById('fb-view-form');
+  if (histView) histView.style.display = 'none';
+  if (formView) formView.style.display = '';
+  // Reset form state
+  const msgEl  = document.getElementById('feedback-message');
+  const catEl  = document.getElementById('feedback-category');
+  const errEl  = document.getElementById('feedback-error');
+  if (msgEl)  msgEl.value   = '';
+  if (catEl)  catEl.value   = 'General';
+  if (errEl)  errEl.textContent = '';
+  window._currentRating = 0;
+  document.querySelectorAll('.star').forEach(s => s.style.opacity = '0.35');
+}
+
+async function _loadUserFeedbackHistory() {
+  const container = document.getElementById('fb-history-list');
+  if (!container) return;
+  const user = APP.currentUser;
+  if (!user) return;
+
+  container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text3)"><div class="loader" style="margin:0 auto 10px"></div>Loading…</div>';
+
+  const res = await Sheets.get('getFeedback', { userId: user.id });
+
+  if (!res?.success || !res.feedback?.length) {
+    container.innerHTML = `
+      <div style="text-align:center;padding:28px 16px;color:var(--text3)">
+        <div style="font-size:36px;margin-bottom:10px">💬</div>
+        <div style="font-size:14px;margin-bottom:6px;font-weight:600">No feedback yet</div>
+        <div style="font-size:12px">Tap "+ New" to share your thoughts with the team.</div>
+      </div>`;
+    return;
+  }
+
+  // Track which replies are newly seen — store seen feedbackIds in localStorage
+  const seenKey  = 'ff_fb_seen_' + user.id;
+  const seenSet  = new Set(Store.get(seenKey, []));
+  let   hasNew   = false;
+
+  container.innerHTML = res.feedback.map(f => {
+    const hasReply  = !!f.adminReply;
+    const isNewReply = hasReply && !seenSet.has(f.id);
+    if (isNewReply) hasNew = true;
+    const stars     = '⭐'.repeat(Math.min(parseInt(f.rating) || 0, 5));
+    const safeMsg   = (f.message   || '').replace(/</g, '&lt;');
+    const safeReply = (f.adminReply || '').replace(/</g, '&lt;');
+    const safeAt    = f.adminReplyAt ? new Date(f.adminReplyAt).toLocaleDateString('en-IN', { day:'numeric', month:'short' }) : '';
+
+    return `
+      <div class="card card-sm" style="margin-bottom:12px;${isNewReply ? 'border-left:3px solid var(--g4)' : ''}">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="display:flex;align-items:center;gap:6px">
+            ${isNewReply ? '<span style="width:8px;height:8px;border-radius:50%;background:var(--g4);display:inline-block"></span>' : ''}
+            <span class="badge badge-blue" style="font-size:10px">${f.category || 'General'}</span>
+            ${stars ? `<span style="font-size:11px">${stars}</span>` : ''}
+          </div>
+          <span style="font-size:11px;color:var(--text3)">${f.date || ''}</span>
+        </div>
+        <div style="font-size:13px;color:var(--text1);line-height:1.55;padding:8px 10px;background:var(--bg3);border-radius:8px;margin-bottom:${hasReply ? '10px' : '0'}">${safeMsg}</div>
+        ${hasReply ? `
+          <div style="font-size:12px;background:rgba(46,125,70,0.1);border:1px solid rgba(46,125,70,0.25);border-radius:8px;padding:8px 10px">
+            <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+              <span style="font-size:13px">✉️</span>
+              <span style="font-weight:700;font-size:12px;color:var(--g5)">Reply from FitFlow Team</span>
+              ${safeAt ? `<span style="font-size:10px;color:var(--text3);margin-left:auto">${safeAt}</span>` : ''}
+            </div>
+            <div style="font-size:13px;color:var(--text1);line-height:1.55">${safeReply}</div>
+          </div>` : `
+          <div style="font-size:11px;color:var(--text3);margin-top:6px">⏳ Awaiting reply from team</div>`}
+      </div>`;
+  }).join('');
+
+  // Mark all shown replies as seen
+  if (hasNew) {
+    res.feedback.forEach(f => { if (f.adminReply) seenSet.add(f.id); });
+    Store.set(seenKey, [...seenSet]);
+  }
 }
 
 async function toggleNotificationSetting() {
