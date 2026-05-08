@@ -2032,15 +2032,15 @@ window.addEventListener('DOMContentLoaded', function() {
         </div>
 
         <!-- Start card -->
-        <div id="run-start-card" class="card" style="text-align:center;padding:32px 24px;background:linear-gradient(135deg,var(--bg2),var(--surface));margin-bottom:14px;position:relative;overflow:hidden;user-select:none">
+        <div id="run-start-card" class="card" style="text-align:center;padding:48px 24px 40px;background:linear-gradient(135deg,var(--bg2),var(--surface));margin-bottom:14px;position:relative;overflow:hidden;user-select:none">
           <!-- Swipe hint arrows — dim at edges, visible when swipe is possible -->
           <div style="display:flex;align-items:center;justify-content:space-between;position:absolute;top:50%;left:12px;right:12px;transform:translateY(-50%);pointer-events:none">
             <span id="run-swipe-arrow-l" style="font-size:20px;color:rgba(255,255,255,0.08);transition:color .2s">‹</span>
             <span id="run-swipe-arrow-r" style="font-size:20px;color:rgba(255,255,255,0.3);transition:color .2s">›</span>
           </div>
-          <div style="font-size:56px;margin-bottom:12px" id="run-idle-emoji">🏃</div>
-          <div class="display" style="font-size:38px;color:var(--g5);margin-bottom:6px" id="run-idle-label">START A RUN</div>
-          <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.5">GPS-tracked distance, live map, real-time pace & speed.</div>
+          <div style="font-size:72px;margin-bottom:14px" id="run-idle-emoji">🏃</div>
+          <div class="display" style="font-size:44px;color:var(--g5);margin-bottom:8px" id="run-idle-label">START A RUN</div>
+          <div style="font-size:14px;color:var(--text2);margin-bottom:20px;line-height:1.6">GPS-tracked distance, live map, real-time pace & speed.</div>
           <!-- Position dots: active dot is larger + green, inactive are small + grey -->
           <div id="run-swipe-dots" style="display:flex;justify-content:center;align-items:center;gap:7px;margin-bottom:18px">
             <span class="run-dot" data-type="run"   style="width:10px;height:10px;border-radius:50%;background:var(--g4);transition:all .25s"></span>
@@ -2050,8 +2050,14 @@ window.addEventListener('DOMContentLoaded', function() {
           <button class="btn btn-primary btn-full btn-lg" onclick="startRun()">▶ Start</button>
         </div>
 
-        <div class="card card-sm" style="background:rgba(240,192,64,0.06);border-color:rgba(240,192,64,0.2);margin-bottom:10px">
-          <div style="font-size:13px;color:var(--accent)">📍 Allow location access when prompted. Works in time-only mode without GPS.</div>
+        <div class="card card-sm" style="background:rgba(239,83,80,0.06);border-color:rgba(239,83,80,0.25);margin-bottom:10px">
+          <div style="display:flex;align-items:flex-start;gap:10px">
+            <span style="font-size:18px;flex-shrink:0">📵</span>
+            <div style="font-size:13px;color:#ef9a9a;line-height:1.6">
+              <strong style="color:#ef5350">Keep your screen ON</strong> during activity.
+              Locking the phone interrupts GPS and stops recording your route.
+            </div>
+          </div>
         </div>
       </div>
 
