@@ -317,9 +317,48 @@ async function _syncContent() {
         _applyToAppData(key, value);
       }
     });
+    // Check if admin has triggered a force refresh for all users
+    _checkForceReload(res.content);
   } catch (e) {
     console.warn('Content sync skipped:', e.message);
   }
+}
+
+// ── ADMIN-TRIGGERED FORCE RELOAD ──────────────────────────────────
+// Admin writes force_reload_ts to Sheets → detected here on every sync
+// → shows a toast and reloads the app so users get the latest version
+// automatically, without needing to clear cache manually.
+function _checkForceReload(content) {
+  try {
+    const serverTs = content['force_reload_ts'];
+    if (!serverTs) return;
+    const localTs = Store.get('ff_force_reload_ts', 0);
+    // Already acted on this reload request
+    if (serverTs <= localTs) return;
+    // Save the new ts FIRST so if reload fails we don't loop
+    Store.set('ff_force_reload_ts', serverTs);
+    // Small delay so the current sync finishes cleanly
+    setTimeout(_doForceUpdate, 1200);
+  } catch (e) {
+    console.warn('Force reload check failed:', e.message);
+  }
+}
+
+async function _doForceUpdate() {
+  try {
+    // Tell the SW to check for a new version of sw.js
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      for (const reg of regs) {
+        await reg.update().catch(() => {});
+      }
+    }
+  } catch (e) { /* non-critical */ }
+
+  if (typeof showToast === 'function') {
+    showToast('🔄 App update available — refreshing…', 'info');
+  }
+  setTimeout(() => window.location.reload(), 1500);
 }
 
 async function _syncUserLogs(userId) {
