@@ -99,6 +99,7 @@ function getModuleOrder(userId) {
     ? onboard.modules
     : null;  // null = show all (no onboarding completed or all selected)
 
+  // Safety: if saved list is empty but selectedIds is also null, show all modules
   if (saved && Array.isArray(saved) && saved.length > 0) {
     // Restore saved order; add any new modules (e.g. core) not yet in saved list
     let ordered = saved.map(id => ALL_MODULES.find(m => m.id === id)).filter(Boolean);
@@ -106,6 +107,9 @@ function getModuleOrder(userId) {
     ordered = [...ordered, ...missing];
     // Apply selection filter if onboarding was done
     if (selectedIds) return ordered.filter(m => selectedIds.includes(m.id));
+    // Safety: if ordered has less than 3 real modules, reset to show all
+    const realModules = ordered.filter(m => !m.id.startsWith('custom_') && m.id !== 'weekly_report');
+    if (realModules.length === 0) return ALL_MODULES;
     return ordered;
   }
 
