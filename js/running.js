@@ -4222,19 +4222,6 @@ function _cardEditorRedraw() {
     ctx.translate(cx, cy);
     ctx.rotate(rot);
     ctx.drawImage(tmp, -elW / 2, -elH / 2);
-
-    // Selection outline + resize dot
-    if (_cardEditor.selected === key) {
-      ctx.strokeStyle = 'rgba(74,222,128,0.9)';
-      ctx.lineWidth   = 2;
-      ctx.setLineDash([Math.round(W*0.015), Math.round(W*0.01)]);
-      ctx.strokeRect(-elW/2, -elH/2, elW, elH);
-      ctx.setLineDash([]);
-      // Resize dot bottom-right
-      ctx.fillStyle = key === 'logo' ? '#f0c040' : '#4ade80';
-      ctx.beginPath(); ctx.arc(elW/2, elH/2, Math.round(W*0.018), 0, Math.PI*2); ctx.fill();
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
-    }
     ctx.restore();
   }
 }
@@ -4584,7 +4571,8 @@ function _closeCardEditor() {
   _cardEditor.active = false;
 }
 
-function _exportCardFromEditor() {
+function _exportCardFromEditor(mode) {
+  // mode: 'save' = direct download/gallery, 'share' = share sheet (default)
   // Export at minimum 1080px on the long edge, always at 2× display resolution for retina quality
   const dispW  = _cardEditor.dispW  || _cardEditor.bgW;
   const dispH  = _cardEditor.dispH  || _cardEditor.bgH;
@@ -4647,7 +4635,13 @@ function _exportCardFromEditor() {
   const fname = 'fitflow-activity-' + Date.now() + '.png';
   cv.toBlob(blob => {
     if (!blob) { showToast('Export failed', 'error'); return; }
-    _saveOrShareBlob(blob, fname);
+    if (mode === 'save') {
+      // Direct save — bypass share sheet entirely
+      _triggerBlobDownload(blob, fname);
+    } else {
+      // Share sheet — falls back to download if share not supported
+      _saveOrShareBlob(blob, fname);
+    }
   }, 'image/png', 1.0);
 }
 
