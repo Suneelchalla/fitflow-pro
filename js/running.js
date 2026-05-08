@@ -63,8 +63,11 @@ function switchMapStyle(style, btn) {
   // Update live map tile layer
   if (_liveMap && _liveMapTileLayer) {
     _liveMap.removeLayer(_liveMapTileLayer);
-    _liveMapTileLayer = L.tileLayer(_getTileLayer(style), { maxZoom: 19 });
+    _liveMapTileLayer = L.tileLayer(_getTileLayer(style), {
+      maxZoom: 19, keepBuffer: 4, updateWhenIdle: false, updateWhenZooming: true,
+    });
     _liveMapTileLayer.addTo(_liveMap);
+    setTimeout(() => { if (_liveMap) _liveMap.invalidateSize({ animate: false }); }, 100);
   }
 }
 
@@ -114,7 +117,7 @@ function selectActivityType(type, el) {
   _activityType = type;
   document.querySelectorAll('.activity-pill').forEach(p => p.classList.remove('active'));
   if (el) el.classList.add('active');
-  // Sync pill when called without el (e.g. from swipe)
+  // Sync pill when called without el (e.g. from card swipe)
   if (!el) {
     const pill = document.querySelector(`.activity-pill[data-type="${type}"]`);
     if (pill) pill.classList.add('active');
@@ -137,19 +140,18 @@ function _syncSwipeDots(type) {
     dot.style.height     = isActive ? '10px' : '6px';
     dot.style.background = isActive ? 'var(--g4)' : 'rgba(255,255,255,0.2)';
   });
-  // Show/hide side arrows based on position
-  const idx = _ACTIVITY_ORDER.indexOf(type);
+  // Dim side arrows when already at an edge
+  const idx    = _ACTIVITY_ORDER.indexOf(type);
   const arrowL = document.getElementById('run-swipe-arrow-l');
   const arrowR = document.getElementById('run-swipe-arrow-r');
-  if (arrowL) arrowL.style.color = idx > 0 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.08)';
-  if (arrowR) arrowR.style.color = idx < _ACTIVITY_ORDER.length - 1 ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.08)';
+  if (arrowL) arrowL.style.color = idx > 0                            ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.08)';
+  if (arrowR) arrowR.style.color = idx < _ACTIVITY_ORDER.length - 1  ? 'rgba(255,255,255,0.3)' : 'rgba(255,255,255,0.08)';
 }
 
 // ── CARD SWIPE INIT ───────────────────────────────────────────────
-// Attaches touch swipe detection to the start card so users can
-// swipe left (run→walk→cycle) or right (cycle→walk→run) to change
-// the activity type without touching the pills.
-// stopPropagation prevents the global goBack() swipe from firing.
+// Swipe LEFT on the start card  → run → walk → cycle (stops at cycle)
+// Swipe RIGHT on the start card → cycle → walk → run (stops at run)
+// stopPropagation prevents the global goBack() swipe in app.js from firing.
 let _cardSwipeInited = false;
 
 function _initCardSwipe() {
@@ -176,7 +178,7 @@ function _initCardSwipe() {
     const dy  = Math.abs(e.changedTouches[0].clientY - _csy);
     const adx = Math.abs(dx);
 
-    // Must be clearly horizontal: >50px dx, dx > dy*1.5, max vertical drift <40px
+    // Must be clearly horizontal: >50px dx, dx dominates dy, max vertical drift <40px
     if (adx < 50 || _cMaxDy > 40 || adx < dy * 1.5) return;
 
     // Stop propagation so the global goBack() swipe doesn't also fire
@@ -184,20 +186,19 @@ function _initCardSwipe() {
 
     const idx     = _ACTIVITY_ORDER.indexOf(_activityType);
     let   nextIdx = idx;
-    if (dx < 0) nextIdx = Math.min(idx + 1, _ACTIVITY_ORDER.length - 1); // swipe left → next
+    if (dx < 0) nextIdx = Math.min(idx + 1, _ACTIVITY_ORDER.length - 1); // swipe left  → next
     else        nextIdx = Math.max(idx - 1, 0);                           // swipe right → prev
 
-    if (nextIdx === idx) return; // already at the edge — do nothing
+    if (nextIdx === idx) return; // already at edge — do nothing
 
-    // Animate the card: quick slide-fade and back
+    // Quick slide-fade animation on the card for tactile feedback
     card.style.transition = 'transform .15s ease, opacity .15s ease';
     card.style.transform  = dx < 0 ? 'translateX(-18px)' : 'translateX(18px)';
     card.style.opacity    = '0.6';
     setTimeout(() => {
       selectActivityType(_ACTIVITY_ORDER[nextIdx], null);
-      card.style.transition = 'transform .15s ease, opacity .15s ease';
-      card.style.transform  = 'translateX(0)';
-      card.style.opacity    = '1';
+      card.style.transform = 'translateX(0)';
+      card.style.opacity   = '1';
       setTimeout(() => { card.style.transition = ''; }, 160);
     }, 130);
   });
@@ -207,6 +208,7 @@ let _livePolyline = null;
 let _liveMarker   = null;
 let _sumMap       = null;
 let _userPanned   = false;   // true when user has manually panned — stops auto-recentering
+let _lastMapPanTs = 0;       // timestamp of last animated setView — throttles pan to 1/sec
 let _mapBearing   = 0;       // current map rotation angle in degrees (0 = north up)
 let _bearingHistory = [];    // rolling window of recent bearings for smoothing
 let _rotationEnabled = true; // false when user has manually panned (disables auto-rotate)
@@ -614,7 +616,7 @@ function initRunningPage() {
 
   renderRunningTabs('log');
   renderRunHistory();
-  _initCardSwipe();  // attach swipe-to-change-activity on the start card
+  _initCardSwipe();  // attach swipe-to-change-activity on the start card (once only)
 }
 
 function renderRunningTabs(tab) {
@@ -786,15 +788,21 @@ function _initLiveMap() {
     };
     styleCtrl.addTo(_liveMap);
 
-    _liveMapTileLayer = L.tileLayer(_getTileLayer(_mapStyle), { maxZoom: 19 });
+    _liveMapTileLayer = L.tileLayer(_getTileLayer(_mapStyle), {
+      maxZoom:           19,
+      keepBuffer:        4,   // preload 4 tiles beyond viewport — prevents blank on zoom
+      updateWhenIdle:    false,
+      updateWhenZooming: true,
+    });
     _liveMapTileLayer.addTo(_liveMap);
 
     _livePolyline = L.polyline([], {
-      color:   '#2d9e5a',
-      weight:  4,
-      opacity: 1.0,
-      lineCap: 'round',
-      lineJoin:'round',
+      color:        '#2d9e5a',
+      weight:       5,      // was 4 — thicker line is more visible and looks cleaner
+      opacity:      1.0,
+      lineCap:      'round',
+      lineJoin:     'round',
+      smoothFactor: 1.0,    // Leaflet display simplification — removes visual pixel jitter
     }).addTo(_liveMap);
 
     const icon = L.divIcon({
@@ -813,6 +821,11 @@ function _initLiveMap() {
 
     // Attach two-finger rotation gesture to map container
     _attachMapRotationGesture(container);
+
+    // Tell Leaflet the real container size now that the div is visible.
+    // Without this, Leaflet may have measured 0×0 (div was hidden) and not
+    // render tiles correctly — causing the blank white area on first zoom.
+    setTimeout(() => { if (_liveMap) _liveMap.invalidateSize({ animate: false }); }, 150);
 
     // Always get real current position to centre map correctly on start
     // Even if we have cached coords (resumed session), re-centre to latest location
@@ -867,19 +880,25 @@ function _updateLiveMap(lat, lon) {
 
   // Auto-center: keep user dot in lower-third of screen (like Google Maps / Strava)
   // offset centre point slightly below middle so more road ahead is visible
+  // Throttle to once per second — GPS can fire several times/sec and queued
+  // animate:true calls backlog Leaflet's animation pipeline causing visible lag.
   if (!_userPanned) {
-    if (_rotationEnabled) {
-      // In rotation mode: use panTo with offset so user dot sits at 65% down screen
-      const size    = _liveMap.getSize();
-      const mapCentre = _liveMap.project(pos, _liveMap.getZoom());
-      // Shift centre point up by 15% of map height so user dot is lower on screen
-      const offsetCentre = _liveMap.unproject(
-        [mapCentre.x, mapCentre.y + size.y * 0.15],
-        _liveMap.getZoom()
-      );
-      _liveMap.setView(offsetCentre, _liveMap.getZoom(), { animate: true, duration: 0.5, noMoveStart: true });
-    } else {
-      _liveMap.setView(pos, _liveMap.getZoom(), { animate: true, duration: 0.6 });
+    const nowTs = Date.now();
+    if (nowTs - _lastMapPanTs >= 950) {  // max 1 animated pan per second
+      _lastMapPanTs = nowTs;
+      if (_rotationEnabled) {
+        // In rotation mode: use panTo with offset so user dot sits at 65% down screen
+        const size    = _liveMap.getSize();
+        const mapCentre = _liveMap.project(pos, _liveMap.getZoom());
+        // Shift centre point up by 15% of map height so user dot is lower on screen
+        const offsetCentre = _liveMap.unproject(
+          [mapCentre.x, mapCentre.y + size.y * 0.15],
+          _liveMap.getZoom()
+        );
+        _liveMap.setView(offsetCentre, _liveMap.getZoom(), { animate: true, duration: 0.5, noMoveStart: true });
+      } else {
+        _liveMap.setView(pos, _liveMap.getZoom(), { animate: true, duration: 0.6 });
+      }
     }
   }
 
@@ -893,6 +912,7 @@ function _destroyLiveMap() {
   _mapBearing      = 0;
   _bearingHistory  = [];
   _rotationEnabled = true;
+  _lastMapPanTs    = 0;
 }
 
 // ── GPS BADGE UPDATE ──────────────────────────────────────────────
@@ -1148,6 +1168,9 @@ function _doStartRun() {
   function _activateRunUI() {
     document.getElementById('run-idle').style.display = 'none';
     document.getElementById('run-active').classList.remove('hidden');
+    // Always force-sync the control buttons to the current session state so the UI
+    // is correct regardless of any prior display state (fixes Pause+Stop both showing)
+    _updateRunControls();
     _startRunTimerLoop();
     _initLiveMap();
     startGPS();          // always start watchPosition — GPS may warm up after UI shows
