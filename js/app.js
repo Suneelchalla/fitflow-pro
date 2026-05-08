@@ -706,6 +706,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // Render immediately from local data
     initDashboard();
 
+    // Check if user is mid-onboarding — if so resume onboarding instead of dashboard
+    const onboard = Store.get('ff_onboard_' + session.id);
+    const onboardComplete = onboard && onboard.date;
+    if (!onboardComplete && session.role !== 'ADMIN') {
+      // Onboarding not completed — resume it
+      if (typeof startOnboarding === 'function') {
+        setTimeout(() => startOnboarding(), 100);
+      }
+      return;
+    }
+
     if (session.role === 'ADMIN') {
       renderAdminPanel();
     } else if (targetPage === 'page-quote') {
