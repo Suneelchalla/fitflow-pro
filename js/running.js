@@ -2580,13 +2580,23 @@ function _renderKmSplits(coords, totalDistance, color) {
 
 // ── DELETE RUN LOG ───────────────────────────────────────────────
 function confirmDeleteRunLog() {
-  if (!_currentDetailRunId) return;
+  // Get ID from _currentDetailRunId, or fall back to the full log object
+  const logId = _currentDetailRunId
+    || window._currentRunDetailLog?.id
+    || window._currentRunDetailLog?.timestamp
+    || null;
+  if (!logId) {
+    showToast('Could not identify activity to delete', 'error');
+    return;
+  }
+  // Keep _currentDetailRunId in sync
+  _currentDetailRunId = logId;
   showConfirm(
     '🗑️ Delete Activity',
     'This will permanently delete this activity from your history and cloud backup. This cannot be undone.',
     'Delete',
     'Cancel',
-    () => _deleteRunLog(_currentDetailRunId),
+    () => _deleteRunLog(logId),
     null,
     'danger'
   );
@@ -2765,7 +2775,7 @@ function _showRunDetail(idx) {
   const r    = logs[idx];
   if (!r) return;
   // Track which run is open so delete knows which one to remove
-  _currentDetailRunId = r.id || r.timestamp || null;
+  _currentDetailRunId = r.id || r.timestamp || r.date + '_' + (r.distance||0) || null;
 
   // Store full log for card generation
   window._currentRunDetailId  = r.id;
