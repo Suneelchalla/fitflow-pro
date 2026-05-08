@@ -718,15 +718,12 @@ function _initLiveMap() {
     const icon = L.divIcon({
       className: '',
       html: `<div style="
-        width:0;height:0;
-        border-left:9px solid transparent;
-        border-right:9px solid transparent;
-        border-bottom:26px solid #2d9e5a;
-        filter:drop-shadow(0 2px 4px rgba(0,0,0,0.6));
-        transform-origin:50% 70%;
+        width:14px;height:14px;border-radius:50%;
+        background:#2d9e5a;border:3px solid #fff;
+        box-shadow:0 0 0 3px rgba(45,158,90,0.35);
       "></div>`,
-      iconSize:   [18, 26],
-      iconAnchor: [9, 18],
+      iconSize:   [14, 14],
+      iconAnchor: [7, 7],
     });
     _liveMarker = L.marker(startCoord[0] !== 0 ? startCoord : [0,0], { icon, zIndexOffset: 1000, interactive: false }).addTo(_liveMap);
 
