@@ -2146,11 +2146,20 @@ window.addEventListener('DOMContentLoaded', function() {
           </div>
         </div>
 
-        <!-- Pause / Stop buttons -->
-        <div style="display:flex;gap:10px">
-          <button id="pause-run-btn" class="btn btn-outline btn-full" onclick="togglePauseRun()"
-            style="border-color:rgba(255,255,255,0.3);color:#fff;background:rgba(255,255,255,0.08)">⏸ Pause</button>
-          <button class="btn btn-danger btn-full" onclick="stopRun()">⏹ Stop</button>
+        <!-- Controls: Pause only while running. Resume+Finish when paused. -->
+        <div id="run-controls-running" style="display:flex">
+          <button id="pause-run-btn" class="btn btn-full" onclick="togglePauseRun()"
+            style="border:1px solid rgba(255,255,255,0.25);color:#fff;
+              background:rgba(255,255,255,0.08);font-size:16px;font-weight:700;
+              padding:14px;border-radius:14px">⏸ Pause</button>
+        </div>
+        <div id="run-controls-paused" style="display:none;gap:10px">
+          <button class="btn btn-full" onclick="togglePauseRun()"
+            style="border:1px solid #43a05a;color:#43d17a;background:rgba(67,160,90,0.15);
+              font-size:16px;font-weight:700;padding:14px;border-radius:14px">▶ Resume</button>
+          <button class="btn btn-full" onclick="stopRun()"
+            style="border:1px solid #e53935;color:#fff;background:#e53935;
+              font-size:16px;font-weight:700;padding:14px;border-radius:14px">🏁 Finish</button>
         </div>
       </div>
     </div>
