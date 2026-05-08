@@ -2032,10 +2032,21 @@ window.addEventListener('DOMContentLoaded', function() {
         </div>
 
         <!-- Start card -->
-        <div class="card" style="text-align:center;padding:32px 24px;background:linear-gradient(135deg,var(--bg2),var(--surface));margin-bottom:14px">
+        <div id="run-start-card" class="card" style="text-align:center;padding:32px 24px;background:linear-gradient(135deg,var(--bg2),var(--surface));margin-bottom:14px;position:relative;overflow:hidden;user-select:none">
+          <!-- Swipe hint arrows — dim at edges, visible when swipe is possible -->
+          <div style="display:flex;align-items:center;justify-content:space-between;position:absolute;top:50%;left:12px;right:12px;transform:translateY(-50%);pointer-events:none">
+            <span id="run-swipe-arrow-l" style="font-size:20px;color:rgba(255,255,255,0.08);transition:color .2s">‹</span>
+            <span id="run-swipe-arrow-r" style="font-size:20px;color:rgba(255,255,255,0.3);transition:color .2s">›</span>
+          </div>
           <div style="font-size:56px;margin-bottom:12px" id="run-idle-emoji">🏃</div>
           <div class="display" style="font-size:38px;color:var(--g5);margin-bottom:6px" id="run-idle-label">START A RUN</div>
-          <div style="font-size:13px;color:var(--text2);margin-bottom:20px;line-height:1.5">GPS-tracked distance, live map, real-time pace & speed.</div>
+          <div style="font-size:13px;color:var(--text2);margin-bottom:16px;line-height:1.5">GPS-tracked distance, live map, real-time pace & speed.</div>
+          <!-- Position dots: active dot is larger + green, inactive are small + grey -->
+          <div id="run-swipe-dots" style="display:flex;justify-content:center;align-items:center;gap:7px;margin-bottom:18px">
+            <span class="run-dot" data-type="run"   style="width:10px;height:10px;border-radius:50%;background:var(--g4);transition:all .25s"></span>
+            <span class="run-dot" data-type="walk"  style="width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.2);transition:all .25s"></span>
+            <span class="run-dot" data-type="cycle" style="width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,0.2);transition:all .25s"></span>
+          </div>
           <button class="btn btn-primary btn-full btn-lg" onclick="startRun()">▶ Start</button>
         </div>
 
@@ -2090,7 +2101,7 @@ window.addEventListener('DOMContentLoaded', function() {
   </div><!-- /#run-idle -->
 
   <!-- ═══ ACTIVE RUN STATE — full-screen live map ══════════════════ -->
-  <div id="run-active" class="hidden" style="display:flex;flex-direction:column;flex:1;position:relative;overflow:hidden">
+  <div id="run-active" class="hidden" style="display:flex;flex-direction:column;flex:1;position:relative">
 
     <!-- Live map — fills entire background; pointer-events managed via CSS -->
     <div id="run-live-map" style="position:absolute;inset:0;z-index:0"></div>
@@ -2828,12 +2839,12 @@ window.addEventListener('DOMContentLoaded', function() {
 </div>
 
 
-<!-- Feedback Modal -->
+<!-- Feedback Modal — two-view: History + New Form -->
 <div id="modal-feedback" class="modal-overlay">
   <div class="modal-sheet" style="max-height:85vh;display:flex;flex-direction:column">
     <div class="modal-handle"></div>
 
-    <!-- ── VIEW 1: History ── -->
+    <!-- VIEW 1: History (default) -->
     <div id="fb-view-history" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-shrink:0">
         <div class="modal-title" style="margin-bottom:0">💬 Feedback on App</div>
@@ -2847,7 +2858,7 @@ window.addEventListener('DOMContentLoaded', function() {
       </div>
     </div>
 
-    <!-- ── VIEW 2: New Feedback Form ── -->
+    <!-- VIEW 2: New Feedback Form -->
     <div id="fb-view-form" style="display:none">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
         <button onclick="_showFeedbackHistory()" style="background:none;border:none;color:var(--g5);font-size:20px;cursor:pointer;padding:0 4px;line-height:1">‹</button>
@@ -2993,7 +3004,7 @@ function setRating(n) {
   _currentRating = n;
   document.querySelectorAll('.star').forEach((s,i) => s.style.opacity = i < n ? '1' : '0.35');
 }
-// openFeedbackModal is defined in dashboard.js — do not redefine here
+// openFeedbackModal is defined in dashboard.js
 async function submitFeedback() {
   const message  = document.getElementById('feedback-message').value.trim();
   const category = document.getElementById('feedback-category').value;
@@ -3017,7 +3028,6 @@ async function submitFeedback() {
     setTimeout(() => closeModal('modal-feedback'), 2000);
   } else if (res?.success) {
     showToast('Thanks for your feedback! 🙏', 'success');
-    // Go back to history so user can see their submission
     if (typeof _showFeedbackHistory === 'function') _showFeedbackHistory();
   } else {
     errEl.textContent = res?.error || 'Failed to send. Try again.';
