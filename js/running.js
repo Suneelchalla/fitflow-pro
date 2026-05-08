@@ -3572,12 +3572,12 @@ function _drawRouteOnCanvas(ctx, coords, x, y, w, h, color) {
 
   // Glow pass — thick blurred line beneath route for depth
   ctx.strokeStyle = color;
-  ctx.lineWidth   = Math.max(4, Math.round(Math.min(w, h) * 0.018));
+  ctx.lineWidth   = Math.max(6, Math.round(Math.min(w, h) * 0.025));
   ctx.lineCap     = 'round';
   ctx.lineJoin    = 'round';
-  ctx.globalAlpha = 0.25;
+  ctx.globalAlpha = 0.35;
   ctx.shadowColor = color;
-  ctx.shadowBlur  = Math.round(Math.min(w, h) * 0.04);
+  ctx.shadowBlur  = Math.round(Math.min(w, h) * 0.06);
   ctx.beginPath();
   pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.px, p.py) : ctx.lineTo(p.px, p.py));
   ctx.stroke();
@@ -3585,7 +3585,7 @@ function _drawRouteOnCanvas(ctx, coords, x, y, w, h, color) {
   // Main route line — catmull-rom via bezier for smooth curves
   ctx.globalAlpha = 1;
   ctx.shadowBlur  = 0;
-  ctx.lineWidth   = Math.max(3, Math.round(Math.min(w, h) * 0.012));
+  ctx.lineWidth   = Math.max(4, Math.round(Math.min(w, h) * 0.016));
   ctx.beginPath();
   ctx.moveTo(pts[0].px, pts[0].py);
   if (pts.length === 2) {
@@ -3718,12 +3718,14 @@ function openHistoryCardModal(log) {
   _hcmTheme    = 'dark';
 
   // Reset modal state
-  const preview = document.getElementById('hcm-photo-preview');
-  if (preview) {
-    preview.innerHTML = '📷<div style="font-size:9px;color:var(--text3);margin-top:2px">Photo</div>';
-    preview.style.border = '2px dashed var(--border)';
-    preview.style.padding = '';
-    preview.style.overflow = '';
+  const btn = document.querySelector('#history-card-modal button[onclick*="hcm-photo-input"]');
+  if (btn) {
+    btn.innerHTML = `
+      <span style="font-size:18px">🖼</span>
+      <div>
+        <div style="color:var(--text);font-size:13px;font-weight:700">Add Background Photo</div>
+        <div style="color:var(--text3);font-size:11px;margin-top:1px">Gallery</div>
+      </div>`;
   }
   const canvas = document.getElementById('hcm-card-canvas');
   if (canvas) { canvas.style.display = 'none'; }
@@ -3792,16 +3794,15 @@ function _onHcmPhotoSelected(input) {
   reader.onload = ev => {
     _hcmPhotoImg = new Image();
     _hcmPhotoImg.onload = () => {
-      const preview = document.getElementById('hcm-photo-preview');
-      if (preview) {
-        preview.innerHTML = '';
-        preview.style.border = '2px solid var(--g4)';
-        preview.style.padding = '0';
-        preview.style.overflow = 'hidden';
-        const thumb = document.createElement('img');
-        thumb.src = ev.target.result;
-        thumb.style.cssText = 'width:100%;height:100%;object-fit:cover;border-radius:8px';
-        preview.appendChild(thumb);
+      // Update button to show photo name as confirmation
+      const btn = document.querySelector('#history-card-modal button[onclick*="hcm-photo-input"]');
+      if (btn) {
+        btn.innerHTML = `
+          <span style="font-size:18px">✅</span>
+          <div>
+            <div style="color:var(--g5);font-size:13px;font-weight:700">Photo Selected</div>
+            <div style="color:var(--text3);font-size:11px;margin-top:1px">${file.name.length > 28 ? file.name.substring(0,28)+'…' : file.name}</div>
+          </div>`;
       }
       // Auto-regenerate if card already shown
       const canvas = document.getElementById('hcm-card-canvas');
@@ -4232,17 +4233,6 @@ function _drawRouteEl(ctx, W, H) {
   ctx.imageSmoothingEnabled = true;
   ctx.imageSmoothingQuality = 'high';
   if (_cardEditor.routeCoords && _cardEditor.routeCoords.length >= 2) {
-    // Dark background for the route panel so the line pops
-    const r = Math.round(Math.min(W, H) * 0.06);
-    ctx.save();
-    _cardRoundRect(ctx, 0, 0, W, H, r);
-    ctx.fillStyle = 'rgba(5,18,10,0.88)';
-    ctx.fill();
-    _cardRoundRect(ctx, 0, 0, W, H, r);
-    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
-    ctx.lineWidth   = 1;
-    ctx.stroke();
-    ctx.restore();
     _drawRouteOnCanvas(ctx, _cardEditor.routeCoords, 0, 0, W, H, '#2d9e5a');
   }
 }
