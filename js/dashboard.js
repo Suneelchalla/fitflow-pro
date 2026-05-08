@@ -91,32 +91,21 @@ const ALL_MODULES = [
 
 function getModuleOrder(userId) {
   const saved   = Store.get('ff_module_order_' + userId);
-  const onboard = Store.get('ff_onboard_' + userId);
-
-  // Determine which modules user selected during onboarding
-  // If they selected specific modules, only show those (+ any new ones added later)
-  const selectedIds = (onboard?.modules && onboard.modules.length > 0)
-    ? onboard.modules
-    : null;  // null = show all (no onboarding completed or all selected)
-
-  // Safety: if saved list is empty but selectedIds is also null, show all modules
+  // All users always get all modules — no filtering by onboarding selection
   if (saved && Array.isArray(saved) && saved.length > 0) {
-    // Restore saved order; add any new modules (e.g. core) not yet in saved list
+    // Restore saved order; add any new modules not yet in saved list
     let ordered = saved.map(id => ALL_MODULES.find(m => m.id === id)).filter(Boolean);
     const missing = ALL_MODULES.filter(m => !saved.includes(m.id));
     ordered = [...ordered, ...missing];
-    // Apply selection filter if onboarding was done
-    if (selectedIds) return ordered.filter(m => selectedIds.includes(m.id));
-    // Safety: if ordered has less than 3 real modules, reset to show all
+    // Safety: if saved order has no real modules, reset to all
     const realModules = ordered.filter(m => !m.id.startsWith('custom_') && m.id !== 'weekly_report');
     if (realModules.length === 0) return ALL_MODULES;
     return ordered;
   }
 
-  // No saved order — use onboarding selection if available
-  if (selectedIds) {
-    const selected = selectedIds.map(id => ALL_MODULES.find(m => m.id === id)).filter(Boolean);
-    const rest     = ALL_MODULES.filter(m => !selectedIds.includes(m.id));
+  // No saved order — return all modules
+  if (false) {
+    const selected = []; const rest = [];
     return [...selected, ...rest].filter(m => selectedIds.includes(m.id));
   }
   return [...ALL_MODULES];
@@ -2172,49 +2161,6 @@ function _renderPersonalRecords(userId) {
     </div>`;
 }
 
-function toggleProfileModule(moduleId) {
-  const user    = APP.currentUser;
-  if (!user) return;
-  const ALL_IDS = ['cardio','gym','yoga','stretching','running','calisthenics','core'];
-  const onboard = Store.get('ff_onboard_' + user.id) || {};
-  // If no selection exists treat all as active
-  let active = (onboard.modules && onboard.modules.length > 0)
-    ? [...onboard.modules]
-    : [...ALL_IDS];
-
-  const idx = active.indexOf(moduleId);
-  if (idx >= 0) {
-    // Don't allow removing all modules — keep at least 1
-    if (active.length <= 1) {
-      showToast('At least one module must be active', 'info');
-      return;
-    }
-    active.splice(idx, 1);
-  } else {
-    active.push(moduleId);
-  }
-
-  // Save back to onboarding store
-  onboard.modules = active;
-  Store.set('ff_onboard_' + user.id, onboard);
-
-  // Update toggle UI without full re-render
-  const on     = active.includes(moduleId);
-  const toggle = document.getElementById('prof-mod-toggle-' + moduleId);
-  if (toggle) {
-    toggle.style.background = on ? 'var(--g3)' : 'var(--bg3)';
-    toggle.style.borderColor = on ? 'var(--g4)' : 'var(--border)';
-    const dot = toggle.querySelector('div');
-    if (dot) {
-      dot.style.left = on ? '22px' : '3px';
-      dot.style.background = on ? 'var(--g5)' : 'var(--text3)';
-    }
-  }
-
-  // Refresh dashboard module tiles immediately
-  if (typeof renderDashboard === 'function') renderDashboard();
-  showToast(on ? '✅ Module added to home screen' : '🗑 Module removed from home screen', 'success');
-}
 
 function renderProfilePage() {
   const user    = APP.currentUser;
@@ -2419,52 +2365,6 @@ function renderProfilePage() {
       <button class="btn btn-ghost btn-full" onclick="openEditBodyStats()">
         ✏️ ${body.age ? 'Update' : 'Add'} Body Stats
       </button>
-    </div>
-
-    <!-- Manage Modules -->
-    <div class="section-title" style="margin-bottom:10px">Manage Modules</div>
-    <div class="card" style="margin-bottom:20px;padding:14px">
-      <div style="font-size:13px;color:var(--text3);margin-bottom:14px">
-        Toggle modules on/off. Active modules appear on your home screen.
-      </div>
-      ${(() => {
-        const ALL_MODS = [
-          { id:'cardio',       emoji:'🏠',    name:'Home Cardio',       sub:'No equipment needed' },
-          { id:'gym',          emoji:'🏋️',   name:'Gym Workouts',      sub:'Weights & machines' },
-          { id:'yoga',         emoji:'🧘',    name:'Yoga',              sub:'Mind & body balance' },
-          { id:'stretching',   emoji:'🤸',    name:'Stretching',        sub:'Flexibility & recovery' },
-          { id:'running',      emoji:'🏃',    name:'Running & Walking', sub:'GPS tracking + plans' },
-          { id:'calisthenics', emoji:'🤸‍♂️', name:'Calisthenics',     sub:'Bodyweight skills' },
-          { id:'core',         emoji:'🔥',    name:'Core & Abs',        sub:'6-day ab programme' },
-        ];
-        const onboard = Store.get('ff_onboard_' + user.id) || {};
-        const active  = (onboard.modules && onboard.modules.length > 0)
-          ? onboard.modules
-          : ALL_MODS.map(m => m.id);  // all active if no onboarding selection
-        return ALL_MODS.map(m => {
-          const on = active.includes(m.id);
-          return \`<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border)"
-            onclick="toggleProfileModule('\${m.id}')" id="prof-mod-row-\${m.id}" style="cursor:pointer">
-            <span style="font-size:24px;width:32px;text-align:center">\${m.emoji}</span>
-            <div style="flex:1">
-              <div style="font-weight:600;font-size:14px">\${m.name}</div>
-              <div style="font-size:12px;color:var(--text3)">\${m.sub}</div>
-            </div>
-            <div id="prof-mod-toggle-\${m.id}" style="
-              width:44px;height:24px;border-radius:12px;
-              background:\${on ? 'var(--g3)' : 'var(--bg3)'};
-              border:1.5px solid \${on ? 'var(--g4)' : 'var(--border)'};
-              position:relative;transition:all .2s;flex-shrink:0">
-              <div style="
-                position:absolute;top:3px;
-                left:\${on ? '22px' : '3px'};
-                width:16px;height:16px;border-radius:50%;
-                background:\${on ? 'var(--g5)' : 'var(--text3)'};
-                transition:left .2s"></div>
-            </div>
-          </div>\`;
-        }).join('');
-      })()}
     </div>
 
     <div class="section-title" style="margin-bottom:10px">Account</div>
