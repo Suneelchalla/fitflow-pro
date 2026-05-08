@@ -427,8 +427,12 @@ window.addEventListener('popstate', e => {
     // Only on root pages (dashboard, admin) and when scrolled to top
     const rootPages = ['page-dashboard', 'page-admin', 'page-history-global'];
     if (!rootPages.includes(APP.currentPage)) return;
-    const scrollEl = document.querySelector('#' + APP.currentPage + ' .scroll-content');
-    if (scrollEl && scrollEl.scrollTop > 5) return; // not at top
+    // Check all scrollable elements within the page — any one scrolled means no PTR
+    const pageEl = document.getElementById(APP.currentPage);
+    const scrollEls = pageEl ? pageEl.querySelectorAll('*') : [];
+    for (const el of scrollEls) {
+      if (el.scrollTop > 5) return; // page not at top
+    }
     startY  = e.touches[0].clientY;
     pulling = true;
   }, { passive: true });
@@ -436,10 +440,10 @@ window.addEventListener('popstate', e => {
   document.addEventListener('touchmove', e => {
     if (!pulling) return;
     const dy = e.touches[0].clientY - startY;
-    if (dy > 60) {
-      // Show indicator
+    if (dy > 120) {
+      // Show indicator only after a deliberate 120px pull
       if (!indicator) indicator = createIndicator();
-      indicator.style.height = Math.min(dy - 40, 52) + 'px';
+      indicator.style.height = Math.min(dy - 90, 52) + 'px';
     }
   }, { passive: true });
 
@@ -448,8 +452,8 @@ window.addEventListener('popstate', e => {
     pulling = false;
     const dy = e.changedTouches[0].clientY - startY;
 
-    if (dy > 80 && indicator) {
-      // User pulled enough — do in-app refresh
+    if (dy > 160 && indicator) {
+      // User pulled enough — do in-app refresh (160px = very deliberate)
       indicator.style.height = '52px';
       _inAppRefresh().then(() => {
         if (indicator) { indicator.style.height = '0'; setTimeout(() => { indicator?.remove(); indicator = null; }, 300); }
