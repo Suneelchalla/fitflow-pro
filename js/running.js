@@ -843,9 +843,9 @@ class GpsKalmanFilter {
     this.variance  = -1;   // negative = not initialised
     this.lastTs    = 0;
     // Process noise: how much we expect position to change per second
-    // Higher = trusts GPS more, Lower = smoother but slower to react
-    // 3.0 m²/s works well for running/walking/cycling
-    this.Q_METRES_PER_SECOND = 3.0;
+    // Higher = trusts GPS more (wiggly), Lower = smoother (slower to react)
+    // 1.5 m²/s: smooth enough to remove jitter, fast enough for real turns
+    this.Q_METRES_PER_SECOND = 1.5;
   }
 
   // Returns smoothed { lat, lon } or null if not ready
@@ -888,9 +888,9 @@ const _kalman = new GpsKalmanFilter();
 // ── GPS RUN TRACKER ───────────────────────────────────────────────
 
 // FIX #2: GPS warm-up state — skip first N fixes while device acquires lock
-const GPS_WARMUP_FIXES    = 5;    // discard first 5 positions (device triangulating)
-const GPS_MIN_ACCURACY_M  = 80;   // reject if worse than 80 m (was 40 — too strict for urban/indoor)
-const GPS_MIN_DISTANCE_KM = 0.005; // ignore movement < 5 m (standing still jitter)
+const GPS_WARMUP_FIXES    = 6;    // discard first 6 positions (device triangulating)
+const GPS_MIN_ACCURACY_M  = 40;   // reject if worse than 40 m — urban multi-path rejection
+const GPS_MIN_DISTANCE_KM = 0.004; // ignore movement < 4 m (standing still jitter)
 
 let _gpsWarmupCount  = 0;          // counts received fixes during warmup phase
 let _gpsLastGoodFix  = null;       // last confirmed-accurate position
@@ -1209,7 +1209,7 @@ function startGPS() {
       }
     },
 
-    { enableHighAccuracy: true, maximumAge: 3000, timeout: 30000 }
+    { enableHighAccuracy: true, maximumAge: 1000, timeout: 30000 }
   );
 }
 
@@ -3286,24 +3286,63 @@ function _renderRunPBBadges(distance, elapsed) {
 // Apply post-processing smoothing to stored coords for display
 // Uses Douglas-Peucker simplification to remove redundant points
 // then a light moving-average pass to reduce any remaining jitter
+// ── Ramer-Douglas-Peucker line simplification ─────────────────────
+// Removes redundant points while preserving all real shape changes.
+// epsilon is in degrees — 0.00003 ≈ 3m which eliminates GPS jitter
+// but preserves corners/turns cleanly.
+function _rdpSimplify(coords, epsilon) {
+  if (coords.length < 3) return coords;
+  // Find the point farthest from the line between start and end
+  let maxDist = 0, maxIdx = 0;
+  const s = coords[0], e = coords[coords.length - 1];
+  for (let i = 1; i < coords.length - 1; i++) {
+    const d = _perpendicularDist(coords[i], s, e);
+    if (d > maxDist) { maxDist = d; maxIdx = i; }
+  }
+  if (maxDist > epsilon) {
+    const left  = _rdpSimplify(coords.slice(0, maxIdx + 1), epsilon);
+    const right = _rdpSimplify(coords.slice(maxIdx), epsilon);
+    return [...left.slice(0, -1), ...right];
+  }
+  return [s, e];
+}
+
+function _perpendicularDist(p, a, b) {
+  const dx = b.lon - a.lon, dy = b.lat - a.lat;
+  if (dx === 0 && dy === 0) {
+    return Math.sqrt((p.lon - a.lon) ** 2 + (p.lat - a.lat) ** 2);
+  }
+  const t = ((p.lon - a.lon) * dx + (p.lat - a.lat) * dy) / (dx * dx + dy * dy);
+  const tc = Math.max(0, Math.min(1, t));
+  return Math.sqrt((p.lon - a.lon - tc * dx) ** 2 + (p.lat - a.lat - tc * dy) ** 2);
+}
+
 function _smoothCoordsForDisplay(coords) {
   if (!coords || coords.length < 3) return coords || [];
 
-  // Moving average: replace each point with weighted avg of neighbours
-  // Weights: [0.25, 0.5, 0.25] — centre point counts most
-  const smoothed = [coords[0]];
-  for (let i = 1; i < coords.length - 1; i++) {
-    const prev = coords[i - 1];
-    const cur  = coords[i];
-    const next = coords[i + 1];
-    smoothed.push({
-      lat: prev.lat * 0.25 + cur.lat * 0.5 + next.lat * 0.25,
-      lon: prev.lon * 0.25 + cur.lon * 0.5 + next.lon * 0.25,
-      ts:  cur.ts,
-    });
+  // Step 1: Gaussian-weighted moving average to remove micro-jitter
+  // Uses a 5-point kernel [0.1, 0.2, 0.4, 0.2, 0.1] for smooth curves
+  const n = coords.length;
+  const w = [0.1, 0.2, 0.4, 0.2, 0.1];
+  const gSmoothed = [coords[0]];
+  for (let i = 1; i < n - 1; i++) {
+    let lat = 0, lon = 0, wSum = 0;
+    for (let j = -2; j <= 2; j++) {
+      const idx = Math.max(0, Math.min(n - 1, i + j));
+      const wt  = w[j + 2];
+      lat  += coords[idx].lat * wt;
+      lon  += coords[idx].lon * wt;
+      wSum += wt;
+    }
+    gSmoothed.push({ lat: lat / wSum, lon: lon / wSum, ts: coords[i].ts });
   }
-  smoothed.push(coords[coords.length - 1]);
-  return smoothed;
+  gSmoothed.push(coords[n - 1]);
+
+  // Step 2: RDP simplification — remove redundant intermediate points
+  // 0.000025 degrees ≈ 2.5m — removes noise while keeping all real turns
+  const simplified = _rdpSimplify(gSmoothed, 0.000025);
+
+  return simplified;
 }
 
 function _renderRunRouteMap(coords) {
@@ -3501,42 +3540,87 @@ function _cardRoundRect(ctx, x, y, w, h, r) {
 
 function _drawRouteOnCanvas(ctx, coords, x, y, w, h, color) {
   if (!coords || coords.length < 2) return;
-  const lats = coords.map(c => c.lat);
-  const lons = coords.map(c => c.lon);
+
+  // Apply display smoothing to card route as well
+  const smoothed = _smoothCoordsForDisplay(coords);
+  const lats = smoothed.map(c => c.lat);
+  const lons = smoothed.map(c => c.lon);
   const minLat = Math.min(...lats), maxLat = Math.max(...lats);
   const minLon = Math.min(...lons), maxLon = Math.max(...lons);
-  const latRange = maxLat - minLat || 0.001;
-  const lonRange = maxLon - minLon || 0.001;
-  const pad = 0.12;
-  const toX = lon => x + (w * pad) + ((lon - minLon) / lonRange) * (w * (1 - pad*2));
-  const toY = lat => y + (h * pad) + ((maxLat - lat) / latRange) * (h * (1 - pad*2));
 
-  const pts = coords.map(c => ({ px: toX(c.lon), py: toY(c.lat) }));
+  // Preserve aspect ratio so the route doesn't get stretched
+  const latRange = maxLat - minLat || 0.0001;
+  const lonRange = maxLon - minLon || 0.0001;
+  const latAspect = latRange, lonAspect = lonRange;
+  const dataAspect = lonAspect / latAspect;
+  const boxAspect  = w / h;
+  let drawW = w, drawH = h;
+  if (dataAspect > boxAspect) { drawH = w / dataAspect; }
+  else                         { drawW = h * dataAspect; }
+  const offX = x + (w - drawW) / 2;
+  const offY = y + (h - drawH) / 2;
+
+  const pad = 0.10;
+  const toX = lon => offX + (drawW * pad) + ((lon - minLon) / lonRange) * (drawW * (1 - pad * 2));
+  const toY = lat => offY + (drawH * pad) + ((maxLat - lat) / latRange) * (drawH * (1 - pad * 2));
+
+  const pts = smoothed.map(c => ({ px: toX(c.lon), py: toY(c.lat) }));
   const n   = pts.length;
-  const dotR = 7;
+  const dotR = Math.max(5, Math.round(Math.min(w, h) * 0.03));
 
   ctx.save();
 
-  // Route line
+  // Glow pass — thick blurred line beneath route for depth
   ctx.strokeStyle = color;
-  ctx.lineWidth   = 3;
+  ctx.lineWidth   = Math.max(4, Math.round(Math.min(w, h) * 0.018));
   ctx.lineCap     = 'round';
   ctx.lineJoin    = 'round';
-  ctx.globalAlpha = 1;
-  ctx.shadowBlur  = 0;
+  ctx.globalAlpha = 0.25;
+  ctx.shadowColor = color;
+  ctx.shadowBlur  = Math.round(Math.min(w, h) * 0.04);
   ctx.beginPath();
   pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.px, p.py) : ctx.lineTo(p.px, p.py));
   ctx.stroke();
 
-  // Start dot — green
-  ctx.fillStyle = '#2d9e5a';
-  ctx.beginPath(); ctx.arc(pts[0].px, pts[0].py, dotR, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+  // Main route line — catmull-rom via bezier for smooth curves
+  ctx.globalAlpha = 1;
+  ctx.shadowBlur  = 0;
+  ctx.lineWidth   = Math.max(3, Math.round(Math.min(w, h) * 0.012));
+  ctx.beginPath();
+  ctx.moveTo(pts[0].px, pts[0].py);
+  if (pts.length === 2) {
+    ctx.lineTo(pts[1].px, pts[1].py);
+  } else {
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[Math.max(0, i - 1)];
+      const p1 = pts[i];
+      const p2 = pts[i + 1];
+      const p3 = pts[Math.min(pts.length - 1, i + 2)];
+      const cp1x = p1.px + (p2.px - p0.px) / 6;
+      const cp1y = p1.py + (p2.py - p0.py) / 6;
+      const cp2x = p2.px - (p3.px - p1.px) / 6;
+      const cp2y = p2.py - (p3.py - p1.py) / 6;
+      ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, p2.px, p2.py);
+    }
+  }
+  ctx.strokeStyle = color;
+  ctx.stroke();
 
-  // End dot — red
-  ctx.fillStyle = '#ef5350';
+  // Start dot — filled circle with white ring
+  ctx.shadowBlur  = dotR * 1.5;
+  ctx.shadowColor = '#2d9e5a';
+  ctx.fillStyle   = '#2d9e5a';
+  ctx.beginPath(); ctx.arc(pts[0].px, pts[0].py, dotR, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowBlur  = 0;
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1.5, dotR * 0.4); ctx.stroke();
+
+  // End dot — red with white ring
+  ctx.shadowBlur  = dotR * 1.5;
+  ctx.shadowColor = '#ef5350';
+  ctx.fillStyle   = '#ef5350';
   ctx.beginPath(); ctx.arc(pts[n-1].px, pts[n-1].py, dotR, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+  ctx.shadowBlur  = 0;
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = Math.max(1.5, dotR * 0.4); ctx.stroke();
 
   ctx.restore();
 }
@@ -4048,6 +4132,7 @@ function _openCardEditorModal(session, meta, drawCoords, photoImg) {
   _cardEditor.logo  = { x: 0.35, y: 0.04, w: 0.60, h: 0.06, scale: 1, rot: 0 };
 
   // Compute display size from window — no layout dependency
+  const dpr   = window.devicePixelRatio || 1;
   const maxW   = window.innerWidth  - 28;
   const maxH   = window.innerHeight - 220;
   const aspRat = photoImg
@@ -4058,14 +4143,18 @@ function _openCardEditorModal(session, meta, drawCoords, photoImg) {
   dW = Math.max(200, dW);
   dH = Math.max(200, dH);
 
-  _cardEditor.bgW = dW;
-  _cardEditor.bgH = dH;
+  // Store logical (CSS) dimensions
+  _cardEditor.bgW      = Math.round(dW * dpr);  // actual canvas pixels
+  _cardEditor.bgH      = Math.round(dH * dpr);
+  _cardEditor.dispW    = dW;   // CSS size
+  _cardEditor.dispH    = dH;
+  _cardEditor.dpr      = dpr;
 
   // Single canvas — bg + elements drawn together
   const cv = document.getElementById('card-editor-main-canvas');
   if (!cv) { console.error('card-editor-main-canvas not found'); return; }
-  cv.width  = dW;
-  cv.height = dH;
+  cv.width  = _cardEditor.bgW;
+  cv.height = _cardEditor.bgH;
   cv.style.width  = dW + 'px';
   cv.style.height = dH + 'px';
 
@@ -4082,6 +4171,8 @@ function _cardEditorRedraw() {
   cv.width  = W;  // also clears canvas
   cv.height = H;
   const ctx = cv.getContext('2d');
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
 
   // Background
   ctx.fillStyle = '#0d1a10';
@@ -4151,10 +4242,22 @@ function _cardEditorRedraw() {
 // Element draw helpers — called by both editor and export
 function _drawRouteEl(ctx, W, H) {
   ctx.clearRect(0, 0, W, H);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
   if (_cardEditor.routeCoords && _cardEditor.routeCoords.length >= 2) {
-    _drawRouteOnCanvas(ctx, _cardEditor.routeCoords, 10, 10, W-20, H-20, '#2d9e5a');
+    // Dark background for the route panel so the line pops
+    const r = Math.round(Math.min(W, H) * 0.06);
+    ctx.save();
+    _cardRoundRect(ctx, 0, 0, W, H, r);
+    ctx.fillStyle = 'rgba(5,18,10,0.88)';
+    ctx.fill();
+    _cardRoundRect(ctx, 0, 0, W, H, r);
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+    ctx.lineWidth   = 1;
+    ctx.stroke();
+    ctx.restore();
+    _drawRouteOnCanvas(ctx, _cardEditor.routeCoords, 0, 0, W, H, '#2d9e5a');
   }
-  // No-route placeholder (transparent — user can still position it)
 }
 
 function _drawLogoEl(ctx, W, H) {
@@ -4168,7 +4271,7 @@ function _drawLogoEl(ctx, W, H) {
   ctx.shadowBlur = 0;
 }
 
-// Stats draw helper — same layout used by both editor preview and export
+// Stats draw helper — premium iOS-level design
 function _drawStatsEl(ctx, elW, elH, session, meta) {
   if (!session) session = _cardEditor.session;
   if (!meta)    meta    = _cardEditor.meta;
@@ -4178,76 +4281,153 @@ function _drawStatsEl(ctx, elW, elH, session, meta) {
   const dist    = (session.distance || 0).toFixed(2);
   const kcal    = Math.round((session.distance || 0) * meta.kcalPerKm);
   const pace    = session.distance > 0 ? fmtPace(session.distance, elapsed) : '--:--';
-  const pad     = Math.round(elW * 0.04);
+  const speedKph = elapsed > 0 ? ((session.distance || 0) / elapsed * 3600).toFixed(1) : '0.0';
+  const pad      = Math.round(elW * 0.05);
+  const r        = Math.round(elW * 0.04);  // corner radius
 
-  function ts(blur) { ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = blur || 8; }
+  // Glassmorphism background panel
+  ctx.save();
+  _cardRoundRect(ctx, 0, 0, elW, elH, r);
+  ctx.fillStyle = 'rgba(0,0,0,0.52)';
+  ctx.fill();
+  // Subtle border
+  _cardRoundRect(ctx, 0, 0, elW, elH, r);
+  ctx.strokeStyle = 'rgba(255,255,255,0.14)';
+  ctx.lineWidth   = 1;
+  ctx.stroke();
+  ctx.restore();
 
-  // Header: activity + title
-  const titleH    = Math.round(elH * 0.28);
-  const titleFont = Math.round(titleH * 0.54);
-  const dateFont  = Math.round(titleH * 0.30);
-  ts();
-  ctx.font = 'bold ' + titleFont + 'px -apple-system,Arial,sans-serif';
-  ctx.fillStyle = '#fff'; ctx.textAlign = 'left';
-  ctx.fillText(meta.emoji + '  ' + (session.title || meta.label), pad, Math.round(titleH * 0.68));
-  ctx.font = dateFont + 'px -apple-system,Arial,sans-serif';
-  ctx.fillStyle = 'rgba(255,255,255,0.75)'; ctx.shadowBlur = 4;
+  // Helper: text with drop shadow
+  function tx(text, x, y, font, color, align, blur) {
+    ctx.save();
+    ctx.font        = font;
+    ctx.fillStyle   = color;
+    ctx.textAlign   = align || 'left';
+    ctx.textBaseline = 'alphabetic';
+    ctx.shadowColor = 'rgba(0,0,0,0.85)';
+    ctx.shadowBlur  = blur || 6;
+    ctx.fillText(text, x, y);
+    ctx.restore();
+  }
+
+  const accentColor = meta.color || '#43d17a';
+  const titleH  = Math.round(elH * 0.30);
+  const bodyY   = titleH + Math.round(elH * 0.04);
+  const bodyH   = Math.round(elH * 0.40);
+  const footerY = bodyY + bodyH + Math.round(elH * 0.04);
+
+  // ── HEADER: activity icon + name + date ─────────────────────────
+  const titleF = Math.round(elH * 0.13);
+  const dateF  = Math.round(elH * 0.075);
+  tx(meta.emoji + '  ' + (session.title || meta.label).toUpperCase(),
+     pad, Math.round(titleH * 0.58),
+     'bold ' + titleF + 'px -apple-system,SF Pro Display,Arial,sans-serif',
+     '#ffffff', 'left', 10);
+
   try {
     const ds = new Date(session.date || session.timestamp).toLocaleDateString('en-IN',
-      { weekday:'long', day:'numeric', month:'long', year:'numeric' });
-    ctx.fillText(ds, pad, Math.round(titleH * 0.96));
+      { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+    tx(ds, pad, Math.round(titleH * 0.92),
+       dateF + 'px -apple-system,SF Pro Text,Arial,sans-serif',
+       'rgba(255,255,255,0.65)', 'left', 4);
   } catch(e) {}
 
-  ctx.shadowBlur = 0;
-  ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(pad, titleH); ctx.lineTo(elW - pad, titleH); ctx.stroke();
-
-  // Body: big distance left | time+pace stacked right
-  const bodyY = titleH, bodyH = Math.round(elH * 0.56), leftW = Math.round(elW * 0.50);
-  const bigF  = Math.round(bodyH * 0.54), lblF = Math.round(bodyH * 0.17);
-  const unitF = Math.round(bodyH * 0.22), smVF = Math.round(bodyH * 0.28), smLF = Math.round(bodyH * 0.16);
-
-  ctx.font = lblF + 'px -apple-system,Arial,sans-serif';
-  ctx.fillStyle = 'rgba(255,255,255,0.82)'; ts(4);
-  ctx.fillText('Distance', pad, bodyY + Math.round(bodyH * 0.18));
-
-  ctx.font = 'bold ' + bigF + 'px -apple-system,Arial,sans-serif';
-  ctx.fillStyle = '#fff'; ts(12);
-  ctx.fillText(dist, pad, bodyY + Math.round(bodyH * 0.72));
-  const dw = ctx.measureText(dist).width;
-
-  ctx.font = 'bold ' + unitF + 'px -apple-system,Arial,sans-serif';
-  ctx.fillStyle = 'rgba(255,255,255,0.90)'; ts(6);
-  ctx.fillText('km', pad + dw + 6, bodyY + Math.round(bodyH * 0.50));
-
-  ctx.shadowBlur = 0;
-  ctx.strokeStyle = 'rgba(255,255,255,0.20)'; ctx.lineWidth = 1;
+  // Thin separator line
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+  ctx.lineWidth   = 1;
   ctx.beginPath();
-  ctx.moveTo(leftW, bodyY + Math.round(bodyH * 0.05));
-  ctx.lineTo(leftW, bodyY + Math.round(bodyH * 0.93)); ctx.stroke();
+  ctx.moveTo(pad, titleH); ctx.lineTo(elW - pad, titleH);
+  ctx.stroke();
+  ctx.restore();
 
-  const rx = leftW + Math.round(elW * 0.05), halfH = Math.round(bodyH * 0.50);
-  [[fmtTime(elapsed), 'Time', 0], [pace, 'Pace /km', halfH]].forEach(([val, lbl, oy]) => {
-    ctx.font = smLF + 'px -apple-system,Arial,sans-serif';
-    ctx.fillStyle = 'rgba(255,255,255,0.82)'; ts(4);
-    ctx.fillText(lbl, rx, bodyY + oy + Math.round(halfH * 0.26));
-    ctx.font = 'bold ' + smVF + 'px -apple-system,Arial,sans-serif';
-    ctx.fillStyle = '#fff'; ts(10);
-    ctx.fillText(val, rx, bodyY + oy + Math.round(halfH * 0.80));
+  // ── BODY: big distance left | time + pace right ──────────────────
+  const halfW = Math.round(elW * 0.50);
+  const bigF  = Math.round(bodyH * 0.60);
+  const unitF = Math.round(bodyH * 0.22);
+  const lblF  = Math.round(bodyH * 0.17);
+  const valF  = Math.round(bodyH * 0.28);
+
+  // Distance label
+  tx('DISTANCE', pad, bodyY + Math.round(bodyH * 0.18),
+     lblF + 'px -apple-system,SF Pro Text,Arial,sans-serif',
+     'rgba(255,255,255,0.55)', 'left', 3);
+
+  // Big distance number
+  ctx.save();
+  ctx.font = 'bold ' + bigF + 'px -apple-system,SF Pro Display,Arial,sans-serif';
+  ctx.fillStyle   = '#ffffff';
+  ctx.textAlign   = 'left';
+  ctx.textBaseline = 'alphabetic';
+  ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 14;
+  ctx.fillText(dist, pad, bodyY + Math.round(bodyH * 0.76));
+  const dw = ctx.measureText(dist).width;
+  ctx.restore();
+
+  // "km" unit in accent colour
+  tx('km', pad + dw + Math.round(elW * 0.015), bodyY + Math.round(bodyH * 0.65),
+     'bold ' + unitF + 'px -apple-system,SF Pro Display,Arial,sans-serif',
+     accentColor, 'left', 8);
+
+  // Vertical divider
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+  ctx.lineWidth   = 1;
+  ctx.beginPath();
+  ctx.moveTo(halfW, bodyY + Math.round(bodyH * 0.06));
+  ctx.lineTo(halfW, bodyY + Math.round(bodyH * 0.95));
+  ctx.stroke();
+  ctx.restore();
+
+  // Right column: TIME + PACE
+  const rx = halfW + Math.round(elW * 0.06);
+  const halfH = Math.round(bodyH * 0.48);
+  [
+    { val: fmtTime(elapsed), lbl: 'TIME',    oy: 0 },
+    { val: pace,             lbl: 'PACE/KM', oy: halfH },
+  ].forEach(({ val, lbl, oy }) => {
+    tx(lbl, rx, bodyY + oy + Math.round(halfH * 0.24),
+       lblF + 'px -apple-system,SF Pro Text,Arial,sans-serif',
+       'rgba(255,255,255,0.55)', 'left', 3);
+    tx(val, rx, bodyY + oy + Math.round(halfH * 0.82),
+       'bold ' + valF + 'px -apple-system,SF Pro Display,Arial,sans-serif',
+       '#ffffff', 'left', 10);
+    if (oy > 0) return;
+    // Horizontal divider between time and pace
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+    ctx.lineWidth   = 1;
+    ctx.beginPath();
+    ctx.moveTo(rx, bodyY + halfH - 2);
+    ctx.lineTo(elW - pad, bodyY + halfH - 2);
+    ctx.stroke();
+    ctx.restore();
   });
 
-  ctx.shadowBlur = 0;
-  const calY = bodyY + bodyH + Math.round(elH * 0.02);
-  ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(pad, calY); ctx.lineTo(elW - pad, calY); ctx.stroke();
-  const calF = Math.round(elH * 0.08);
-  ctx.font = calF + 'px -apple-system,Arial,sans-serif';
-  ctx.fillStyle = 'rgba(255,255,255,0.82)'; ts(4);
-  ctx.fillText('Calories', pad, calY + Math.round(elH * 0.085));
-  ctx.font = 'bold ' + calF + 'px -apple-system,Arial,sans-serif';
-  ctx.fillStyle = 'rgba(255,255,255,0.80)';
-  ctx.fillText(kcal + ' kcal', pad + Math.round(elW * 0.24), calY + Math.round(elH * 0.085));
-  ctx.shadowBlur = 0;
+  // ── FOOTER: calories + speed ─────────────────────────────────────
+  // Full-width separator
+  ctx.save();
+  ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+  ctx.lineWidth   = 1;
+  ctx.beginPath();
+  ctx.moveTo(pad, footerY); ctx.lineTo(elW - pad, footerY);
+  ctx.stroke();
+  ctx.restore();
+
+  const fF  = Math.round(elH * 0.075);
+  const fVF = Math.round(elH * 0.09);
+  const footerCols = [
+    { val: kcal + ' kcal', lbl: 'CALORIES', x: pad },
+    { val: speedKph + ' km/h', lbl: 'AVG SPEED', x: Math.round(elW * 0.52) },
+  ];
+  footerCols.forEach(({ val, lbl, x }) => {
+    tx(lbl, x, footerY + Math.round(elH * 0.065),
+       fF + 'px -apple-system,SF Pro Text,Arial,sans-serif',
+       'rgba(255,255,255,0.50)', 'left', 3);
+    tx(val, x, footerY + Math.round(elH * 0.135),
+       'bold ' + fVF + 'px -apple-system,SF Pro Display,Arial,sans-serif',
+       '#ffffff', 'left', 6);
+  });
 }
 
 // Stubs kept for compatibility (all now call _cardEditorRedraw)
@@ -4294,10 +4474,13 @@ function _attachCardEditorHandlers(cv) {
   let drag = null, pinch = null;
 
   function xyFromTouch(touch) {
-    const r  = cv.getBoundingClientRect();
+    const r   = cv.getBoundingClientRect();
+    // Map CSS pixels → canvas pixels (accounts for DPR scaling)
+    const scX = _cardEditor.bgW / r.width;
+    const scY = _cardEditor.bgH / r.height;
     return [
-      (touch.clientX - r.left) / r.width  * _cardEditor.bgW,
-      (touch.clientY - r.top)  / r.height * _cardEditor.bgH,
+      (touch.clientX - r.left) * scX,
+      (touch.clientY - r.top)  * scY,
     ];
   }
 
@@ -4402,11 +4585,14 @@ function _closeCardEditor() {
 }
 
 function _exportCardFromEditor() {
-  // Export at 1080p — scale up from display resolution
-  const dispW  = _cardEditor.bgW, dispH = _cardEditor.bgH;
+  // Export at minimum 1080px on the long edge, always at 2× display resolution for retina quality
+  const dispW  = _cardEditor.dispW  || _cardEditor.bgW;
+  const dispH  = _cardEditor.dispH  || _cardEditor.bgH;
   const aspRat = dispW / dispH;
-  const EW     = aspRat >= 1 ? 1080 : Math.round(1080 * aspRat);
-  const EH     = aspRat >= 1 ? Math.round(1080 / aspRat) : 1080;
+  const minEdge = 1080;
+  let EW, EH;
+  if (aspRat >= 1) { EW = Math.max(minEdge, dispW * 2); EH = Math.round(EW / aspRat); }
+  else             { EH = Math.max(minEdge, dispH * 2); EW = Math.round(EH * aspRat); }
 
   const cv  = document.getElementById('activity-card-canvas');
   if (!cv) { showToast('Canvas not found', 'error'); return; }
