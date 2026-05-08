@@ -3504,22 +3504,35 @@ function _drawRouteOnCanvas(ctx, coords, x, y, w, h, color) {
   const toX = lon => x + (w * pad) + ((lon - minLon) / lonRange) * (w * (1 - pad*2));
   const toY = lat => y + (h * pad) + ((maxLat - lat) / latRange) * (h * (1 - pad*2));
 
+  const pts = coords.map(c => ({ px: toX(c.lon), py: toY(c.lat) }));
+  const n   = pts.length;
+  const dotR = 7;
+
   ctx.save();
+
+  // Route line
   ctx.strokeStyle = color;
-  ctx.lineWidth   = 5;
+  ctx.lineWidth   = 3;
   ctx.lineCap     = 'round';
   ctx.lineJoin    = 'round';
   ctx.globalAlpha = 1;
   ctx.shadowBlur  = 0;
   ctx.beginPath();
-  coords.forEach((c, i) => {
-    const px = toX(c.lon), py = toY(c.lat);
-    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
-  });
+  pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.px, p.py) : ctx.lineTo(p.px, p.py));
   ctx.stroke();
+
+  // Start dot — green
+  ctx.fillStyle = '#2d9e5a';
+  ctx.beginPath(); ctx.arc(pts[0].px, pts[0].py, dotR, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+
+  // End dot — red
+  ctx.fillStyle = '#ef5350';
+  ctx.beginPath(); ctx.arc(pts[n-1].px, pts[n-1].py, dotR, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+
   ctx.restore();
 }
-
 // _generateActivityCard moved to card editor below
 
 function _downloadActivityCard() {
@@ -4022,6 +4035,10 @@ function _openCardEditorModal(session, meta, drawCoords, photoImg) {
   _cardEditor.meta     = meta;
   _cardEditor.routeCoords = drawCoords || [];
   _cardEditor.photoImg = photoImg || null;
+  // Always reset element positions/scale/rotation on every open
+  _cardEditor.route = { x: 0.04, y: 0.04, w: 0.42, h: 0.42, scale: 1, rot: 0 };
+  _cardEditor.stats = { x: 0.04, y: 0.62, w: 0.88, h: 0.26, scale: 1, rot: 0 };
+  _cardEditor.logo  = { x: 0.35, y: 0.04, w: 0.60, h: 0.06, scale: 1, rot: 0 };
 
   // Compute display size from window — no layout dependency
   const maxW   = window.innerWidth  - 28;
