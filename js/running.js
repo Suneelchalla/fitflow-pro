@@ -2859,20 +2859,20 @@ function _showRunDetail(idx) {
         L.tileLayer(_getTileLayer(_mapStyle), { maxZoom: 19 }).addTo(_detailMapInst);
 
         L.polyline(latlngs, {
-          color:   meta.color,
-          weight:  5,
-          opacity: 0.95,
+          color:   '#2d9e5a',
+          weight:  4,
+          opacity: 1.0,
           lineCap: 'round',
         }).addTo(_detailMapInst);
 
-        // Start marker
+        // Start marker — green
         L.circleMarker(latlngs[0], {
-          radius: 7, fillColor: '#43a05a', color: '#fff', weight: 2, fillOpacity: 1,
+          radius: 6, fillColor: '#2d9e5a', color: '#fff', weight: 2, fillOpacity: 1,
         }).addTo(_detailMapInst);
 
-        // Finish marker
+        // Finish marker — green
         L.circleMarker(latlngs[latlngs.length - 1], {
-          radius: 7, fillColor: meta.color, color: '#fff', weight: 2, fillOpacity: 1,
+          radius: 6, fillColor: '#2d9e5a', color: '#fff', weight: 2, fillOpacity: 1,
         }).addTo(_detailMapInst);
 
         _detailMapInst.fitBounds(L.latLngBounds(latlngs).pad(0.15));
@@ -3346,22 +3346,22 @@ function _renderRunRouteMap(coords) {
 
     L.tileLayer(_getTileLayer(_mapStyle), { maxZoom: 19 }).addTo(_sumMap);
 
-    // Route line — activity color
+    // Route line — always FitFlow green to match activity card
     L.polyline(latlngs, {
-      color:   meta.color,
-      weight:  5,
-      opacity: 0.95,
+      color:   '#2d9e5a',
+      weight:  4,
+      opacity: 1.0,
       lineCap: 'round',
     }).addTo(_sumMap);
 
-    // Start marker — green dot
+    // Start marker — green
     L.circleMarker(latlngs[0], {
-      radius: 7, fillColor: '#43a05a', color: '#fff', weight: 2, fillOpacity: 1,
+      radius: 6, fillColor: '#2d9e5a', color: '#fff', weight: 2, fillOpacity: 1,
     }).addTo(_sumMap);
 
-    // Finish marker — activity color
+    // Finish marker — green
     L.circleMarker(latlngs[latlngs.length - 1], {
-      radius: 7, fillColor: meta.color, color: '#fff', weight: 2, fillOpacity: 1,
+      radius: 6, fillColor: '#2d9e5a', color: '#fff', weight: 2, fillOpacity: 1,
     }).addTo(_sumMap);
 
     _sumMap.fitBounds(L.latLngBounds(latlngs).pad(0.15));
@@ -3948,7 +3948,7 @@ var _cardEditor = {
   meta:        null,    // ACTIVITY_META
   // Element states — x/y are 0-1 fractions, scale multiplier, rot degrees
   route: { x: 0.05, y: 0.05, w: 0.4, h: 0.4, scale: 1, rot: 0 },
-  stats: { x: 0.05, y: 0.60, w: 0.9, h: 0.30, scale: 1, rot: 0 },
+  stats: { x: 0.04, y: 0.62, w: 0.88, h: 0.26, scale: 1, rot: 0 },
   logo:  { x: 0.52, y: 0.88, w: 0.60, h: 0.07, scale: 1, rot: 0 },
   selected: 'stats',
   // Canvas dimensions
@@ -4254,7 +4254,7 @@ function _selectCardEl(key) {
 
 function _resetCardElPositions() {
   _cardEditor.route = { x: 0.04, y: 0.04, w: 0.42, h: 0.42, scale: 1, rot: 0 };
-  _cardEditor.stats = { x: 0.03, y: 0.57, w: 0.94, h: 0.38, scale: 1, rot: 0 };
+  _cardEditor.stats = { x: 0.04, y: 0.62, w: 0.88, h: 0.26, scale: 1, rot: 0 };
   _cardEditor.logo  = { x: 0.35, y: 0.04, w: 0.60, h: 0.06, scale: 1, rot: 0 };
   _cardEditorRedraw();
 }
