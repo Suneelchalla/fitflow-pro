@@ -1034,9 +1034,6 @@ function renderOnboardingStep(step) {
         </button>
       </div>`;
   } else if (step === 2) {
-    // Auto-select all modules and move forward immediately
-    const ALL_MOD_IDS = ['cardio','gym','yoga','stretching','running','calisthenics','core'];
-    _onboardData.modules = [...ALL_MOD_IDS];
     container.innerHTML = `
       <div style="background:linear-gradient(135deg,var(--g1),var(--bg));min-height:100vh;padding:48px 24px 32px;display:flex;flex-direction:column">
         <div style="flex:1">
@@ -1044,37 +1041,40 @@ function renderOnboardingStep(step) {
           <div style="height:4px;background:var(--bg3);border-radius:2px;margin-bottom:32px">
             <div style="width:${stepProgress(2)}%;height:100%;background:var(--g4);border-radius:2px"></div>
           </div>
-          <div style="font-size:40px;margin-bottom:16px">🏋️</div>
-          <div style="font-family:var(--font-display);font-size:34px;color:var(--g5);line-height:1.1;margin-bottom:12px">Your Full Fitness Suite</div>
-          <div style="font-size:14px;color:var(--text2);margin-bottom:28px;line-height:1.6">
-            You get access to <strong>all 7 modules</strong> right from the start. No restrictions, no locked content.
-          </div>
+          <div style="font-size:40px;margin-bottom:12px">🏋️</div>
+          <div style="font-family:var(--font-display);font-size:34px;color:var(--g5);line-height:1.1;margin-bottom:8px">Pick Your Modules</div>
+          <div style="font-size:14px;color:var(--text2);margin-bottom:24px;line-height:1.5">Choose the activities you want to do. You can always change these later.</div>
           ${[
-            { emoji:'🏠',   name:'Home Cardio',       sub:'No equipment needed' },
-            { emoji:'🏋️',  name:'Gym Workouts',       sub:'Weights & machines' },
-            { emoji:'🧘',   name:'Yoga',               sub:'Mind & body balance' },
-            { emoji:'🤸',   name:'Stretching',         sub:'Flexibility & recovery' },
-            { emoji:'🏃',   name:'Running & Walking',  sub:'GPS tracking + plans' },
-            { emoji:'🤸‍♂️', name:'Calisthenics', sub:'Bodyweight skills & progressions' },
-            { emoji:'🔥',   name:'Core & Abs',         sub:'6-day ab workout programme' },
+            { id:'cardio',      emoji:'🏠',   name:'Home Cardio',      sub:'No equipment needed' },
+            { id:'gym',         emoji:'🏋️',  name:'Gym Workouts',     sub:'Weights & machines' },
+            { id:'yoga',        emoji:'🧘',   name:'Yoga',             sub:'Mind & body balance' },
+            { id:'stretching',  emoji:'🤸',   name:'Stretching',       sub:'Flexibility & recovery' },
+            { id:'running',     emoji:'🏃',   name:'Running & Walking',sub:'GPS tracking + plans' },
+            { id:'calisthenics',emoji:'🤸‍♂️',name:'Calisthenics',    sub:'Bodyweight skills & progressions' },
+            { id:'core',        emoji:'🔥',   name:'Core & Abs',       sub:'6-day ab workout programme' },
           ].map(m => `
-            <div style="display:flex;align-items:center;gap:14px;padding:11px 14px;border-radius:14px;margin-bottom:8px;
-              border:1.5px solid var(--g4);background:rgba(67,160,90,0.06)">
-              <span style="font-size:24px;flex-shrink:0">${m.emoji}</span>
+            <div onclick="toggleOnboardModule('${m.id}',this)"
+              id="mod-${m.id}"
+              style="display:flex;align-items:center;gap:14px;padding:13px 16px;border-radius:14px;margin-bottom:10px;cursor:pointer;
+                border:2px solid var(--border);background:var(--surface);transition:all .2s">
+              <span style="font-size:26px;flex-shrink:0">${m.emoji}</span>
               <div style="flex:1">
-                <div style="font-weight:700;font-size:14px">${m.name}</div>
-                <div style="font-size:11px;color:var(--text3)">${m.sub}</div>
+                <div style="font-weight:700;font-size:15px">${m.name}</div>
+                <div style="font-size:12px;color:var(--text3)">${m.sub}</div>
               </div>
-              <div style="width:20px;height:20px;border-radius:50%;background:var(--g3);display:flex;align-items:center;justify-content:center;flex-shrink:0">
-                <span style="font-size:11px;color:#fff">✓</span>
-              </div>
+              <div id="mod-check-${m.id}" style="width:22px;height:22px;border-radius:50%;border:2px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all .2s"></div>
             </div>`).join('')}
         </div>
         <div style="display:flex;gap:10px;margin-top:20px">
           <button class="btn btn-ghost btn-full" onclick="goOnboardStep(1)">← Back</button>
-          <button class="btn btn-primary btn-full btn-lg" onclick="goOnboardStep(2.5)">Continue →</button>
+          <button id="ob-next-2" class="btn btn-primary btn-full btn-lg" style="opacity:0.4" disabled onclick="goOnboardStep(2.5)">Continue →</button>
         </div>
       </div>`;
+    // Re-select previously chosen modules
+    _onboardData.modules.forEach(id => {
+      const el = document.getElementById('mod-'+id);
+      if (el) _applyModuleSelect(el, id, true);
+    });
   } else if (step === 2.5) {
     container.innerHTML = `
       <div style="background:linear-gradient(135deg,var(--g1),var(--bg));min-height:100vh;padding:48px 24px 32px;display:flex;flex-direction:column">
@@ -1405,11 +1405,14 @@ function completeOnboarding() {
     Store.set('ff_body_profile_' + user.id, profile);
   }
 
-  // Always save all modules — every user gets the full suite
-  const ALL_MODS = ['cardio','gym','yoga','stretching','running','calisthenics','core'];
-  _onboardData.modules = [...ALL_MODS];
-  if (typeof saveModuleOrder === 'function') {
-    saveModuleOrder(user.id, ALL_MODS.map(id => ({ id })));
+  // Save preferred module order based on selections
+  if (_onboardData.modules.length > 0 && typeof saveModuleOrder === 'function') {
+    const ALL = ['cardio','gym','yoga','stretching','running','calisthenics','core'];
+    const ordered = [
+      ..._onboardData.modules,
+      ...ALL.filter(m => !_onboardData.modules.includes(m)),
+    ];
+    saveModuleOrder(user.id, ordered.map(id => ({ id })));
   }
 
   // Save default calisthenics equipment (no bar = safest default)
@@ -1433,13 +1436,57 @@ function completeOnboarding() {
 
 // Called when user clicks "Sign in with Google" button
 function signInWithGoogle() {
-  // Trigger the Google Identity Services popup
+  // Guard: check google GSI script has loaded
+  if (typeof google === 'undefined' || !google?.accounts?.id) {
+    showToast('Google Sign-In loading... please try again', 'info');
+    // Retry once after 1.5s
+    setTimeout(signInWithGoogle, 1500);
+    return;
+  }
+
+  // Initialize with popup mode — works reliably on mobile Chrome and TWA
   google.accounts.id.initialize({
     client_id: '255447439211-c769706kdp6g4vjuagf8t2uenkl5qhr8.apps.googleusercontent.com',
     callback:  handleGoogleLogin,
     ux_mode:   'popup',
+    cancel_on_tap_outside: false,
   });
-  google.accounts.id.prompt();
+
+  // Use renderButton approach for reliable mobile popup
+  // Then programmatically click it
+  const container = document.getElementById('google-signin-btn');
+  if (container) {
+    // Create a hidden div to render the real Google button, then click it
+    let hiddenDiv = document.getElementById('_g_btn_hidden');
+    if (!hiddenDiv) {
+      hiddenDiv = document.createElement('div');
+      hiddenDiv.id = '_g_btn_hidden';
+      hiddenDiv.style.cssText = 'position:absolute;opacity:0;pointer-events:none;width:1px;height:1px;overflow:hidden';
+      document.body.appendChild(hiddenDiv);
+    }
+    google.accounts.id.renderButton(hiddenDiv, {
+      type: 'standard',
+      size: 'large',
+      theme: 'outline',
+      text: 'signin_with',
+    });
+    // Click the rendered button after a short delay
+    setTimeout(() => {
+      const realBtn = hiddenDiv.querySelector('div[role="button"]') || hiddenDiv.querySelector('button');
+      if (realBtn) {
+        realBtn.click();
+      } else {
+        // Fallback: use One Tap prompt
+        google.accounts.id.prompt(notification => {
+          if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+            // One Tap was suppressed — show error
+            const errEl = document.getElementById('login-error');
+            if (errEl) errEl.textContent = 'Google Sign-In was blocked by your browser. Please try email login or allow popups.';
+          }
+        });
+      }
+    }, 300);
+  }
 }
 
 // Called by Google after user selects their account
