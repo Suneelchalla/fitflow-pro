@@ -39,8 +39,8 @@ const PUSH = {
               appId: this.ONESIGNAL_APP_ID,
               // Reuse our existing sw.js — it imports OneSignal SDK via importScripts.
               // This prevents two SW registrations fighting over the same scope.
-              serviceWorkerPath: '/fitflow-pro/sw.js',
-              serviceWorkerParam: { scope: '/fitflow-pro/' },
+              serviceWorkerPath: '/sw.js',
+              serviceWorkerParam: { scope: '/' },
               allowLocalhostAsSecureOrigin: true,
               notifyButton: { enable: false },
               autoRegister: false,
