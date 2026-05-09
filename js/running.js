@@ -392,23 +392,40 @@ function _activityNotifPayload(type) {
   };
 }
 
-function startActivityNotification() {
-  // Request notification permission if not already granted
-  if (Notification.permission === 'default') {
-    Notification.requestPermission();
+async function startActivityNotification() {
+  try {
+    // Request permission and AWAIT it — fire-and-forget was the bug
+    if (Notification.permission === 'default') {
+      const perm = await Notification.requestPermission().catch(() => 'denied');
+      if (perm !== 'granted') return;
+    }
+    if (Notification.permission !== 'granted') return;
+
+    // In TWA, SW controller may be null right after page load.
+    // Wait up to 4 seconds for it to become available.
+    if ('serviceWorker' in navigator) {
+      await navigator.serviceWorker.ready.catch(() => {});
+    }
+    if (!navigator.serviceWorker?.controller) {
+      // SW not controlling page yet — retry once after 2s
+      await new Promise(r => setTimeout(r, 2000));
+    }
+    if (!navigator.serviceWorker?.controller) return; // still not ready — skip
+
+    // Send initial notification immediately
+    const payload = _activityNotifPayload('ACTIVITY_START');
+    if (payload) _swPost(payload);
+
+    // Update every 3 seconds — keeps lock screen + notification bar current
+    if (_activityNotifInterval) clearInterval(_activityNotifInterval);
+    _activityNotifInterval = setInterval(() => {
+      if (!navigator.serviceWorker?.controller) return;
+      const p = _activityNotifPayload('ACTIVITY_UPDATE');
+      if (p) _swPost(p);
+    }, 3000);
+  } catch (e) {
+    console.warn('startActivityNotification failed:', e.message);
   }
-  if (Notification.permission !== 'granted') return;
-
-  // Send initial notification immediately
-  const payload = _activityNotifPayload('ACTIVITY_START');
-  if (payload) _swPost(payload);
-
-  // Update every 3 seconds — keeps lock screen + notification bar current
-  if (_activityNotifInterval) clearInterval(_activityNotifInterval);
-  _activityNotifInterval = setInterval(() => {
-    const p = _activityNotifPayload('ACTIVITY_UPDATE');
-    if (p) _swPost(p);
-  }, 3000);
 }
 
 function stopActivityNotification() {
