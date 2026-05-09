@@ -6,7 +6,7 @@
 // Import OneSignal's service worker — handles push notifications
 importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
 
-const CACHE = 'fitflow-v84';
+const CACHE = 'fitflow-v85';
 const ASSETS = [
   './',
   './index.html',
@@ -16,7 +16,7 @@ const ASSETS = [
   './js/app.js?v=75',
   './js/auth.js?v=76',
   './js/dashboard.js?v=76',
-  './js/running.js?v=77',
+  './js/running.js?v=78',
   './js/admin.js?v=76',
   './push.js',
   './js/custom-workouts.js?v=75',
@@ -115,42 +115,34 @@ self.addEventListener('message', e => {
 });
 
 function _showActivityNotif(data) {
-  const { emoji, label, distance, time, pace, kcal, paused } = data;
+  const { emoji, label, distance, time, pace, speed, kcal, paused } = data;
   const statusIcon = paused ? '⏸' : emoji;
-  const title      = `${statusIcon} ${label}  ·  ${distance} km  ·  ${time}`;
-  const body       = paused
-    ? `Paused — Tap to resume`
-    : `Pace ${pace}/km  ·  ${kcal} kcal burned`;
+
+  // Title: activity type + the two most glanceable stats
+  const title = `${statusIcon} ${label}  ·  ${distance} km  ·  ${time}`;
+
+  // Body: full stats line — speed, pace, calories
+  const body = paused
+    ? `Paused  ·  ${distance} km logged`
+    : `${speed || '0.0'} km/h  ·  Pace ${pace}/km  ·  ${kcal} kcal`;
 
   self.registration.showNotification(title, {
-    tag:              ACTIVITY_NOTIF_TAG,
+    tag:               ACTIVITY_NOTIF_TAG,
     body,
-    icon:             '/fitflow-pro/icons/icon-192.png',
-    badge:            '/fitflow-pro/icons/icon-192.png',
-    silent:           true,
-    renotify:         false,
-    requireInteraction: true,
-    actions: [
-      { action: 'open',  title: '📱 Open App' },
-      { action: 'pause', title: paused ? '▶ Resume' : '⏸ Pause' },
-    ],
+    icon:              '/fitflow-pro/icons/icon-192.png',
+    badge:             '/fitflow-pro/icons/icon-192.png',
+    silent:            true,   // no sound on every 3s update
+    renotify:          false,  // update in place — no vibration
+    requireInteraction: true,  // stays on lock screen until dismissed
     data: { url: '/fitflow-pro/#page-running' },
+    // No actions — tap notification to open app
   });
 }
 
 self.addEventListener('notificationclick', e => {
   if (e.notification.tag !== ACTIVITY_NOTIF_TAG) return;
   e.notification.close();
-
-  if (e.action === 'pause') {
-    // Send message to app to toggle pause
-    self.clients.matchAll({ type: 'window' }).then(clients => {
-      clients.forEach(c => c.postMessage({ type: 'SW_TOGGLE_PAUSE' }));
-    });
-    return;
-  }
-
-  // Open/focus the app
+  // Tap notification → open / focus the app on the running page
   e.waitUntil(
     self.clients.matchAll({ type: 'window' }).then(clients => {
       const match = clients.find(c => c.url.includes('fitflow-pro'));
