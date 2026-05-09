@@ -2121,21 +2121,21 @@ window.addEventListener('DOMContentLoaded', function() {
     </div>
 
     <!-- Bottom stats panel — floats above map, full pointer-events -->
-    <div style="position:absolute;bottom:0;left:0;right:0;z-index:20;pointer-events:auto">
+    <div style="position:absolute;bottom:0;left:0;right:0;z-index:20;pointer-events:auto;padding-bottom:env(safe-area-inset-bottom,0px)">
 
       <!-- Stats card -->
       <div style="margin:0 12px 10px;border-radius:20px;overflow:hidden;
         background:rgba(7,21,16,0.92);backdrop-filter:blur(12px);
-        border:1px solid rgba(255,255,255,0.1);padding:20px 20px 16px">
+        border:1px solid rgba(255,255,255,0.1);padding:14px 20px 12px">
 
         <!-- Timer -->
-        <div style="text-align:center;margin-bottom:14px">
+        <div style="text-align:center;margin-bottom:10px">
           <div style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px">Elapsed Time</div>
           <div class="run-timer" id="run-timer">00:00</div>
         </div>
 
         <!-- Stats row: distance / pace / speed / cal -->
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-bottom:16px">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:4px;margin-bottom:12px">
           <div class="run-stat">
             <div class="val" id="run-dist">0.00</div>
             <div class="lbl">KM</div>
@@ -2159,7 +2159,7 @@ window.addEventListener('DOMContentLoaded', function() {
           <button id="pause-run-btn" class="btn btn-full" onclick="togglePauseRun()"
             style="border:1px solid rgba(255,255,255,0.25);color:#fff;
               background:rgba(255,255,255,0.08);font-size:16px;font-weight:700;
-              padding:14px;border-radius:14px">⏸ Pause</button>
+              padding:12px;border-radius:14px">⏸ Pause</button>
         </div>
         <div id="run-controls-paused" style="display:none;gap:10px">
           <button class="btn btn-full" onclick="togglePauseRun()"
