@@ -1,8 +1,8 @@
 {
   "name": "FitFlow Pro",
   "short_name": "FitFlow",
-  "id": "/fitflow-pro/",
-  "description": "Android-first all-in-one fitness app — workouts, running, yoga, calisthenics, diet & more.",
+  "id": "/",
+  "description": "Android-first all-in-one fitness app \u2014 workouts, running, yoga, calisthenics, diet & more.",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",
@@ -59,7 +59,11 @@
       "purpose": "maskable"
     }
   ],
-  "categories": ["fitness", "health", "sports"],
+  "categories": [
+    "fitness",
+    "health",
+    "sports"
+  ],
   "lang": "en",
   "dir": "ltr",
   "shortcuts": [
@@ -68,14 +72,24 @@
       "short_name": "Run",
       "description": "Start a GPS running session",
       "url": "./index.html#page-running",
-      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     },
     {
       "name": "Dashboard",
       "short_name": "Home",
       "description": "Go to your fitness dashboard",
       "url": "./index.html#page-dashboard",
-      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     }
   ]
 }
