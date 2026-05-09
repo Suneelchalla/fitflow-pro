@@ -377,6 +377,8 @@ function _activityNotifPayload(type) {
   if (!s) return null;
   const elapsed = _calcElapsed(s);
   const meta    = ACTIVITY_META[s.activityType || _activityType] || ACTIVITY_META.run;
+  const avgSpeedKph  = elapsed > 0 ? (s.distance / elapsed * 3600) : 0;
+  const displaySpeed = (_currentGpsSpeed !== null) ? _currentGpsSpeed : avgSpeedKph;
   return {
     type,
     emoji:    meta.emoji,
@@ -384,13 +386,14 @@ function _activityNotifPayload(type) {
     distance: s.distance.toFixed(2),
     time:     fmtTime(elapsed),
     pace:     fmtPace(s.distance, elapsed),
+    speed:    displaySpeed.toFixed(1),
     kcal:     Math.round(s.distance * meta.kcalPerKm),
     paused:   !!s.paused,
   };
 }
 
 function startActivityNotification() {
-  // Request notification permission if not granted
+  // Request notification permission if not already granted
   if (Notification.permission === 'default') {
     Notification.requestPermission();
   }
@@ -400,17 +403,12 @@ function startActivityNotification() {
   const payload = _activityNotifPayload('ACTIVITY_START');
   if (payload) _swPost(payload);
 
-  // Update every 3 seconds
+  // Update every 3 seconds — keeps lock screen + notification bar current
   if (_activityNotifInterval) clearInterval(_activityNotifInterval);
   _activityNotifInterval = setInterval(() => {
     const p = _activityNotifPayload('ACTIVITY_UPDATE');
     if (p) _swPost(p);
   }, 3000);
-
-  // Listen for SW pause toggle commands
-  navigator.serviceWorker?.addEventListener('message', e => {
-    if (e.data?.type === 'SW_TOGGLE_PAUSE') togglePauseRun();
-  });
 }
 
 function stopActivityNotification() {
@@ -586,7 +584,10 @@ function _tryRecoverRunSession() {
   _activityType  = APP.runSession.activityType;
 
   _startRunTimerLoop();
-  if (!APP.runSession.paused) startGPS();
+  if (!APP.runSession.paused) {
+    startGPS();
+    startActivityNotification(); // restore live notification for recovered session
+  }
   LockScreen.start();
   showToast('Run restored — still tracking! 🏃', 'success');
 }
@@ -1176,6 +1177,7 @@ function _doStartRun() {
     startGPS();          // always start watchPosition — GPS may warm up after UI shows
     _requestWakeLock();
     LockScreen.start();
+    startActivityNotification(); // show live stats in notification bar + lock screen
   }
 
   navigator.geolocation.getCurrentPosition(
@@ -1197,9 +1199,11 @@ function _startRunTimerLoop() {
     if (!APP.runSession || APP.runSession.paused) return;
     updateRunDisplay();
     const elapsed = _calcElapsed(APP.runSession);
-    // FIX #3: save every 3 s (was 5 s — more reliable on throttled bg timers)
+    // Save every 3s — reliable on throttled background timers
     if (elapsed % 3  === 0) _saveRunSession();
-    if (elapsed % 10 === 0) { LockScreen.refresh(); refreshActivityNotification(); }
+    // Refresh lock screen media session every 10s (lightweight)
+    // Notification bar updates on its own 3s interval via startActivityNotification()
+    if (elapsed % 10 === 0) LockScreen.refresh();
   }, 1000);
 }
 
