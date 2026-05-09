@@ -6,7 +6,7 @@
 // Import OneSignal's service worker — handles push notifications
 importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
 
-const CACHE = 'fitflow-v88';
+const CACHE = 'fitflow-v89';
 const ASSETS = [
   './',
   './index.html',
@@ -129,12 +129,12 @@ function _showActivityNotif(data) {
   self.registration.showNotification(title, {
     tag:               ACTIVITY_NOTIF_TAG,
     body,
-    icon:              '/fitflow-pro/icons/icon-192.png',
-    badge:             '/fitflow-pro/icons/icon-192.png',
+    icon:              '/icons/icon-192.png',
+    badge:             '/icons/icon-192.png',
     silent:            true,   // no sound on every 3s update
     renotify:          false,  // update in place — no vibration
     requireInteraction: true,  // stays on lock screen until dismissed
-    data: { url: '/fitflow-pro/#page-running' },
+    data: { url: '/#page-running' },
     // No actions — tap notification to open app
   });
 }
@@ -145,9 +145,9 @@ self.addEventListener('notificationclick', e => {
   // Tap notification → open / focus the app on the running page
   e.waitUntil(
     self.clients.matchAll({ type: 'window' }).then(clients => {
-      const match = clients.find(c => c.url.includes('fitflow-pro'));
+      const match = clients.find(c => c.url.includes('fitflowpro.in'));
       if (match) return match.focus();
-      return self.clients.openWindow('/fitflow-pro/#page-running');
+      return self.clients.openWindow('/#page-running');
     })
   );
 });
