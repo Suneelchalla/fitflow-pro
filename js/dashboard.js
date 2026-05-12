@@ -916,16 +916,22 @@ function updateCompleteBtn() {
 
   if (!all.length) return;
 
-  const isHoldBased    = mod === 'yoga' || mod === 'stretching';
+  // Gym uses plain text rows — no interactive checkboxes, so sets can never be
+  // "checked". Treat gym as always ready to log (or already logged).
+  const isGymModule = mod === 'gym';
+  const isHoldBased = mod === 'yoga' || mod === 'stretching';
+
   const totalSets = isHoldBased
     ? all.length
     : all.reduce((a, e) => a + (parseInt(e.sets) || 1), 0);
   const doneSets  = isHoldBased
     ? all.filter((_, i) => (sessionData[i] || []).length >= 1).length
     : Object.values(sessionData).flat().length;
-  const allDone   = isHoldBased
-    ? all.every((_, i) => (sessionData[i] || []).length >= 1)
-    : all.every((ex, i) => (sessionData[i] || []).length >= (parseInt(ex.sets) || 1));
+  const allDone   = isGymModule  // gym: always "ready" since sets aren't tracked
+    ? true
+    : isHoldBased
+      ? all.every((_, i) => (sessionData[i] || []).length >= 1)
+      : all.every((ex, i) => (sessionData[i] || []).length >= (parseInt(ex.sets) || 1));
   const alreadyLogged = Store.getModuleDayLogs(user.id, mod).some(l => l.day === day && l.date === todayStr());
 
   const btn = document.getElementById('complete-day-btn');
@@ -935,6 +941,11 @@ function updateCompleteBtn() {
     btn.textContent = '✓ Day Complete!';
     btn.className   = 'btn btn-outline btn-full';
     btn.disabled    = true;
+  } else if (isGymModule) {
+    // Gym: no set tracking — just show a clean "Log Workout" button
+    btn.textContent = '🎉 Log Today\'s Workout';
+    btn.className   = 'btn btn-accent btn-full';
+    btn.disabled    = false;
   } else {
     btn.textContent = allDone ? '🎉 Complete Day!' : `Mark Day Complete (${doneSets}/${totalSets} sets)`;
     btn.className   = `btn ${allDone ? 'btn-accent' : 'btn-primary'} btn-full`;
@@ -1512,39 +1523,67 @@ function _showHistoryRunDetail(idx) {
 
 // ── HISTORY: WORKOUT DETAIL CARD ─────────────────────────────────
 function _showHistoryWorkoutDetail(moduleId, date, day) {
-  const modData = (window.APP_DATA_DEFAULT||window.APP_DATA).modules[moduleId];
-  const modName = getModuleName(moduleId);
+  const modData  = (window.APP_DATA_DEFAULT||window.APP_DATA).modules[moduleId];
+  const modName  = getModuleName(moduleId);
   const modEmoji = getModuleEmoji(moduleId);
 
-  // Get the exercises done that day from session data
-  const user       = APP.currentUser;
-  const sessionKey = `sess_${user.id}_${moduleId}_${day}_${date}`;
+  const user        = APP.currentUser;
+  const sessionKey  = `sess_${user.id}_${moduleId}_${day}_${date}`;
   const sessionData = Store.get(sessionKey, {});
 
-  // Get exercise list for that day
-  const exOverride    = Store.getContent('exercises_' + moduleId);
-  const dayExercises  = exOverride?.days?.[day] || modData?.days?.[day] || [];
-  const warmups       = Store.getContent('warmup_' + moduleId)   || (window.APP_DATA_DEFAULT||window.APP_DATA).warmups?.[moduleId]   || [];
-  const cooldowns     = Store.getContent('cooldown_' + moduleId) || (window.APP_DATA_DEFAULT||window.APP_DATA).cooldowns?.[moduleId] || [];
-  const allExercises  = [
-    ...warmups.map(e => ({...e, _section:'warmup'})),
+  // Build exercise list for that day
+  const exOverride   = Store.getContent('exercises_' + moduleId);
+  const dayExercises = exOverride?.days?.[day] || modData?.days?.[day] || [];
+  const warmups      = Store.getContent('warmup_'   + moduleId) || (window.APP_DATA_DEFAULT||window.APP_DATA).warmups?.[moduleId]   || [];
+  const cooldowns    = Store.getContent('cooldown_' + moduleId) || (window.APP_DATA_DEFAULT||window.APP_DATA).cooldowns?.[moduleId] || [];
+  const allExercises = [
+    ...warmups.map(e    => ({...e, _section:'warmup'})),
     ...dayExercises.map(e => ({...e, _section:'main'})),
-    ...cooldowns.map(e => ({...e, _section:'cooldown'})),
+    ...cooldowns.map(e  => ({...e, _section:'cooldown'})),
   ];
 
-  const dateObj  = new Date(date + 'T12:00:00');
-  const dateStr  = dateObj.toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+  const dateObj = new Date(date + 'T12:00:00');
+  const dateStr = dateObj.toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
 
-  // Count completed sets
-  const totalSets = allExercises.reduce((a, ex) => a + (parseInt(ex.sets) || 1), 0);
-  const doneSets  = Object.values(sessionData).flat().length;
-  const pct       = totalSets > 0 ? Math.round(doneSets / totalSets * 100) : 0;
+  // ── COMPLETION LOGIC ──────────────────────────────────────────────
+  // Was this day actually logged by the user pressing "Complete Day"?
+  const wasLogged = Store.getModuleDayLogs(user.id, moduleId).some(l => l.day === day && l.date === date);
 
+  // Gym workouts render plain text rows — no interactive checkboxes exist,
+  // so sessionData is always empty {} regardless of effort. For any other module,
+  // if the user pressed "Complete Day" without tracking individual sets, the same
+  // empty-session problem occurs. In both cases: if the day is logged and there
+  // is no set data, treat the whole session as 100% complete.
+  const isGymModule  = moduleId === 'gym';
+  const rawDoneSets  = Object.values(sessionData).flat().length;
+  const totalSets    = allExercises.reduce((a, ex) => a + (parseInt(ex.sets) || 1), 0);
+  const noSetData    = rawDoneSets === 0;
+  const treatAsFull  = wasLogged && (isGymModule || noSetData);
+  const doneSets     = treatAsFull ? totalSets : rawDoneSets;
+  const pct          = totalSets > 0 ? Math.round(doneSets / totalSets * 100) : (wasLogged ? 100 : 0);
+
+  // Status + sub-label
+  const statusLabel = (pct === 100)
+    ? '🎉 Workout Complete!'
+    : pct > 0
+      ? '⚡ Partial Workout'
+      : wasLogged
+        ? '✓ Day Logged'
+        : '📋 Logged';
+
+  const subLabel = isGymModule
+    ? `${allExercises.length} exercises · Day: ${day}`
+    : (treatAsFull && noSetData)
+      ? `All sets complete · Day: ${day}`
+      : `${doneSets} of ${totalSets} sets completed · Day: ${day}`;
+
+  // ── EXERCISE ROWS ─────────────────────────────────────────────────
   const sectionLabels = { warmup: '🔥 Warm-Up', main: '💪 Main Workout', cooldown: '🧘 Cool-Down' };
   let prevSection = '';
   const exerciseRows = allExercises.map((ex, i) => {
-    const isDone   = sessionData[i] && sessionData[i].length >= (parseInt(ex.sets) || 1);
-    const checkedCount = (sessionData[i] || []).length;
+    // Mark done if: set-level data confirms it, OR we're treating the day as fully complete
+    const isDone       = treatAsFull || (sessionData[i] && sessionData[i].length >= (parseInt(ex.sets) || 1));
+    const checkedCount = treatAsFull ? (parseInt(ex.sets) || 1) : (sessionData[i] || []).length;
     let sectionHdr = '';
     if (ex._section !== prevSection) {
       prevSection = ex._section;
@@ -1561,7 +1600,7 @@ function _showHistoryWorkoutDetail(moduleId, date, day) {
         </div>
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:600;${isDone ? '' : 'color:var(--text3)'}">${ex.name || ''}</div>
-          <div style="font-size:11px;color:var(--text3)">${ex.sets || 1} sets · ${ex.reps || ''}</div>
+          <div style="font-size:11px;color:var(--text3)">${ex.sets || 1} sets · ${ex.reps || ex.hold || ''}</div>
         </div>
         <div style="font-size:11px;color:var(--text3);flex-shrink:0">${checkedCount}/${parseInt(ex.sets)||1}</div>
       </div>`;
@@ -1600,12 +1639,8 @@ function _showHistoryWorkoutDetail(moduleId, date, day) {
           font-size:12px;font-weight:700;color:var(--g5)">${pct}%</div>
       </div>
       <div>
-        <div style="font-weight:700;font-size:15px">
-          ${pct === 100 ? '🎉 Full Workout Complete!' : pct > 0 ? '⚡ Partial Workout' : '📋 Logged'}
-        </div>
-        <div style="font-size:13px;color:var(--text3);margin-top:3px">
-          ${doneSets} of ${totalSets} sets completed · Day: ${day}
-        </div>
+        <div style="font-weight:700;font-size:15px">${statusLabel}</div>
+        <div style="font-size:13px;color:var(--text3);margin-top:3px">${subLabel}</div>
       </div>
     </div>
 
