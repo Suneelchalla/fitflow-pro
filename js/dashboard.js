@@ -1526,20 +1526,65 @@ function _showHistoryWorkoutDetail(moduleId, date, day) {
   const modData  = (window.APP_DATA_DEFAULT||window.APP_DATA).modules[moduleId];
   const modName  = getModuleName(moduleId);
   const modEmoji = getModuleEmoji(moduleId);
+  const user     = APP.currentUser;
 
-  const user        = APP.currentUser;
   const sessionKey  = `sess_${user.id}_${moduleId}_${day}_${date}`;
   const sessionData = Store.get(sessionKey, {});
 
-  // Build exercise list for that day
-  const exOverride   = Store.getContent('exercises_' + moduleId);
-  const dayExercises = exOverride?.days?.[day] || modData?.days?.[day] || [];
-  const warmups      = Store.getContent('warmup_'   + moduleId) || (window.APP_DATA_DEFAULT||window.APP_DATA).warmups?.[moduleId]   || [];
-  const cooldowns    = Store.getContent('cooldown_' + moduleId) || (window.APP_DATA_DEFAULT||window.APP_DATA).cooldowns?.[moduleId] || [];
+  // ── MODULE-AWARE EXERCISE FETCHING ────────────────────────────────
+  // Each module stores its exercise data differently.
+  // We must read from the right source or the list will be empty.
+  const isGymModule    = moduleId === 'gym';
+  const isYogaModule   = moduleId === 'yoga';
+  const isCaliModule   = moduleId === 'calisthenics';
+  const isCustomModule = moduleId.startsWith('custom_');
+
+  let dayExercises = [];
+  let warmups      = [];
+  let cooldowns    = [];
+
+  if (isYogaModule) {
+    // Yoga uses schedule['Day N'].poses — NOT days[weekday]
+    const yogaBase = (window.APP_DATA_DEFAULT||window.APP_DATA).modules?.yoga;
+    const savedYoga = Store.getContent('exercises_yoga');
+    const yogaData  = savedYoga
+      ? { ...yogaBase, schedule: savedYoga.schedule || yogaBase?.schedule }
+      : yogaBase;
+    const dayData = yogaData?.schedule?.[day]; // day = "Day 5", "Day 12" etc.
+    dayExercises = dayData?.poses || [];
+    warmups  = Store.getContent('warmup_yoga')   || (window.APP_DATA_DEFAULT||window.APP_DATA).warmups?.yoga   || [];
+    cooldowns = Store.getContent('cooldown_yoga') || (window.APP_DATA_DEFAULT||window.APP_DATA).cooldowns?.yoga || [];
+
+  } else if (isCaliModule) {
+    // Calisthenics exercises live inside levels[level].days[weekday]
+    const userLevel = Store.get('ff_cali_level_' + user.id, 1);
+    const levels    = (window.APP_DATA_DEFAULT||window.APP_DATA).modules?.calisthenics?.levels || {};
+    const savedKey  = 'exercises_calisthenics_l' + userLevel;
+    const savedData = Store.getContent(savedKey);
+    dayExercises = savedData?.days?.[day] || levels[userLevel]?.days?.[day] || [];
+    warmups  = Store.getContent('warmup_calisthenics')   || (window.APP_DATA_DEFAULT||window.APP_DATA).warmups?.calisthenics   || [];
+    cooldowns = Store.getContent('cooldown_calisthenics') || (window.APP_DATA_DEFAULT||window.APP_DATA).cooldowns?.calisthenics || [];
+
+  } else if (isCustomModule) {
+    // Custom workouts: exercises from CW store — no warmup/cooldown
+    const workoutId = moduleId.replace('custom_', '');
+    const cw = (typeof CW !== 'undefined') ? CW.getById(user.id, workoutId) : null;
+    dayExercises = cw ? cw.exercises || [] : [];
+    warmups  = [];
+    cooldowns = [];
+
+  } else {
+    // Cardio, Gym, Stretching, Core — standard days[weekday] structure
+    const exOverride = Store.getContent('exercises_' + moduleId);
+    dayExercises = exOverride?.days?.[day] || modData?.days?.[day] || [];
+    warmups  = Store.getContent('warmup_'   + moduleId) || (window.APP_DATA_DEFAULT||window.APP_DATA).warmups?.[moduleId]   || [];
+    cooldowns = Store.getContent('cooldown_' + moduleId) || (window.APP_DATA_DEFAULT||window.APP_DATA).cooldowns?.[moduleId] || [];
+  }
+
   const allExercises = [
-    ...warmups.map(e    => ({...e, _section:'warmup'})),
+    ...warmups.map(e     => ({...e, _section:'warmup'})),
     ...dayExercises.map(e => ({...e, _section:'main'})),
-    ...cooldowns.map(e  => ({...e, _section:'cooldown'})),
+    ...cooldowns.map(e   => ({...e, _section:'cooldown'})),
   ];
 
   const dateObj = new Date(date + 'T12:00:00');
@@ -1549,18 +1594,15 @@ function _showHistoryWorkoutDetail(moduleId, date, day) {
   // Was this day actually logged by the user pressing "Complete Day"?
   const wasLogged = Store.getModuleDayLogs(user.id, moduleId).some(l => l.day === day && l.date === date);
 
-  // Gym workouts render plain text rows — no interactive checkboxes exist,
-  // so sessionData is always empty {} regardless of effort. For any other module,
-  // if the user pressed "Complete Day" without tracking individual sets, the same
-  // empty-session problem occurs. In both cases: if the day is logged and there
-  // is no set data, treat the whole session as 100% complete.
-  const isGymModule  = moduleId === 'gym';
-  const rawDoneSets  = Object.values(sessionData).flat().length;
-  const totalSets    = allExercises.reduce((a, ex) => a + (parseInt(ex.sets) || 1), 0);
-  const noSetData    = rawDoneSets === 0;
-  const treatAsFull  = wasLogged && (isGymModule || noSetData);
-  const doneSets     = treatAsFull ? totalSets : rawDoneSets;
-  const pct          = totalSets > 0 ? Math.round(doneSets / totalSets * 100) : (wasLogged ? 100 : 0);
+  // Gym: plain text rows — no checkboxes, sessionData always empty.
+  // Any module: if logged with no per-set data, user pressed "Complete Day"
+  //   directly — treat as fully complete rather than showing 0%.
+  const rawDoneSets = Object.values(sessionData).flat().length;
+  const totalSets   = allExercises.reduce((a, ex) => a + (parseInt(ex.sets) || 1), 0);
+  const noSetData   = rawDoneSets === 0;
+  const treatAsFull = wasLogged && (isGymModule || isYogaModule || isCaliModule || isCustomModule || noSetData);
+  const doneSets    = treatAsFull ? totalSets : rawDoneSets;
+  const pct         = totalSets > 0 ? Math.round(doneSets / totalSets * 100) : (wasLogged ? 100 : 0);
 
   // Status + sub-label
   const statusLabel = (pct === 100)
@@ -1573,24 +1615,41 @@ function _showHistoryWorkoutDetail(moduleId, date, day) {
 
   const subLabel = isGymModule
     ? `${allExercises.length} exercises · Day: ${day}`
-    : (treatAsFull && noSetData)
-      ? `All sets complete · Day: ${day}`
-      : `${doneSets} of ${totalSets} sets completed · Day: ${day}`;
+    : isYogaModule
+      ? `${dayExercises.length} poses · ${day}`
+      : isCaliModule
+        ? `${dayExercises.length} exercises · Day: ${day}`
+        : isCustomModule
+          ? `${dayExercises.length} exercises logged`
+          : (treatAsFull && noSetData)
+            ? `All sets complete · Day: ${day}`
+            : `${doneSets} of ${totalSets} sets completed · Day: ${day}`;
 
   // ── EXERCISE ROWS ─────────────────────────────────────────────────
   const sectionLabels = { warmup: '🔥 Warm-Up', main: '💪 Main Workout', cooldown: '🧘 Cool-Down' };
   let prevSection = '';
   const exerciseRows = allExercises.map((ex, i) => {
-    // Mark done if: set-level data confirms it, OR we're treating the day as fully complete
     const isDone       = treatAsFull || (sessionData[i] && sessionData[i].length >= (parseInt(ex.sets) || 1));
     const checkedCount = treatAsFull ? (parseInt(ex.sets) || 1) : (sessionData[i] || []).length;
     let sectionHdr = '';
     if (ex._section !== prevSection) {
       prevSection = ex._section;
+      // For yoga: rename "Main Workout" → "Practice Sequence"
+      const sectionName = isYogaModule && ex._section === 'main'
+        ? '🧘 Practice Sequence'
+        : isCaliModule && ex._section === 'main'
+          ? '🤸 Exercises'
+          : isCustomModule && ex._section === 'main'
+            ? '💪 Your Workout'
+            : sectionLabels[ex._section] || ex._section;
       sectionHdr = `<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;
         letter-spacing:.08em;margin:12px 0 6px;padding:6px 10px;background:var(--bg3);border-radius:8px">
-        ${sectionLabels[ex._section] || ex._section}</div>`;
+        ${sectionName}</div>`;
     }
+    // Yoga shows hold time, others show sets·reps
+    const metaLine = isYogaModule
+      ? (ex.hold || ex.reps || '')
+      : `${ex.sets || 1} sets · ${ex.reps || ex.hold || ''}`;
     return `${sectionHdr}
       <div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">
         <div style="width:28px;height:28px;border-radius:8px;flex-shrink:0;
@@ -1600,7 +1659,7 @@ function _showHistoryWorkoutDetail(moduleId, date, day) {
         </div>
         <div style="flex:1;min-width:0">
           <div style="font-size:13px;font-weight:600;${isDone ? '' : 'color:var(--text3)'}">${ex.name || ''}</div>
-          <div style="font-size:11px;color:var(--text3)">${ex.sets || 1} sets · ${ex.reps || ex.hold || ''}</div>
+          <div style="font-size:11px;color:var(--text3)">${metaLine}</div>
         </div>
         <div style="font-size:11px;color:var(--text3);flex-shrink:0">${checkedCount}/${parseInt(ex.sets)||1}</div>
       </div>`;
