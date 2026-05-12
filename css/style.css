@@ -484,6 +484,11 @@ textarea.form-input { resize: vertical; min-height: 90px; line-height: 1.5; }
 .leaflet-bottom       { z-index: 2 !important; }
 .leaflet-control      { z-index: 2 !important; }
 
+/* Keep map background dark at all times — prevents white flash during tile
+   load, zoom, or style switch. CSS fires before JS so no flicker on init. */
+.leaflet-container    { background: #0d1f14 !important; }
+.leaflet-tile-pane    { background: #0d1f14 !important; }
+
 /* Live map container: pointer-events ON — map handles its own touches.
    The stats panel sits in a sibling with z-index:20 and pointer-events:auto,
    so button taps reach the buttons. Map gets everything else. */
