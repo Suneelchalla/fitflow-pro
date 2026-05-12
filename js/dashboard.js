@@ -2490,8 +2490,6 @@ function toggleProfileMenu() {
     const em = document.getElementById('profile-menu-email');
     if (el) el.textContent = APP.currentUser.name;
     if (em) em.textContent = APP.currentUser.email;
-    // Refresh notification toggle switch state when menu opens
-    _updateNotifToggleVisual();
     // Refresh admin theme toggle (visibility + state)
     if (typeof refreshAdminThemeToggle === 'function') refreshAdminThemeToggle();
   }
