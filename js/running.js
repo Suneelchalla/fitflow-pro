@@ -1620,6 +1620,10 @@ function saveRun() {
 
 // ── DISCARD ───────────────────────────────────────────────────────
 function discardRun() {
+  // Always stop the live activity notification — even when called directly from
+  // the "Discard" button, not via saveRun(). Without this the notification
+  // stays on the lock screen indefinitely after discarding.
+  stopActivityNotification();
   clearInterval(APP.runInterval);
   APP.runInterval = null;
   if (APP.runWatchId != null) {
