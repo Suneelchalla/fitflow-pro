@@ -30,7 +30,7 @@ const PUSH = {
     if (this._initPromise) return this._initPromise;
     if (typeof window.OneSignalDeferred === 'undefined') return null;
 
-    this._initPromise = new Promise(resolve => {
+    const sdkPromise = new Promise(resolve => {
       window.OneSignalDeferred.push(async OneSignal => {
         if (!this._initStarted) {
           this._initStarted = true;
@@ -53,6 +53,27 @@ const PUSH = {
         resolve(OneSignal);
       });
     });
+
+    // 8-second timeout — if SDK init callback never fires (network issue,
+    // CDN slow, etc.) we don't hang the toggle forever.
+    // On timeout: resolve null AND reset state so the next tap can retry.
+    const timeoutPromise = new Promise(resolve =>
+      setTimeout(() => {
+        console.warn('Push: OneSignal init timed out — will retry on next tap');
+        resolve(null);
+      }, 8000)
+    );
+
+    this._initPromise = Promise.race([sdkPromise, timeoutPromise]);
+
+    // If timed out (null result), clear cached promise so next subscribe attempt retries
+    this._initPromise.then(result => {
+      if (!result) {
+        this._initPromise  = null;
+        this._initStarted  = false;
+      }
+    });
+
     return this._initPromise;
   },
 
