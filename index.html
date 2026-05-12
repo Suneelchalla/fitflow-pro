@@ -1840,16 +1840,8 @@ window.addEventListener('DOMContentLoaded', function() {
           <!-- 1. My Profile -->
           <button onclick="openProfilePage()" style="width:100%;text-align:left;padding:10px 12px;background:none;border:none;color:var(--text2);font-size:14px;cursor:pointer;border-radius:8px;font-family:var(--font-body)">👤 My Profile</button>
 
-          <!-- 2. Daily Reminders with toggle switch -->
-          <div onclick="toggleNotificationSetting()" id="notif-toggle-btn"
-            style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 12px;cursor:pointer;border-radius:8px;font-family:var(--font-body)">
-            <span style="color:var(--text2);font-size:14px">🔔 Daily Reminders</span>
-            <div id="notif-toggle-switch" data-on="false"
-              style="width:42px;height:24px;border-radius:12px;background:rgba(255,255,255,0.15);position:relative;transition:background 0.2s;flex-shrink:0">
-              <div id="notif-toggle-knob"
-                style="position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:white;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.3)"></div>
-            </div>
-          </div>
+          <!-- 2. Daily Reminders — auto-subscribed, no toggle needed -->
+          <!-- Users manage notifications via Android Settings → Apps → FitFlow Pro -->
 
           <!-- 3. Change Password -->
           <button onclick="openChangePasswordModal()" style="width:100%;text-align:left;padding:10px 12px;background:none;border:none;color:var(--text2);font-size:14px;cursor:pointer;border-radius:8px;font-family:var(--font-body)">🔑 Change Password</button>
@@ -2975,10 +2967,10 @@ window.addEventListener('DOMContentLoaded', function() {
 <script src="js/data-cali.js?v=75"></script>
 <script src="js/app.js?v=77"></script>
 <script src="js/auth.js?v=77"></script>
-<script src="js/dashboard.js?v=82"></script>
+<script src="js/dashboard.js?v=83"></script>
 <script src="js/running.js?v=81"></script>
 <script src="js/admin.js?v=76"></script>
-<script src="push.js?v=5"></script>
+<script src="push.js?v=6"></script>
 <script src="js/custom-workouts.js?v=75"></script>
 <script src="js/weekly-report.js?v=75"></script>
 <script>
@@ -2992,7 +2984,7 @@ window.addEventListener('DOMContentLoaded', function() {
 //   (b) calling a stale updateReminderBtn() that read pushManager state
 //       directly instead of OneSignal's state, causing the notification
 //       toggle to never reflect the real subscription.
-// Do NOT redefine toggleProfileMenu, toggleNotificationSetting, or
+// Do NOT redefine toggleProfileMenu or
 // updateReminderBtn here.
 
 // ── FEEDBACK ──────────────────────────────────────────────────
@@ -3051,8 +3043,7 @@ function fillDemo(email, pass) {
   document.getElementById('login-password').value = pass;
 }
 
-// NOTE: toggleNotificationSetting() and the toggle-visual updater are
-// defined in dashboard.js (toggleNotificationSetting + _updateNotifToggleVisual).
+
 // The previous inline duplicates checked navigator.serviceWorker pushManager
 // directly, which does NOT reflect OneSignal v16's subscription state — so
 // users could never enable notifications from the toggle. Keeping a single
