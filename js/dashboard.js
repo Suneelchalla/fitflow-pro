@@ -2930,19 +2930,19 @@ async function _updateNotifToggleVisual() {
   }
   sw.style.opacity = '1';
   try {
-    // Wait for OneSignal init — but cap at 3s so the toggle never stays frozen
-    if (PUSH._ensureInit) {
-      await Promise.race([
-        PUSH._ensureInit(),
-        new Promise(r => setTimeout(r, 3000)),
-      ]);
+    // Quick path: if OS permission is not granted, we are definitely not subscribed.
+    // No need to wait for OneSignal at all — return immediately.
+    const perm = (typeof Notification !== 'undefined') ? Notification.permission : 'denied';
+    if (perm !== 'granted') {
+      sw.setAttribute('data-on', 'false');
+      sw.style.background = 'rgba(255,255,255,0.15)';
+      knob.style.left     = '3px';
+      return;
     }
-    // Brief moment for SDK to hydrate state from cache
-    await new Promise(r => setTimeout(r, 100));
-    // Cap isSubscribed check at 3s too
+    // Permission is granted — check actual subscription state, capped at 2s
     const on = await Promise.race([
       PUSH.isSubscribed(),
-      new Promise(r => setTimeout(() => r(false), 3000)),
+      new Promise(r => setTimeout(() => r(false), 2000)),
     ]);
     sw.setAttribute('data-on', on ? 'true' : 'false');
     sw.style.background = on ? 'var(--g4)' : 'rgba(255,255,255,0.15)';
