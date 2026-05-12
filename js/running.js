@@ -64,10 +64,15 @@ function switchMapStyle(style, btn) {
   if (_liveMap && _liveMapTileLayer) {
     _liveMap.removeLayer(_liveMapTileLayer);
     _liveMapTileLayer = L.tileLayer(_getTileLayer(style), {
-      maxZoom: 19, keepBuffer: 4, updateWhenIdle: false, updateWhenZooming: true,
+      maxZoom: 19, keepBuffer: 6, updateWhenIdle: false, updateWhenZooming: true, crossOrigin: true,
     });
     _liveMapTileLayer.addTo(_liveMap);
+    // Keep dark container background regardless of map style —
+    // prevents white flash when tiles load after a style switch.
+    const container = _liveMap.getContainer();
+    if (container) container.style.background = '#0d1f14';
     setTimeout(() => { if (_liveMap) _liveMap.invalidateSize({ animate: false }); }, 100);
+    setTimeout(() => { if (_liveMap) _liveMap.invalidateSize({ animate: false }); }, 400);
   }
 }
 
@@ -401,14 +406,17 @@ async function startActivityNotification() {
     }
     if (Notification.permission !== 'granted') return;
 
-    // In TWA, SW controller may be null right after page load.
-    // Wait up to 4 seconds for it to become available.
+    // In TWA / Android Chrome, the SW controller may be null right after page load.
+    // Wait up to 6 seconds with retries — 2s wasn't always enough.
     if ('serviceWorker' in navigator) {
       await navigator.serviceWorker.ready.catch(() => {});
     }
     if (!navigator.serviceWorker?.controller) {
-      // SW not controlling page yet — retry once after 2s
-      await new Promise(r => setTimeout(r, 2000));
+      // Retry up to 3 times with 2s gaps
+      for (let attempt = 0; attempt < 3; attempt++) {
+        await new Promise(r => setTimeout(r, 2000));
+        if (navigator.serviceWorker?.controller) break;
+      }
     }
     if (!navigator.serviceWorker?.controller) return; // still not ready — skip
 
@@ -589,6 +597,15 @@ function _tryRecoverRunSession() {
   const saved = Store.get(RUN_SESSION_KEY);
   if (!saved || APP.runSession) return;
 
+  // Don't restore sessions older than 3 hours — they're stale abandonments.
+  // Without this check, visiting the running page days later would restore an
+  // old session and fire GPS + activity notification unexpectedly.
+  const sessionAge = Date.now() - (saved.startTime || 0);
+  if (sessionAge > 3 * 60 * 60 * 1000) {
+    Store.remove(RUN_SESSION_KEY);
+    return;
+  }
+
   APP.runSession = {
     startTime:    saved.startTime,
     pausedAt:     saved.pausedAt    || null,
@@ -614,6 +631,14 @@ function initRunningPage() {
   APP.currentModule = 'running';
 
   _tryRecoverRunSession();
+
+  if (!APP.runSession) {
+    // Clear any stale activity notification left from a previous session that ended
+    // without sending ACTIVITY_STOP (e.g. app was killed, page was refreshed).
+    // requireInteraction:true keeps the notification alive indefinitely — this clears it.
+    _swPost({ type: 'ACTIVITY_STOP' });
+    if (_activityNotifInterval) { clearInterval(_activityNotifInterval); _activityNotifInterval = null; }
+  }
 
   if (APP.runSession) {
     // Show active run UI (hides idle, shows full-screen map state)
@@ -732,6 +757,18 @@ function _initLiveMap() {
       bounceAtZoomLimits: false,
     }).setView(startCoord, 17);
 
+    // Set dark background so the container never flashes white during tile load/zoom.
+    // Leaflet's default background is white — this overrides it immediately.
+    container.style.background = '#0d1f14';
+    const tilePane = _liveMap.getPanes().tilePane;
+    if (tilePane) tilePane.style.background = '#0d1f14';
+
+    // Re-measure after zoom so Leaflet knows the real container bounds.
+    // Without this, zooming on some Android versions causes a blank tile flash.
+    _liveMap.on('zoomend', () => {
+      if (_liveMap) _liveMap.invalidateSize({ animate: false });
+    });
+
     // Detect when user manually pans — stop auto-recentering AND rotation
     _liveMap.on('dragstart', () => {
       _userPanned      = true;
@@ -808,9 +845,10 @@ function _initLiveMap() {
 
     _liveMapTileLayer = L.tileLayer(_getTileLayer(_mapStyle), {
       maxZoom:           19,
-      keepBuffer:        4,   // preload 4 tiles beyond viewport — prevents blank on zoom
+      keepBuffer:        6,   // preload 6 tiles beyond viewport — prevents blank on zoom/pan
       updateWhenIdle:    false,
       updateWhenZooming: true,
+      crossOrigin:       true,  // required for some tile CDNs on Android WebView
     });
     _liveMapTileLayer.addTo(_liveMap);
 
@@ -964,8 +1002,8 @@ class GpsKalmanFilter {
     this.lastTs    = 0;
     // Process noise: how much we expect position to change per second
     // Higher = trusts GPS more (wiggly), Lower = smoother (slower to react)
-    // 1.5 m²/s: smooth enough to remove jitter, fast enough for real turns
-    this.Q_METRES_PER_SECOND = 1.5;
+    // 3.0 m²/s: responsive enough for walking (1.1 m/s) and running (3+ m/s)
+    this.Q_METRES_PER_SECOND = 3.0;
   }
 
   // Returns smoothed { lat, lon } or null if not ready
@@ -1008,9 +1046,9 @@ const _kalman = new GpsKalmanFilter();
 // ── GPS RUN TRACKER ───────────────────────────────────────────────
 
 // FIX #2: GPS warm-up state — skip first N fixes while device acquires lock
-const GPS_WARMUP_FIXES    = 6;    // discard first 6 positions (device triangulating)
-const GPS_MIN_ACCURACY_M  = 40;   // reject if worse than 40 m — urban multi-path rejection
-const GPS_MIN_DISTANCE_KM = 0.004; // ignore movement < 4 m (standing still jitter)
+const GPS_WARMUP_FIXES    = 4;    // discard first 4 positions (device triangulating)
+const GPS_MIN_ACCURACY_M  = 60;   // reject if worse than 60 m — increased from 40 for urban tolerance
+const GPS_MIN_DISTANCE_KM = 0.001; // ignore movement < 1 m (was 4 m — too high for slow walking)
 
 let _gpsWarmupCount  = 0;          // counts received fixes during warmup phase
 let _gpsLastGoodFix  = null;       // last confirmed-accurate position
@@ -1425,6 +1463,7 @@ function stopRun() {
     document.getElementById('run-active').classList.add('hidden');
     APP.runSession = null;
     _clearRunSession();
+    stopActivityNotification(); // always clear notification — even for short/discarded runs
     if (elapsed > 0) showToast('Run was too short — not saved.', 'info');
     return;
   }
