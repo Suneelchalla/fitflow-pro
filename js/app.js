@@ -611,8 +611,13 @@ document.addEventListener('DOMContentLoaded', () => {
         : 'page-quote';
 
     const restorablePages = ['page-dashboard','page-history-global','page-module',
-      'page-profile','page-custom-workouts','page-weekly-report','page-running',
+      'page-profile','page-custom-workouts','page-weekly-report',
       'page-calisthenics','page-my-plan'];
+    // page-running is only restorable if there is an active session in storage.
+    // Restoring to it without an active session calls initRunningPage() →
+    // _tryRecoverRunSession() → GPS + activity notification fires unexpectedly.
+    const hasSavedRun = !!Store.get('ff_active_run');
+    if (hasSavedRun) restorablePages.push('page-running');
     const targetPage = (savedLastPage && restorablePages.includes(savedLastPage) && session.role !== 'ADMIN')
       ? savedLastPage : basePage;
 
