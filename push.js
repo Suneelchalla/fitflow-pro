@@ -49,8 +49,9 @@ const PUSH = {
           try {
             await OneSignal.init({
               appId: this.ONESIGNAL_APP_ID,
-              // Reuse our existing sw.js — it imports OneSignal SDK via importScripts.
-              // This prevents two SW registrations fighting over the same scope.
+              // SW path must match OneSignal dashboard:
+              // Settings → Web Push → Advanced → Service Workers
+              // Path: /   Filename: sw.js   Scope: /
               serviceWorkerPath: '/sw.js',
               serviceWorkerParam: { scope: '/' },
               allowLocalhostAsSecureOrigin: true,
