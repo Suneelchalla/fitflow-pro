@@ -375,21 +375,35 @@ async function _healthCheckAndRecover() {
 }
 
 // ── AUTO-INIT AFTER LOGIN ─────────────────────────────────────────
+// No in-app toggle — permission is requested automatically.
+// Users manage notifications via Android Settings if they want to turn it off.
 async function initPushNotifications() {
   if (!PUSH.isSupported()) return;
-  
-  // FIRST: Run health check — if FCM token expired, this re-subscribes silently
-  // (runs in background, doesn't block UI)
-  _healthCheckAndRecover().catch(e => console.warn('Push recovery failed:', e?.message));
-  
-  // Initialize OneSignal SDK so it can register the service worker
-  await PUSH._ensureInit();
+  if (typeof APP !== 'undefined' && APP.currentUser?.role === 'ADMIN') return;
 
-  // If already subscribed, refresh the user tag on Sheets
+  // Run health check in background (re-subscribes silently if token expired)
+  _healthCheckAndRecover().catch(e => console.warn('Push recovery failed:', e?.message));
+
+  // If already subscribed and active, just refresh the tag
   if (await PUSH.isSubscribed()) {
     await PUSH._save();
+    return;
   }
-  // Don't auto-prompt — let the user toggle it themselves from the menu
+
+  // Not subscribed yet — auto-request OS permission after a short delay
+  // so the user sees the dashboard before the dialog appears.
+  const perm = PUSH.getPermission();
+  if (perm === 'denied') return; // user denied at OS level — respect it, don't keep asking
+
+  setTimeout(async () => {
+    try {
+      // Only proceed if user is still logged in
+      if (!APP.currentUser || APP.currentUser.role === 'ADMIN') return;
+      await PUSH.subscribe();
+    } catch (e) {
+      console.warn('Auto push subscribe failed:', e?.message);
+    }
+  }, 3000); // 3s delay so dashboard renders before dialog appears
 }
 
 function showPushPrompt(force = false) {
