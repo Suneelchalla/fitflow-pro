@@ -2816,10 +2816,27 @@ async function toggleNotificationSetting() {
 // Show clear instructions when browser has blocked notifications
 function _showUnblockInstructions() {
   const isAndroid = /Android/i.test(navigator.userAgent);
-  const isiOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const isiOS     = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+  // TWA (Play Store installed app) sets document.referrer to android-app://package.name.
+  // In TWA there is NO address bar — Chrome-specific unlock steps are useless there.
+  const isTWA     = !!(document.referrer && document.referrer.startsWith('android-app://'));
 
   let html;
-  if (isAndroid) {
+  if (isAndroid && isTWA) {
+    // Installed app (Play Store TWA) — no browser UI, must use Android Settings
+    html = `
+      <div style="text-align:left;line-height:1.55;font-size:14px">
+        <p style="margin-bottom:14px"><strong>Allow FitFlow Pro to send you notifications:</strong></p>
+        <ol style="padding-left:20px;display:flex;flex-direction:column;gap:10px">
+          <li>Open your phone's <strong>Settings</strong></li>
+          <li>Tap <strong>Apps</strong> → tap <strong>FitFlow Pro</strong></li>
+          <li>Tap <strong>Notifications</strong></li>
+          <li>Turn ON <strong>"Allow notifications"</strong></li>
+          <li>Come back here and tap the toggle again 🔔</li>
+        </ol>
+      </div>`;
+  } else if (isAndroid) {
+    // Chrome browser on Android
     html = `
       <div style="text-align:left;line-height:1.55;font-size:14px">
         <p style="margin-bottom:14px"><strong>Notifications are blocked.</strong> To enable:</p>
