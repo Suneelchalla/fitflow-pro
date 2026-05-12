@@ -100,25 +100,24 @@ const PUSH = {
   async subscribe() {
     if (!this.isSupported()) return { ok: false, reason: 'unsupported' };
     try {
-      const OneSignal = await this._ensureInit();
-      if (!OneSignal) return { ok: false, reason: 'init_failed' };
-
-      // Step 1: Check if already hard-blocked
+      // ── STEP 1: Check/request OS permission — NO OneSignal needed here ──
+      // This must happen FIRST. _ensureInit() can take up to 10 seconds;
+      // asking permission before that makes the dialog appear immediately on tap.
       const perm = (typeof Notification !== 'undefined') ? Notification.permission : 'denied';
+
       if (perm === 'denied') {
-        console.warn('Push: permission is BLOCKED');
+        console.warn('Push: permission is BLOCKED at OS level');
         return { ok: false, reason: 'permission_blocked' };
       }
 
-      // Step 2: Ask for OS permission FIRST using native API — this is instant
-      // and does not require OneSignal to be loaded. The OS dialog appears immediately.
       if (perm === 'default') {
+        // Show the Android OS notification permission dialog immediately
         let granted = false;
         try {
           const result = await Notification.requestPermission();
           granted = (result === 'granted');
         } catch (e) {
-          // Fallback for older callback-style API
+          // Older callback-style fallback
           granted = await new Promise(res =>
             Notification.requestPermission(r => res(r === 'granted'))
           );
@@ -129,19 +128,29 @@ const PUSH = {
         }
       }
 
-      // Step 3: Permission is granted. Register with OneSignal in background.
-      // If OneSignal isn't ready, still return success — _healthCheckAndRecover()
-      // will complete the registration automatically on next app open.
+      // ── STEP 2: Permission granted — now init OneSignal and register ──
+      // We do this AFTER getting permission so the user never waits for
+      // OneSignal to load before seeing the dialog.
+      const OneSignal = await this._ensureInit();
+      if (!OneSignal) {
+        // OneSignal not available, but OS permission is granted.
+        // Save the intent — _healthCheckAndRecover() will register on next open.
+        Store.set('ff_push_subscribed', true);
+        return { ok: true, subId: 'pending' };
+      }
+
+      // ── STEP 3: Register device with OneSignal ──
       const subId = await this._registerWithOneSignal(OneSignal);
       if (subId) {
         await this._save();
         return { ok: true, subId };
       }
 
-      // OneSignal registration pending — save intent and let health check finish it
+      // Registration pending — health check will finish it on next app open
       Store.set('ff_push_subscribed', true);
       await this._save();
       return { ok: true, subId: 'pending' };
+
     } catch (e) {
       console.error('Push subscribe failed:', e?.message || e);
       return { ok: false, reason: 'exception', error: e?.message };
