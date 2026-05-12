@@ -346,18 +346,22 @@ function _checkForceReload(content) {
 
 async function _doForceUpdate() {
   try {
-    // Tell the SW to check for a new version of sw.js
     if ('serviceWorker' in navigator) {
       const regs = await navigator.serviceWorker.getRegistrations();
-      for (const reg of regs) {
-        await reg.update().catch(() => {});
-      }
+      // update() downloads and installs the new SW.
+      // We wait for ALL updates to start before reloading so skipWaiting() has
+      // time to fire and the new SW is actually active when the page reloads.
+      await Promise.all(regs.map(r => r.update().catch(() => {})));
+      // Give the new SW time to install + activate (skipWaiting fires quickly,
+      // but activating across clients takes a moment on slow devices)
+      await new Promise(r => setTimeout(r, 2000));
     }
   } catch (e) { /* non-critical */ }
 
   if (typeof showToast === 'function') {
     showToast('🔄 App update available — refreshing…', 'info');
   }
+  // Short delay so the toast is visible before reload
   setTimeout(() => window.location.reload(), 1500);
 }
 
