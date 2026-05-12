@@ -314,15 +314,18 @@ function renderAnnouncementBanner() {
     danger:  { bg:'rgba(229,57,53,0.12)',  border:'rgba(229,57,53,0.3)',  color:'#ef9a9a', icon:'🚨' },
   };
   const c = colors[data.type] || colors.info;
+  // Only admins can dismiss the announcement — regular users see it until admin removes it.
+  const isAdmin = APP.currentUser?.role === 'ADMIN';
   el.style.display = '';
   el.innerHTML = `
     <div style="display:flex;align-items:flex-start;gap:10px;padding:13px 16px;border-radius:14px;
       background:${c.bg};border:1px solid ${c.border}">
       <span style="font-size:18px;flex-shrink:0">${c.icon}</span>
       <div style="flex:1;font-size:13px;color:${c.color};line-height:1.5;font-weight:500">${data.text}</div>
-      <button onclick="this.closest('[style]').style.display='none'" 
-        style="background:none;border:none;color:${c.color};font-size:16px;cursor:pointer;flex-shrink:0;opacity:0.6">✕</button>
+      ${isAdmin ? `<button onclick="this.closest('[style]').style.display='none'"
+        style="background:none;border:none;color:${c.color};font-size:16px;cursor:pointer;flex-shrink:0;opacity:0.6">✕</button>` : ''}
     </div>`;
+}
 }
 
 // ── OPEN MODULE ───────────────────────────────────────────────────
