@@ -6,14 +6,14 @@
 // Import OneSignal's service worker — handles push notifications
 importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
 
-const CACHE = 'fitflow-v92';
+const CACHE = 'fitflow-v93';
 const ASSETS = [
   './',
   './index.html',
   './css/style.css?v=76',
   './js/data.js?v=75',
   './js/data-cali.js?v=75',
-  './js/app.js?v=75',
+  './js/app.js?v=76',
   './js/auth.js?v=76',
   './js/dashboard.js?v=79',
   './js/running.js?v=80',
