@@ -326,7 +326,6 @@ function renderAnnouncementBanner() {
         style="background:none;border:none;color:${c.color};font-size:16px;cursor:pointer;flex-shrink:0;opacity:0.6">✕</button>` : ''}
     </div>`;
 }
-}
 
 // ── OPEN MODULE ───────────────────────────────────────────────────
 function openModule(moduleId) {
