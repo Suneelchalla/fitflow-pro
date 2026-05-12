@@ -29,22 +29,14 @@ const PUSH = {
   async _ensureInit() {
     if (this._initPromise) return this._initPromise;
 
-    // If SDK script didn't load (CDN failure, slow network), try injecting it dynamically
+    // The SDK loads with 'defer' — it may not be ready at the exact moment this
+    // is called. Poll for up to 5 seconds before giving up.
+    // Note: don't check the script tag — it's always in the DOM from index.html
+    // but the script might still be loading. Only trust window.OneSignalDeferred.
     if (typeof window.OneSignalDeferred === 'undefined') {
-      try {
-        await new Promise((resolve, reject) => {
-          // Don't add a duplicate script if one is already in the DOM
-          if (document.querySelector('script[src*="OneSignalSDK.page.js"]')) {
-            resolve(); return;
-          }
-          const s = document.createElement('script');
-          s.src = 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js';
-          s.onload = () => setTimeout(resolve, 800); // give SDK time to bootstrap
-          s.onerror = reject;
-          document.head.appendChild(s);
-        });
-      } catch {
-        console.warn('Push: OneSignal SDK failed to load dynamically');
+      for (let i = 0; i < 10; i++) {
+        await new Promise(r => setTimeout(r, 500));
+        if (typeof window.OneSignalDeferred !== 'undefined') break;
       }
     }
 
@@ -74,14 +66,13 @@ const PUSH = {
       });
     });
 
-    // 8-second timeout — if SDK init callback never fires (network issue,
-    // CDN slow, etc.) we don't hang the toggle forever.
+    // 5-second timeout — if SDK init callback never fires we don't hang the toggle.
     // On timeout: resolve null AND reset state so the next tap can retry.
     const timeoutPromise = new Promise(resolve =>
       setTimeout(() => {
         console.warn('Push: OneSignal init timed out — will retry on next tap');
         resolve(null);
-      }, 8000)
+      }, 5000)
     );
 
     this._initPromise = Promise.race([sdkPromise, timeoutPromise]);
@@ -112,58 +103,45 @@ const PUSH = {
       const OneSignal = await this._ensureInit();
       if (!OneSignal) return { ok: false, reason: 'init_failed' };
 
-      // Step 1: Check if already hard-blocked at browser level
-      const browserPerm = (typeof Notification !== 'undefined') ? Notification.permission : 'denied';
-      if (browserPerm === 'denied') {
-        console.warn('Push: browser permission is BLOCKED');
+      // Step 1: Check if already hard-blocked
+      const perm = (typeof Notification !== 'undefined') ? Notification.permission : 'denied';
+      if (perm === 'denied') {
+        console.warn('Push: permission is BLOCKED');
         return { ok: false, reason: 'permission_blocked' };
       }
 
-      // Step 2: Let OneSignal handle everything in one call — optIn() requests OS
-      // permission internally if needed. This is the correct approach for TWA (Play Store)
-      // apps where calling Notification.requestPermission() directly often fails silently.
-      try {
-        await OneSignal.User.PushSubscription.optIn();
-      } catch (e) {
-        console.warn('OneSignal optIn warning:', e?.message);
-      }
-
-      // Check permission state AFTER optIn attempt
-      const postPerm = (typeof Notification !== 'undefined') ? Notification.permission : 'denied';
-      if (postPerm === 'denied') {
-        return { ok: false, reason: 'permission_blocked' };
-      }
-      // 'default' means user dismissed the OS dialog without granting
-      if (postPerm !== 'granted' && !OneSignal.User.PushSubscription.optedIn) {
-        return { ok: false, reason: 'permission_denied' };
-      }
-
-      // Step 3: Poll for subscription ID (up to 15 seconds)
-      let subId = null;
-      for (let i = 0; i < 30; i++) {
+      // Step 2: Ask for OS permission FIRST using native API — this is instant
+      // and does not require OneSignal to be loaded. The OS dialog appears immediately.
+      if (perm === 'default') {
+        let granted = false;
         try {
-          subId = OneSignal.User.PushSubscription.id;
-          if (subId) break;
-        } catch {}
-        await new Promise(r => setTimeout(r, 500));
-      }
-
-      // Step 4: If still no subId, attempt RECOVERY
-      if (!subId) {
-        console.warn('Push: subId did not appear — attempting recovery (clear SW + retry)');
-        const recovered = await this._forceRecovery();
-        if (recovered) {
-          subId = OneSignal.User.PushSubscription.id;
+          const result = await Notification.requestPermission();
+          granted = (result === 'granted');
+        } catch (e) {
+          // Fallback for older callback-style API
+          granted = await new Promise(res =>
+            Notification.requestPermission(r => res(r === 'granted'))
+          );
+        }
+        if (!granted) {
+          const finalPerm = typeof Notification !== 'undefined' ? Notification.permission : 'denied';
+          return { ok: false, reason: finalPerm === 'denied' ? 'permission_blocked' : 'permission_denied' };
         }
       }
 
-      if (!subId) {
-        return { ok: false, reason: 'no_subscription_id' };
+      // Step 3: Permission is granted. Register with OneSignal in background.
+      // If OneSignal isn't ready, still return success — _healthCheckAndRecover()
+      // will complete the registration automatically on next app open.
+      const subId = await this._registerWithOneSignal(OneSignal);
+      if (subId) {
+        await this._save();
+        return { ok: true, subId };
       }
 
-      // Step 5: Save to sheet
+      // OneSignal registration pending — save intent and let health check finish it
+      Store.set('ff_push_subscribed', true);
       await this._save();
-      return { ok: true, subId: subId };
+      return { ok: true, subId: 'pending' };
     } catch (e) {
       console.error('Push subscribe failed:', e?.message || e);
       return { ok: false, reason: 'exception', error: e?.message };
@@ -197,6 +175,38 @@ const PUSH = {
     } catch (e) {
       console.warn('Recovery threw:', e?.message);
       return false;
+    }
+  },
+
+  // ── Register with OneSignal after OS permission is already granted ─
+  // Called from subscribe() — runs in background after user grants OS permission.
+  // If OneSignal isn't ready, returns null — health check will retry on next open.
+  async _registerWithOneSignal(OneSignal) {
+    try {
+      // Opt in (OneSignal knows permission is already granted)
+      try {
+        await OneSignal.User.PushSubscription.optIn();
+      } catch (e) {
+        console.warn('OneSignal optIn warning:', e?.message);
+      }
+
+      // Poll for subscription ID (up to 15 seconds)
+      for (let i = 0; i < 30; i++) {
+        try {
+          const id = OneSignal.User.PushSubscription.id;
+          if (id) return id;
+        } catch {}
+        await new Promise(r => setTimeout(r, 500));
+      }
+
+      // Try recovery cycle
+      const recovered = await this._forceRecovery();
+      if (recovered) return OneSignal.User.PushSubscription.id || null;
+
+      return null;
+    } catch (e) {
+      console.warn('OneSignal registration failed:', e?.message);
+      return null;
     }
   },
 
