@@ -28,6 +28,26 @@ const PUSH = {
   // ── Initialize OneSignal SDK once per page load ─────────────────
   async _ensureInit() {
     if (this._initPromise) return this._initPromise;
+
+    // If SDK script didn't load (CDN failure, slow network), try injecting it dynamically
+    if (typeof window.OneSignalDeferred === 'undefined') {
+      try {
+        await new Promise((resolve, reject) => {
+          // Don't add a duplicate script if one is already in the DOM
+          if (document.querySelector('script[src*="OneSignalSDK.page.js"]')) {
+            resolve(); return;
+          }
+          const s = document.createElement('script');
+          s.src = 'https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js';
+          s.onload = () => setTimeout(resolve, 800); // give SDK time to bootstrap
+          s.onerror = reject;
+          document.head.appendChild(s);
+        });
+      } catch {
+        console.warn('Push: OneSignal SDK failed to load dynamically');
+      }
+    }
+
     if (typeof window.OneSignalDeferred === 'undefined') return null;
 
     const sdkPromise = new Promise(resolve => {
@@ -92,34 +112,30 @@ const PUSH = {
       const OneSignal = await this._ensureInit();
       if (!OneSignal) return { ok: false, reason: 'init_failed' };
 
-      // Step 1: Check browser permission first
+      // Step 1: Check if already hard-blocked at browser level
       const browserPerm = (typeof Notification !== 'undefined') ? Notification.permission : 'denied';
-
       if (browserPerm === 'denied') {
-        // Browser permission was explicitly blocked — user must unblock manually
-        console.warn('Push: browser permission is BLOCKED — user must unblock in browser settings');
+        console.warn('Push: browser permission is BLOCKED');
         return { ok: false, reason: 'permission_blocked' };
       }
 
-      if (browserPerm === 'default') {
-        // Need to ask user
-        try {
-          await OneSignal.Notifications.requestPermission();
-        } catch (e) {
-          console.warn('requestPermission threw:', e?.message);
-        }
-        // Re-check
-        const newPerm = (typeof Notification !== 'undefined') ? Notification.permission : 'denied';
-        if (newPerm !== 'granted') {
-          return { ok: false, reason: 'permission_denied' };
-        }
-      }
-
-      // Step 2: Opt in to OneSignal
+      // Step 2: Let OneSignal handle everything in one call — optIn() requests OS
+      // permission internally if needed. This is the correct approach for TWA (Play Store)
+      // apps where calling Notification.requestPermission() directly often fails silently.
       try {
         await OneSignal.User.PushSubscription.optIn();
       } catch (e) {
         console.warn('OneSignal optIn warning:', e?.message);
+      }
+
+      // Check permission state AFTER optIn attempt
+      const postPerm = (typeof Notification !== 'undefined') ? Notification.permission : 'denied';
+      if (postPerm === 'denied') {
+        return { ok: false, reason: 'permission_blocked' };
+      }
+      // 'default' means user dismissed the OS dialog without granting
+      if (postPerm !== 'granted' && !OneSignal.User.PushSubscription.optedIn) {
+        return { ok: false, reason: 'permission_denied' };
       }
 
       // Step 3: Poll for subscription ID (up to 15 seconds)
