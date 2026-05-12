@@ -322,7 +322,7 @@ function renderAnnouncementBanner() {
       background:${c.bg};border:1px solid ${c.border}">
       <span style="font-size:18px;flex-shrink:0">${c.icon}</span>
       <div style="flex:1;font-size:13px;color:${c.color};line-height:1.5;font-weight:500">${data.text}</div>
-      ${isAdmin ? `<button onclick="this.closest('[style]').style.display='none'"
+      ${isAdmin ? `<button onclick="document.getElementById('dash-announcement').style.display='none'"
         style="background:none;border:none;color:${c.color};font-size:16px;cursor:pointer;flex-shrink:0;opacity:0.6">✕</button>` : ''}
     </div>`;
 }
