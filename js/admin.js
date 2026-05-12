@@ -3592,6 +3592,8 @@ async function renderAdminNotify() {
     </div>
   `;
 
+  // Load diagnostics + send history + subscriber count
+  _loadPushDiagnostics();
   // Load send history + subscriber count
   _loadNotifyHistory();
   _refreshAudienceCount();
@@ -4094,14 +4096,75 @@ async function _sendAdminNotification() {
   }
 }
 
+async function _loadPushDiagnostics() {
+  const el = document.getElementById('push-diagnostics-panel');
+  if (!el) return;
+  el.innerHTML = '<div style="color:var(--text3);font-size:12px;padding:8px">Checking subscription status…</div>';
+  try {
+    const res = await Sheets.get('getPushDiagnostics');
+    if (!res?.success) {
+      el.innerHTML = `<div style="color:var(--accent);font-size:12px;padding:8px">⚠️ ${res?.error || 'Could not load diagnostics'}</div>`;
+      return;
+    }
+    const { totalUsers, activeInOS, sheetOnly, notSubscribed, osTotal, osValid, oneSignalError, users } = res;
+
+    // Status summary bar
+    let summaryColor = activeInOS === 0 ? 'var(--accent)' : 'var(--g5)';
+    let html = `
+      <div style="padding:12px;background:rgba(0,0,0,0.2);border-radius:10px;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:700;margin-bottom:8px;color:${summaryColor}">
+          ${activeInOS === 0 ? '⚠️ No users subscribed in OneSignal' : `✅ ${activeInOS} of ${totalUsers} users active in OneSignal`}
+        </div>`;
+
+    if (oneSignalError) {
+      html += `<div style="font-size:11px;color:var(--accent);margin-bottom:6px">OneSignal API error: ${oneSignalError}</div>`;
+    }
+
+    html += `<div style="font-size:11px;color:var(--text3);display:flex;gap:16px;flex-wrap:wrap">
+        <span>Total in OneSignal: <b>${osTotal}</b> (${osValid} valid)</span>
+        <span>Sheet-only (stale): <b>${sheetOnly}</b></span>
+        <span>Not subscribed: <b>${notSubscribed}</b></span>
+      </div>
+    </div>`;
+
+    // Per-user table
+    if (users && users.length) {
+      html += `<div style="font-size:12px;color:var(--text3);margin-bottom:6px">Per-user subscription status:</div>
+        <div style="display:flex;flex-direction:column;gap:4px">`;
+      users.forEach(u => {
+        const icon  = u.status === 'active' ? '🟢' : u.status === 'sheet_only' ? '🟡' : '🔴';
+        const label = u.status === 'active'
+          ? `Active (last seen: ${u.lastActive || 'unknown'})`
+          : u.status === 'sheet_only'
+          ? `Sheet only — not in OneSignal`
+          : `Not subscribed`;
+        html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;background:rgba(0,0,0,0.15);border-radius:6px">
+          <span>${icon}</span>
+          <div style="flex:1;min-width:0">
+            <div style="font-size:12px;font-weight:600;color:var(--text)">${u.name || u.email}</div>
+            <div style="font-size:11px;color:var(--text3)">${label}</div>
+          </div>
+        </div>`;
+      });
+      html += '</div>';
+    }
+
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = `<div style="color:var(--accent);font-size:12px;padding:8px">Error: ${e.message}</div>`;
+  }
+}
+
 async function _loadNotifyHistory() {
   const list = document.getElementById('notify-history-list');
   if (!list) return;
   try {
     const res = await Sheets.get('getAdminPushLog');
-    const history = res?.history || [];
+    // Apps Script already deletes rows older than 3 days — this is a client-side safety filter
+    const cutoff  = Date.now() - 3 * 24 * 60 * 60 * 1000;
+    const history = (res?.history || []).filter(h => !h.sentAt || new Date(h.sentAt).getTime() >= cutoff);
     if (!history.length) {
-      list.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:14px;text-align:center">No notifications sent yet</div>';
+      list.innerHTML = '<div style="color:var(--text3);font-size:13px;padding:14px;text-align:center">No notifications sent in the last 3 days</div>';
       return;
     }
     list.innerHTML = history.map(h => {
