@@ -2754,62 +2754,62 @@ async function toggleNotificationSetting() {
     showToast('Push notifications not supported on this device', 'error');
     return;
   }
+
+  // Disable toggle immediately to prevent double-taps while async work runs
+  const toggleBtn = document.getElementById('notif-toggle-btn');
+  const toggleSw  = document.getElementById('notif-toggle-switch');
+  if (toggleBtn) toggleBtn.style.pointerEvents = 'none';
+  if (toggleSw)  toggleSw.style.opacity = '0.5';
+
+  const _restoreToggle = () => {
+    if (toggleBtn) toggleBtn.style.pointerEvents = '';
+    if (toggleSw)  toggleSw.style.opacity = '';
+  };
+
   try {
-    // Check the *intent* — what state does the user think they're in?
-    // The visual toggle reflects this. Use it as the action signal.
-    const sw = document.getElementById('notif-toggle-switch');
-    const visuallyOn = sw && sw.getAttribute('data-on') === 'true';
-
-    // Check the *actual* subscription state
+    const visuallyOn        = toggleSw && toggleSw.getAttribute('data-on') === 'true';
     const actuallySubscribed = await PUSH.isSubscribed();
-
-    // CASE 1: Toggle is visually ON and we ARE subscribed → unsubscribe
-    // CASE 2: Toggle is visually OFF (user wants to turn ON) → subscribe
-    // CASE 3: Toggle is visually ON but we are NOT actually subscribed → broken state, fix by re-subscribing
-    // CASE 4: Toggle is visually OFF and we are subscribed (rare) → just update visual
 
     if (visuallyOn && actuallySubscribed) {
       // Normal unsubscribe
       await PUSH.unsubscribe();
       await _updateNotifToggleVisual();
+      _restoreToggle();
       showToast('Daily reminders disabled', 'info');
       return;
     }
 
-    // All other cases: try to subscribe (fresh)
-    {
-      // Show pending state on the toggle
-      const sw = document.getElementById('notif-toggle-switch');
-      if (sw) sw.style.opacity = '0.6';
-      showToast('Setting up notifications…', 'info');
+    // All other cases: subscribe
+    showToast('Setting up notifications…', 'info');
 
-      const result = await PUSH.subscribe();
+    const result = await PUSH.subscribe();
+    await _updateNotifToggleVisual();
+    _restoreToggle();
 
-      // After subscribe completes, update visual
-      await _updateNotifToggleVisual();
-
-      // Subscribe now returns {ok, reason} object — handle each reason clearly
-      if (result?.ok) {
-        showToast('🔔 Daily reminders enabled!', 'success');
-      } else if (result?.reason === 'permission_blocked') {
-        // User had blocked notifications previously — show how to unblock
-        _showUnblockInstructions();
-      } else if (result?.reason === 'permission_denied') {
-        showToast('Permission was denied. Tap toggle again to retry.', 'error');
-      } else if (result?.reason === 'no_subscription_id') {
-        // Token registration failed — page reload usually fixes it
-        showToast('Could not register. Reloading page in 3 seconds…', 'warning');
-        setTimeout(() => window.location.reload(), 3000);
-      } else if (result?.reason === 'unsupported') {
-        showToast('Push notifications not supported on this device', 'error');
-      } else {
-        showToast('Could not enable. Try reloading the page.', 'error');
-      }
+    if (result?.ok) {
+      showToast('🔔 Daily reminders enabled!', 'success');
+    } else if (result?.reason === 'init_failed') {
+      // OneSignal SDK didn't load — network issue or first install
+      showToast('Notification service not ready. Reload the app and try again.', 'error');
+    } else if (result?.reason === 'permission_blocked') {
+      _showUnblockInstructions();
+    } else if (result?.reason === 'permission_denied') {
+      // On Android TWA, this often means the OS-level notification
+      // permission was denied. Guide the user to fix it.
+      _showUnblockInstructions();
+    } else if (result?.reason === 'no_subscription_id') {
+      showToast('Could not register device. Reloading in 3s…', 'error');
+      setTimeout(() => window.location.reload(), 3000);
+    } else if (result?.reason === 'unsupported') {
+      showToast('Push notifications not supported on this device', 'error');
+    } else {
+      showToast('Could not enable. Reload the app and try again.', 'error');
     }
   } catch (e) {
     console.error('toggleNotificationSetting error:', e);
+    _restoreToggle();
     await _updateNotifToggleVisual();
-    showToast('Error: ' + (e?.message || e), 'error');
+    showToast('Error: ' + (e?.message || 'Please reload and try again.'), 'error');
   }
 }
 
@@ -2913,11 +2913,20 @@ async function _updateNotifToggleVisual() {
   }
   sw.style.opacity = '1';
   try {
-    // Make sure OneSignal SDK has initialized before reading subscription state
-    if (PUSH._ensureInit) await PUSH._ensureInit();
-    // Give SDK an extra moment to hydrate state from cache
-    await new Promise(r => setTimeout(r, 300));
-    const on = await PUSH.isSubscribed();
+    // Wait for OneSignal init — but cap at 3s so the toggle never stays frozen
+    if (PUSH._ensureInit) {
+      await Promise.race([
+        PUSH._ensureInit(),
+        new Promise(r => setTimeout(r, 3000)),
+      ]);
+    }
+    // Brief moment for SDK to hydrate state from cache
+    await new Promise(r => setTimeout(r, 100));
+    // Cap isSubscribed check at 3s too
+    const on = await Promise.race([
+      PUSH.isSubscribed(),
+      new Promise(r => setTimeout(() => r(false), 3000)),
+    ]);
     sw.setAttribute('data-on', on ? 'true' : 'false');
     sw.style.background = on ? 'var(--g4)' : 'rgba(255,255,255,0.15)';
     knob.style.left     = on ? '21px' : '3px';
