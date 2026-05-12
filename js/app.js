@@ -871,6 +871,12 @@ document.addEventListener('DOMContentLoaded', () => {
       } else if (page === 'page-module' && typeof renderExercises === 'function'
                  && APP.currentModule && APP.currentDay) {
         renderExercises(APP.currentModule, APP.currentDay);
+      } else if (page === 'page-admin' && typeof renderAdminPanel === 'function') {
+        renderAdminPanel();
+      } else if (page === 'page-calisthenics' && typeof initCalisthenicsPage === 'function') {
+        initCalisthenicsPage();
+      } else if (page === 'page-custom-workouts' && typeof renderCustomWorkoutsList === 'function') {
+        renderCustomWorkoutsList();
       }
 
       if (typeof showToast === 'function') showToast('✓ Up to date', 'success');
