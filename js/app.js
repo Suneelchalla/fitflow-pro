@@ -704,3 +704,182 @@ document.addEventListener('DOMContentLoaded', () => {
     showPage('page-login', false);
   }
 });
+
+// ── PULL TO REFRESH ───────────────────────────────────────────────
+// Triggers a full data sync when the user drags DOWN from the top of
+// any page and releases past the threshold.
+//
+// Rules:
+//   • Only fires when the active page is already scrolled to the top
+//   • Requires a clear downward-dominant drag > 80 px
+//   • Does NOT fire on normal scrolls, horizontal swipes, or during runs
+//   • Does NOT fire when a modal is open
+(function () {
+  const THRESHOLD = 80;   // px of pull needed to trigger refresh
+  const MAX_PULL  = 105;  // max visual travel of the indicator bubble
+
+  let _ptY     = 0;       // touchstart Y
+  let _ptX     = 0;       // touchstart X
+  let _ptAlive = false;   // gesture is eligible (started at scroll-top, vertical)
+  let _ptReady = false;   // crossed threshold — will trigger on release
+  let _ptBusy  = false;   // refresh in progress — block new gesture
+
+  // ── Indicator ──────────────────────────────────────────────────
+  function _el() {
+    let el = document.getElementById('ptr-indicator');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'ptr-indicator';
+      el.innerHTML = '<span id="ptr-icon" style="font-size:18px;display:block;line-height:1">↓</span>';
+      el.style.cssText =
+        'position:fixed;top:-64px;left:50%;transform:translateX(-50%);' +
+        'width:46px;height:46px;border-radius:50%;' +
+        'background:var(--surface,#1a3328);' +
+        'border:1.5px solid var(--border,rgba(255,255,255,.15));' +
+        'color:var(--text,#e0e0e0);' +
+        'display:flex;align-items:center;justify-content:center;' +
+        'z-index:9995;pointer-events:none;' +
+        'box-shadow:0 4px 16px rgba(0,0,0,.5);' +
+        'transition:top .25s ease,opacity .25s ease,background .2s,border-color .2s';
+      document.body.appendChild(el);
+      // Inject spin keyframe once
+      if (!document.getElementById('ptr-kf')) {
+        const s  = document.createElement('style');
+        s.id     = 'ptr-kf';
+        s.textContent = '@keyframes _ptrSpin{to{transform:rotate(360deg)}}';
+        document.head.appendChild(s);
+      }
+    }
+    return el;
+  }
+
+  function _icon() { return document.getElementById('ptr-icon'); }
+
+  function _hide() {
+    const el = document.getElementById('ptr-indicator');
+    if (!el) return;
+    el.style.transition = 'top .3s ease,opacity .3s ease';
+    el.style.top        = '-64px';
+    el.style.opacity    = '0';
+    const ic = _icon();
+    if (ic) {
+      ic.style.animation = '';
+      ic.style.transform = '';
+      ic.textContent     = '↓';
+    }
+    el.style.background  = 'var(--surface,#1a3328)';
+    el.style.borderColor = 'var(--border,rgba(255,255,255,.15))';
+    el.style.color       = 'var(--text,#e0e0e0)';
+  }
+
+  function _scrollTop() {
+    // Active page's scroll container
+    const pg = document.querySelector('.page.active');
+    return pg ? pg.scrollTop : (window.scrollY || 0);
+  }
+
+  // ── Touch start ────────────────────────────────────────────────
+  document.addEventListener('touchstart', e => {
+    _ptAlive = false;
+    _ptReady = false;
+    if (_ptBusy) return;
+    if (typeof APP !== 'undefined' && APP.runSession) return; // never during active run
+    if (document.querySelector('.modal-overlay.open'))  return; // never over a modal
+    _ptY     = e.touches[0].clientY;
+    _ptX     = e.touches[0].clientX;
+    // Only eligible when page is already at the very top
+    _ptAlive = _scrollTop() <= 1;
+  }, { passive: true });
+
+  // ── Touch move ─────────────────────────────────────────────────
+  document.addEventListener('touchmove', e => {
+    if (!_ptAlive || _ptBusy) return;
+
+    const dy = e.touches[0].clientY - _ptY;
+    const dx = Math.abs(e.touches[0].clientX - _ptX);
+
+    // Cancel if not clearly downward-dominant (user is scrolling or swiping sideways)
+    if (dy <= 0 || dx > dy * 0.55) {
+      _ptAlive = false;
+      _hide();
+      return;
+    }
+
+    const pull = Math.min(dy, MAX_PULL);
+    const pct  = Math.min(pull / THRESHOLD, 1);
+    _ptReady   = pull >= THRESHOLD;
+
+    // Move indicator — follows finger with a slight ease factor
+    const indicator = _el();
+    const ic        = _icon();
+    indicator.style.transition  = 'none';
+    indicator.style.top         = (pull * 0.52 - 28) + 'px';
+    indicator.style.opacity     = String(Math.min(pct * 1.4, 1));
+
+    if (_ptReady) {
+      // Past threshold → turn green, show ↻
+      indicator.style.background  = 'var(--g3,#2e7d46)';
+      indicator.style.borderColor = 'var(--g4,#43a05a)';
+      indicator.style.color       = '#fff';
+      if (ic) { ic.textContent = '↻'; ic.style.transform = 'rotate(180deg)'; }
+    } else {
+      // Still pulling → rotate arrow proportionally
+      indicator.style.background  = 'var(--surface,#1a3328)';
+      indicator.style.borderColor = 'var(--border,rgba(255,255,255,.15))';
+      indicator.style.color       = 'var(--text,#e0e0e0)';
+      if (ic) { ic.textContent = '↓'; ic.style.transform = `rotate(${pct * 155}deg)`; }
+    }
+  }, { passive: true });
+
+  // ── Touch end ──────────────────────────────────────────────────
+  document.addEventListener('touchend', async () => {
+    if (!_ptAlive) return;
+    _ptAlive = false;
+
+    if (!_ptReady) { _hide(); return; }   // didn't reach threshold — snap back
+    _ptReady = false;
+    _ptBusy  = true;
+
+    // Pin indicator in spinning state
+    const indicator = _el();
+    const ic        = _icon();
+    indicator.style.transition  = 'top .2s ease';
+    indicator.style.top         = '14px';
+    indicator.style.opacity     = '1';
+    if (ic) {
+      ic.textContent     = '↻';
+      ic.style.transform = '';
+      ic.style.animation = '_ptrSpin .75s linear infinite';
+    }
+
+    try {
+      // Full data sync from Sheets
+      if (typeof syncContentFromSheets === 'function') {
+        await syncContentFromSheets();
+      }
+
+      // Re-render whichever page is active
+      const page = (typeof APP !== 'undefined') ? APP.currentPage : '';
+      if (page === 'page-dashboard' && typeof refreshDashboard === 'function') {
+        refreshDashboard();
+      } else if (page === 'page-history-global' && typeof renderGlobalHistory === 'function') {
+        renderGlobalHistory();
+      } else if (page === 'page-running' && typeof renderRunHistory === 'function') {
+        renderRunHistory();
+      } else if (page === 'page-my-plan' && typeof renderMyPlan === 'function') {
+        renderMyPlan();
+      } else if (page === 'page-module' && typeof renderExercises === 'function'
+                 && APP.currentModule && APP.currentDay) {
+        renderExercises(APP.currentModule, APP.currentDay);
+      }
+
+      if (typeof showToast === 'function') showToast('✓ Up to date', 'success');
+    } catch (err) {
+      console.warn('[PTR] refresh failed:', err?.message);
+      if (typeof showToast === 'function') showToast('Could not refresh — check connection', 'error');
+    }
+
+    // Always hide indicator after a short delay, even on error
+    setTimeout(() => { _hide(); _ptBusy = false; }, 500);
+  }, { passive: true });
+})();
