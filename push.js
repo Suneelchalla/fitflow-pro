@@ -376,35 +376,51 @@ async function _healthCheckAndRecover() {
 }
 
 // ── AUTO-INIT AFTER LOGIN ─────────────────────────────────────────
-// No in-app toggle — permission is requested automatically.
+// No in-app toggle — managed automatically on every login.
 // Users manage notifications via Android Settings if they want to turn it off.
 async function initPushNotifications() {
   if (!PUSH.isSupported()) return;
   if (typeof APP !== 'undefined' && APP.currentUser?.role === 'ADMIN') return;
 
-  // Run health check in background (re-subscribes silently if token expired)
-  _healthCheckAndRecover().catch(e => console.warn('Push recovery failed:', e?.message));
-
-  // If already subscribed and active, just refresh the tag
-  if (await PUSH.isSubscribed()) {
-    await PUSH._save();
-    return;
-  }
-
-  // Not subscribed yet — auto-request OS permission after a short delay
-  // so the user sees the dashboard before the dialog appears.
   const perm = PUSH.getPermission();
-  if (perm === 'denied') return; // user denied at OS level — respect it, don't keep asking
+  if (perm === 'denied') return; // user blocked at OS level — respect it
 
-  setTimeout(async () => {
-    try {
-      // Only proceed if user is still logged in
-      if (!APP.currentUser || APP.currentUser.role === 'ADMIN') return;
-      await PUSH.subscribe();
-    } catch (e) {
-      console.warn('Auto push subscribe failed:', e?.message);
-    }
-  }, 3000); // 3s delay so dashboard renders before dialog appears
+  if (perm === 'granted') {
+    // Permission already granted — silently re-confirm subscription on every login.
+    // This is critical after any OneSignal service worker path change: old subscriptions
+    // are bound to the old SW scope and will never receive pushes. Re-calling optIn()
+    // updates the subscription to the current SW path without showing any dialog.
+    setTimeout(async () => {
+      try {
+        if (!APP.currentUser || APP.currentUser.role === 'ADMIN') return;
+        const OneSignal = await PUSH._ensureInit();
+        if (!OneSignal) return;
+        // optIn() is a no-op if subscription is still valid,
+        // creates a fresh one if it's stale/invalid
+        await OneSignal.User.PushSubscription.optIn();
+        // Wait briefly for subscription ID to appear
+        await new Promise(r => setTimeout(r, 2000));
+        const subId = OneSignal.User.PushSubscription.id;
+        if (subId) {
+          Store.set('ff_push_subscribed', true);
+          await PUSH._save();
+        }
+      } catch (e) {
+        console.warn('Push re-confirm failed:', e?.message);
+      }
+    }, 2000);
+
+  } else {
+    // Permission not asked yet — show OS dialog after short delay
+    setTimeout(async () => {
+      try {
+        if (!APP.currentUser || APP.currentUser.role === 'ADMIN') return;
+        await PUSH.subscribe();
+      } catch (e) {
+        console.warn('Auto push subscribe failed:', e?.message);
+      }
+    }, 3000);
+  }
 }
 
 function showPushPrompt(force = false) {
