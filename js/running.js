@@ -597,33 +597,30 @@ function _tryRecoverRunSession() {
   const saved = Store.get(RUN_SESSION_KEY);
   if (!saved || APP.runSession) return;
 
-  // Don't restore sessions older than 3 hours — they're stale abandonments.
-  // Without this check, visiting the running page days later would restore an
-  // old session and fire GPS + activity notification unexpectedly.
+  // Don't restore sessions older than 45 minutes — they're stale abandonments.
   const sessionAge = Date.now() - (saved.startTime || 0);
-  if (sessionAge > 3 * 60 * 60 * 1000) {
+  if (sessionAge > 45 * 60 * 1000) {
     Store.remove(RUN_SESSION_KEY);
     return;
   }
 
+  // ALWAYS restore as paused — NEVER auto-start GPS without explicit user tap.
+  // This is the root-cause fix for "activity starts automatically when user walks."
   APP.runSession = {
     startTime:    saved.startTime,
-    pausedAt:     saved.pausedAt    || null,
+    pausedAt:     saved.pausedAt || Date.now(),
     totalPaused:  saved.totalPaused || 0,
     distance:     saved.distance    || 0,
-    paused:       saved.paused      || false,
+    paused:       true,   // ← always paused on recovery, regardless of saved state
     activityType: saved.activityType || 'run',
   };
   APP.gpsCoords  = saved.coords || [];
   _activityType  = APP.runSession.activityType;
 
   _startRunTimerLoop();
-  if (!APP.runSession.paused) {
-    startGPS();
-    startActivityNotification(); // restore live notification for recovered session
-  }
+  // Do NOT call startGPS() here — user must press Resume explicitly.
   LockScreen.start();
-  showToast('Run restored — still tracking! 🏃', 'success');
+  showToast('Previous session restored. Tap Resume to continue. 🏃', 'info', 4000);
 }
 
 // ── PAGE INIT ─────────────────────────────────────────────────────
@@ -918,43 +915,17 @@ function _updateLiveMap(lat, lon) {
   if (!_liveMap) return;
   const pos = [lat, lon];
 
-  // Calculate bearing from previous fix and apply map rotation
-  const coords = APP.gpsCoords;
-  if (coords.length >= 2 && !_userPanned) {
-    const prev = coords[coords.length - 2];
-    const rawBearing = _calcBearing(prev.lat, prev.lon, lat, lon);
-    // Only update bearing if we actually moved (avoids jitter when stationary)
-    const distMoved = haversine(prev.lat, prev.lon, lat, lon);
-    if (distMoved > 0.003) {  // only rotate after moving 3m+
-      const smoothed = _smoothBearing(rawBearing);
-      _applyMapRotation(smoothed);
-    }
-  }
-
   // Update marker position
   if (_liveMarker) _liveMarker.setLatLng(pos);
 
-  // Auto-center: keep user dot in lower-third of screen (like Google Maps / Strava)
-  // offset centre point slightly below middle so more road ahead is visible
+  // Auto-center: keep user dot in view (north-up, no rotation).
   // Throttle to once per second — GPS can fire several times/sec and queued
   // animate:true calls backlog Leaflet's animation pipeline causing visible lag.
   if (!_userPanned) {
     const nowTs = Date.now();
     if (nowTs - _lastMapPanTs >= 950) {  // max 1 animated pan per second
       _lastMapPanTs = nowTs;
-      if (_rotationEnabled) {
-        // In rotation mode: use panTo with offset so user dot sits at 65% down screen
-        const size    = _liveMap.getSize();
-        const mapCentre = _liveMap.project(pos, _liveMap.getZoom());
-        // Shift centre point up by 15% of map height so user dot is lower on screen
-        const offsetCentre = _liveMap.unproject(
-          [mapCentre.x, mapCentre.y + size.y * 0.15],
-          _liveMap.getZoom()
-        );
-        _liveMap.setView(offsetCentre, _liveMap.getZoom(), { animate: true, duration: 0.5, noMoveStart: true });
-      } else {
-        _liveMap.setView(pos, _liveMap.getZoom(), { animate: true, duration: 0.6 });
-      }
+      _liveMap.setView(pos, _liveMap.getZoom(), { animate: true, duration: 0.5 });
     }
   }
 
@@ -965,9 +936,6 @@ function _destroyLiveMap() {
   if (_liveMap) { _liveMap.remove(); _liveMap = null; }
   _livePolyline    = null;
   _liveMarker      = null;
-  _mapBearing      = 0;
-  _bearingHistory  = [];
-  _rotationEnabled = true;
   _lastMapPanTs    = 0;
 }
 
@@ -1001,9 +969,9 @@ class GpsKalmanFilter {
     this.variance  = -1;   // negative = not initialised
     this.lastTs    = 0;
     // Process noise: how much we expect position to change per second
-    // Higher = trusts GPS more (wiggly), Lower = smoother (slower to react)
-    // 3.0 m²/s: responsive enough for walking (1.1 m/s) and running (3+ m/s)
-    this.Q_METRES_PER_SECOND = 3.0;
+    // Lower value = smoother line (less jitter). 1.5 m²/s is well-suited for
+    // walking (1.1 m/s) and running (3+ m/s) while still preserving real turns.
+    this.Q_METRES_PER_SECOND = 1.5;
   }
 
   // Returns smoothed { lat, lon } or null if not ready
@@ -1047,7 +1015,7 @@ const _kalman = new GpsKalmanFilter();
 
 // FIX #2: GPS warm-up state — skip first N fixes while device acquires lock
 const GPS_WARMUP_FIXES    = 4;    // discard first 4 positions (device triangulating)
-const GPS_MIN_ACCURACY_M  = 60;   // reject if worse than 60 m — increased from 40 for urban tolerance
+const GPS_MIN_ACCURACY_M  = 35;   // reject if worse than 35 m — tighter for better route accuracy
 const GPS_MIN_DISTANCE_KM = 0.001; // ignore movement < 1 m (was 4 m — too high for slow walking)
 
 let _gpsWarmupCount  = 0;          // counts received fixes during warmup phase
@@ -1190,6 +1158,11 @@ function startRun() {
     return;
   }
 
+  // MUST start silent audio HERE — still within the user gesture (button tap) context.
+  // Starting it inside an async callback (after getCurrentPosition) causes Android
+  // to block autoplay, which prevents GPS keepalive and makes GPS stop on screen lock.
+  LockScreen.start();
+
   // Check location permission and show background GPS reminder if needed
   _checkLocationPermission(_doStartRun);
 }
@@ -1231,7 +1204,7 @@ function _doStartRun() {
     _initLiveMap();
     startGPS();          // always start watchPosition — GPS may warm up after UI shows
     _requestWakeLock();
-    LockScreen.start();
+    // LockScreen.start() already called synchronously in startRun() — don't call again
     startActivityNotification(); // show live stats in notification bar + lock screen
   }
 
@@ -1316,12 +1289,17 @@ function startGPS() {
       const lat = smoothed.lat;
       const lon = smoothed.lon;
 
-      // FIX #2b: Warmup — skip first N fixes for distance calc, but still record coords for the route map
+      // FIX #2b: Warmup — skip first N fixes entirely for route + distance.
+      // Early fixes are highly inaccurate and cause zigzag lines at the start.
+      // Only update the marker position so the map centres correctly.
       if (_gpsWarmupCount < GPS_WARMUP_FIXES) {
         _gpsWarmupCount++;
         _gpsLastGoodFix = { lat, lon, ts: nowTs };
-        APP.gpsCoords.push({ lat, lon, ts: nowTs }); // record for route map
-        _updateLiveMap(lat, lon);
+        // Move marker + re-centre map but do NOT draw the polyline yet
+        if (_liveMarker) _liveMarker.setLatLng([lat, lon]);
+        if (!_userPanned && _liveMap) {
+          _liveMap.setView([lat, lon], _liveMap.getZoom(), { animate: false });
+        }
         return;
       }
 
@@ -1664,42 +1642,28 @@ function discardRun() {
 // ── BACKGROUND / FOREGROUND RECOVERY ─────────────────────────────
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'hidden') {
-    if (APP.runSession && !APP.runSession.paused) {
-      // Auto-pause when screen locks so timer doesn't run without GPS
-      _lockedWhileRunning = true;
-      APP.runSession.paused   = true;
-      APP.runSession.pausedAt = Date.now();
-      _saveRunSession();
-      // Update controls UI if visible
-      _updateRunControls();
-    }
+    // Do NOT auto-pause when screen locks.
+    // Silent audio (started synchronously in startRun) keeps GPS alive via
+    // Android's audio-active keepalive. The wake lock + GPS keepalive interval
+    // also prevent the OS from suspending location updates.
+    // Auto-pausing was the cause of "GPS stops on lock screen" — removing it
+    // means the timer and GPS keep running while the screen is off.
+    if (APP.runSession) _saveRunSession(); // just persist current state
     return;
   }
 
-  // Screen unlocked
-  if (!APP.runSession) return;
+  // Screen unlocked / app foregrounded
+  if (!APP.runSession || APP.runSession.paused) return; // nothing to do if not running
 
-  if (_lockedWhileRunning && APP.runSession.paused) {
-    // Auto-resume — undo the auto-pause we applied on lock
-    _lockedWhileRunning = false;
-    if (APP.runSession.pausedAt) {
-      APP.runSession.totalPaused += (Date.now() - APP.runSession.pausedAt);
-    }
-    APP.runSession.pausedAt = null;
-    APP.runSession.paused   = false;
-    _saveRunSession();
-    _updateRunControls();
-    showToast('GPS resumed 📍', 'success');
-  }
-
-  if (APP.runSession.paused) return; // user manually paused — don't restart GPS
-
+  // Re-request wake lock (may have been released while backgrounded)
   _requestWakeLock();
-  _gpsWarmupCount = 0;
-  _gpsLastGoodFix = null;
+  // Reset Kalman state — GPS accuracy may have degraded while backgrounded
+  _gpsWarmupCount  = 0;
+  _gpsLastGoodFix  = null;
   _currentGpsSpeed = null;
-  _kalman.reset();   // GPS may have drifted while screen was locked
+  _kalman.reset();
   _setGpsBadge(false);
+  // Re-register watchPosition in case Android dropped it while backgrounded
   startGPS();
   updateRunDisplay();
   LockScreen.refresh();
