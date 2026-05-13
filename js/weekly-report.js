@@ -155,85 +155,88 @@ function renderWeeklyReport() {
   container.innerHTML = `
 
     <!-- Week nav -->
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px 6px">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:6px 8px 4px">
       <button onclick="wrNav(-1)"
         style="background:var(--surface);border:1px solid var(--border);border-radius:10px;
-        padding:6px 16px;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer">‹ Prev</button>
+        padding:5px 14px;color:var(--text2);font-size:13px;font-weight:600;cursor:pointer">‹ Prev</button>
       <div style="text-align:center">
-        <div style="font-size:14px;font-weight:700;color:var(--g5)">${weekLabel}</div>
-        <div style="font-size:11px;color:var(--text3)">${_fmt(monday)} – ${_fmt(sunday)}</div>
+        <div style="font-size:13px;font-weight:700;color:var(--g5)">${weekLabel}</div>
+        <div style="font-size:10px;color:var(--text3)">${_fmt(monday)} – ${_fmt(sunday)}</div>
       </div>
       <button onclick="wrNav(1)" ${isThisWeek ? 'disabled' : ''}
         style="background:var(--surface);border:1px solid var(--border);border-radius:10px;
-        padding:6px 16px;font-size:13px;font-weight:600;cursor:pointer;
+        padding:5px 14px;font-size:13px;font-weight:600;cursor:pointer;
         color:${isThisWeek?'var(--text3)':'var(--text2)'};
         opacity:${isThisWeek?'0.35':'1'}">Next ›</button>
     </div>
 
-    <!-- Grade card — unchanged big layout -->
-    <div style="margin:6px 16px 8px;background:linear-gradient(135deg,var(--g1),var(--bg2));
-      border:1px solid var(--border);border-radius:16px;padding:20px 16px;text-align:center">
-      <div style="font-size:11px;color:var(--text3);text-transform:uppercase;
-        letter-spacing:.08em;margin-bottom:2px">${weekLabel}</div>
-      <div style="font-family:var(--font-display);font-size:80px;
-        color:${grade.color};line-height:1;margin:6px 0">${grade.letter}</div>
-      <div style="font-size:18px;font-weight:700;margin-bottom:4px">${grade.label}</div>
-      <div style="font-size:13px;color:var(--text2)">
-        ${activeDays} active day${activeDays!==1?'s':''} · ${streak} day streak 🔥
+    <!-- Grade card — compact horizontal layout -->
+    <div style="margin:4px 8px 6px;background:linear-gradient(135deg,var(--g1),var(--bg2));
+      border:1px solid var(--border);border-radius:14px;padding:12px 16px;
+      display:flex;align-items:center;gap:14px">
+      <div style="font-family:var(--font-display);font-size:62px;
+        color:${grade.color};line-height:1;flex-shrink:0">${grade.letter}</div>
+      <div>
+        <div style="font-size:10px;color:var(--text3);text-transform:uppercase;
+          letter-spacing:.07em;margin-bottom:1px">${weekLabel.toUpperCase()}</div>
+        <div style="font-size:16px;font-weight:700;margin-bottom:3px">${grade.label}</div>
+        <div style="font-size:12px;color:var(--text2)">
+          ${activeDays} active day${activeDays!==1?'s':''} · ${streak} day streak 🔥
+        </div>
       </div>
     </div>
 
-    <!-- 4 stat cards — compact 2×2 -->
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:0 16px 8px">
+    <!-- 4 stat cards — compact 2×2, full width -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin:0 8px 6px">
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;
-        padding:10px 12px;text-align:center">
+        padding:10px 10px 8px;text-align:center">
         <div style="font-size:16px;margin-bottom:2px">💪</div>
-        <div style="font-family:var(--font-display);font-size:22px;color:var(--g5);line-height:1.1">${totalWorkouts}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">Workouts</div>
+        <div style="font-family:var(--font-display);font-size:24px;color:var(--g5);line-height:1.1">${totalWorkouts}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:1px">Workouts</div>
         ${wowWorkouts!==0?`<div style="font-size:10px;color:${wowWorkouts>0?'var(--g5)':'#ef9a9a'};margin-top:1px">${wowWorkouts>0?'+':''}${wowWorkouts} vs last</div>`:''}
       </div>
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;
-        padding:10px 12px;text-align:center">
+        padding:10px 10px 8px;text-align:center">
         <div style="font-size:16px;margin-bottom:2px">📅</div>
-        <div style="font-family:var(--font-display);font-size:22px;color:var(--g5);line-height:1.1">${activeDays}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">Active Days</div>
+        <div style="font-family:var(--font-display);font-size:24px;color:var(--g5);line-height:1.1">${activeDays}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:1px">Active Days</div>
         ${wowDays!==0?`<div style="font-size:10px;color:${wowDays>0?'var(--g5)':'#ef9a9a'};margin-top:1px">${wowDays>0?'+':''}${wowDays} vs last</div>`:''}
       </div>
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;
-        padding:10px 12px;text-align:center">
+        padding:10px 10px 8px;text-align:center">
         <div style="font-size:16px;margin-bottom:2px">🏃</div>
-        <div style="font-family:var(--font-display);font-size:22px;color:var(--g5);line-height:1.1">${totalKm.toFixed(1)}km</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">Distance Run</div>
+        <div style="font-family:var(--font-display);font-size:24px;color:var(--g5);line-height:1.1">${totalKm.toFixed(1)}km</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:1px">Distance Run</div>
       </div>
       <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;
-        padding:10px 12px;text-align:center">
+        padding:10px 10px 8px;text-align:center">
         <div style="font-size:16px;margin-bottom:2px">⏱</div>
-        <div style="font-family:var(--font-display);font-size:22px;color:var(--g5);line-height:1.1">${fmtTime(totalTime)}</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">Time Running</div>
+        <div style="font-family:var(--font-display);font-size:24px;color:var(--g5);line-height:1.1">${fmtTime(totalTime)}</div>
+        <div style="font-size:11px;color:var(--text3);margin-top:1px">Time Running</div>
       </div>
     </div>
 
-    <!-- 7-day grid -->
-    <div style="margin:0 16px 8px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:11px 13px">
-      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;
-        letter-spacing:.07em;margin-bottom:9px">Daily Activity — ${weekLabel}</div>
-      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px;margin-bottom:4px">
+    <!-- 7-day grid — full width -->
+    <div style="margin:0 8px 6px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 10px 8px">
+      <div style="font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;
+        letter-spacing:.07em;margin-bottom:7px">Daily Activity — ${weekLabel}</div>
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:3px">
         ${['M','T','W','T','F','S','S'].map(x=>`
-          <div style="text-align:center;font-size:11px;color:var(--text3);font-weight:700">${x}</div>`).join('')}
+          <div style="text-align:center;font-size:10px;color:var(--text3);font-weight:700">${x}</div>`).join('')}
       </div>
-      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">
+      <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px">
         ${dayGrid.map(({d,count,emoji,isToday,isFuture})=>`
-          <div title="${d}" style="aspect-ratio:1;border-radius:8px;
+          <div title="${d}" style="aspect-ratio:1;border-radius:7px;
             display:flex;flex-direction:column;align-items:center;justify-content:center;
             background:${isFuture?'transparent':count>0?'var(--g3)':'rgba(229,57,53,0.18)'};
             border:${isToday?'2px solid var(--accent)':isFuture?'1px dashed var(--border)':'none'};
             color:${isFuture?'transparent':count>0?'white':'#ef9a9a'}">
             ${isFuture?'':count>0
-              ?`<span style="font-size:14px">${emoji||'💪'}</span>${count>1?`<span style="font-size:9px">+${count-1}</span>`:''}`
-              :'<span style="font-size:13px">✕</span>'}
+              ?`<span style="font-size:13px">${emoji||'💪'}</span>${count>1?`<span style="font-size:8px">+${count-1}</span>`:''}`
+              :'<span style="font-size:12px">✕</span>'}
           </div>`).join('')}
       </div>
-      <div style="display:flex;gap:10px;margin-top:7px;font-size:10px;color:var(--text3)">
+      <div style="display:flex;gap:10px;margin-top:6px;font-size:10px;color:var(--text3)">
         <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;
           background:var(--g3);margin-right:3px;vertical-align:middle"></span>Active</span>
         <span><span style="display:inline-block;width:8px;height:8px;border-radius:2px;
@@ -243,14 +246,14 @@ function renderWeeklyReport() {
       </div>
     </div>
 
-    <!-- Activity breakdown -->
-    <div style="margin:0 16px 8px;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:11px 13px">
-      <div style="font-size:11px;font-weight:700;color:var(--text2);text-transform:uppercase;
-        letter-spacing:.07em;margin-bottom:9px">Activity Breakdown</div>
+    <!-- Activity breakdown — full width -->
+    <div style="margin:0 8px 6px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:10px 10px 8px">
+      <div style="font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;
+        letter-spacing:.07em;margin-bottom:7px">Activity Breakdown</div>
       ${topMods.length > 0
         ? topMods.map(([mod,cnt])=>`
-          <div style="display:flex;align-items:center;gap:9px;margin-bottom:8px">
-            <span style="font-size:18px;width:24px;text-align:center">${_wrEmoji(mod)}</span>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+            <span style="font-size:17px;width:22px;text-align:center">${_wrEmoji(mod)}</span>
             <div style="flex:1">
               <div style="display:flex;justify-content:space-between;margin-bottom:3px">
                 <span style="font-size:12px;font-weight:600">${_wrName(mod)}</span>
@@ -261,20 +264,20 @@ function renderWeeklyReport() {
               </div>
             </div>
           </div>`).join('')
-        : `<div style="text-align:center;padding:8px 0;color:var(--text3);font-size:13px">
+        : `<div style="text-align:center;padding:6px 0;color:var(--text3);font-size:13px">
             No workouts logged ${isThisWeek?'this week yet':'this week'}
             ${isThisWeek?`<br><button onclick="wrNav(-1)"
-              style="margin-top:7px;background:none;border:1px solid var(--border);border-radius:8px;
+              style="margin-top:6px;background:none;border:1px solid var(--border);border-radius:8px;
               padding:4px 14px;color:var(--text2);font-size:12px;cursor:pointer">‹ Check last week</button>`:''}
           </div>`}
     </div>
 
-    <!-- Motivational -->
-    <div style="margin:0 16px 16px;background:rgba(46,125,70,0.08);
-      border:1px solid rgba(46,125,70,0.2);border-radius:14px;padding:11px 14px;
-      display:flex;align-items:center;gap:11px">
-      <span style="font-size:22px;flex-shrink:0">${getMotivationalEmoji(activeDays)}</span>
-      <div style="font-size:12px;color:var(--text2);line-height:1.5;font-style:italic">
+    <!-- Motivational — full width -->
+    <div style="margin:0 8px 8px;background:rgba(46,125,70,0.08);
+      border:1px solid rgba(46,125,70,0.2);border-radius:12px;padding:9px 12px;
+      display:flex;align-items:center;gap:10px">
+      <span style="font-size:20px;flex-shrink:0">${getMotivationalEmoji(activeDays)}</span>
+      <div style="font-size:11px;color:var(--text2);line-height:1.5;font-style:italic">
         "${getMotivationalMessage(activeDays)}"
       </div>
     </div>
