@@ -84,7 +84,7 @@ const ALL_MODULES = [
   { id: 'gym',          name: 'Gym Workouts',      emoji: '🏋️',   color: 'grad-gym',     sub: '8 exercises · 6 days' },
   { id: 'yoga',         name: 'Yoga',              emoji: '🧘',    color: 'grad-yoga',    sub: '8-12 poses · 6 days' },
   { id: 'running',      name: 'Running & Walking', emoji: '🏃',    color: 'grad-running', sub: 'GPS tracker + plans' },
-  { id: 'stretching',   name: 'Stretching',        emoji: '🙆',    color: 'grad-stretch', sub: '6 stretches · 6 days' },
+  { id: 'stretching',   name: 'Stretching',        emoji: '🙆',    color: 'grad-stretch', sub: '10 body parts · 100 stretches' },
   { id: 'calisthenics', name: 'Calisthenics',      emoji: '🤸‍♂️', color: 'grad-cali',    sub: '3 levels · skill tree' },
   { id: 'core',         name: 'Core & Abs',        emoji: '🔥',    color: 'grad-core',    sub: '6 exercises · 6 days' },
 ];
@@ -128,9 +128,18 @@ function renderDashboardTiles() {
   if (!grid) return;
 
   grid.innerHTML = modules.map(m => {
-    const logs      = Store.getModuleDayLogs(user.id, m.id);
-    const todayDone = logs.some(l => l.day === todayDay && l.date === today);
-    const weekDone  = getWeekDays().filter(d => logs.some(l => l.day === d && l.date >= monday)).length;
+    const logs    = Store.getModuleDayLogs(user.id, m.id);
+    const modData = (window.APP_DATA_DEFAULT||window.APP_DATA).modules?.[m.id];
+    // For body-part modules (stretching), logs use body-part ids in `day`,
+    // not weekday names. Count distinct DATES instead.
+    const isBodyPartMode = !!modData?.usesBodyParts;
+    const todayDone = isBodyPartMode
+      ? logs.some(l => l.date === today)
+      : logs.some(l => l.day === todayDay && l.date === today);
+    const weekDone  = isBodyPartMode
+      ? new Set(logs.filter(l => l.date >= monday).map(l => l.date)).size
+      : getWeekDays().filter(d => logs.some(l => l.day === d && l.date >= monday)).length;
+    const idleLabel = isBodyPartMode ? 'Tap to stretch' : 'Today: ' + todayDay;
 
     return `
       <div class="module-card ${m.color} animate-in"
@@ -146,7 +155,7 @@ function renderDashboardTiles() {
           <div class="module-sub">${m.sub}</div>
         </div>
         <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px">
-          <span class="badge ${todayDone ? 'badge-green' : 'badge-yellow'}">${todayDone ? '✓ Today Done' : 'Today: ' + todayDay}</span>
+          <span class="badge ${todayDone ? 'badge-green' : 'badge-yellow'}">${todayDone ? '✓ Today Done' : idleLabel}</span>
           <span style="font-size:12px;color:rgba(255,255,255,0.55)">${weekDone}/6 wk</span>
         </div>
         <div class="module-bg">${m.emoji}</div>
@@ -1632,7 +1641,9 @@ function _renderDayActivityLog(allLogs) {
               <div style="font-weight:700;font-size:15px">${
                 isRun
                   ? (runLog?.title || _getActivityLabel(l._activityType || runLog?.activityType || 'run'))
-                  : getModuleName(l.module)
+                  : (l.module === 'stretching' && l.day && (window.APP_DATA_DEFAULT||window.APP_DATA)?.modules?.stretching?.bodyParts?.find(p => p.id === l.day))
+                    ? getModuleName(l.module) + ': ' + _bodyPartLabel(l.module, l.day)
+                    : getModuleName(l.module)
               }</div>
               <div style="font-size:12px;color:var(--text3);margin-top:2px">
                 ${(() => {
@@ -1871,7 +1882,9 @@ function _showHistoryWorkoutDetail(moduleId, date, day) {
 
 
 // ── DEDUP LOCAL LOGS ─────────────────────────────────────────────
-// Removes duplicate entries from localStorage (same userId+module+date)
+// Removes duplicate entries from localStorage (same userId+module+day+date).
+// `day` is part of the key so stretching logs for different body parts on
+// the same date (e.g. neck + hamstrings on Tuesday) are kept as separate entries.
 // Call from console: dedupLocalLogs() — returns count removed
 function dedupLocalLogs() {
   // Helper: derive YYYY-MM-DD from a timestamp string in LOCAL time
@@ -1900,7 +1913,7 @@ function dedupLocalLogs() {
       date = localFromTs;
       dateFixed++;
     }
-    const key = (l.userId||'') + '|' + (l.module||'') + '|' + date;
+    const key = (l.userId||'') + '|' + (l.module||'') + '|' + (l.day||'') + '|' + date;
     if (seen.has(key)) { dups++; return; }
     seen.add(key);
     kept.push({ ...l, date });
@@ -2014,10 +2027,12 @@ async function _syncHistoryThenRender() {
       }));
       const allLocal = Store.get('ff_logs', []) || [];
       const otherUsers = allLocal.filter(l => l.userId !== user.id);
+      // Dedup key includes `day` — for stretching, the body-part id, so neck +
+      // hamstrings on the same date are preserved as separate log entries.
       const seen = new Set();
       const myLogs = [];
       fromSheet.forEach(sl => {
-        const key = (sl.userId||'') + '|' + (sl.module||'') + '|' + (sl.date||'');
+        const key = (sl.userId||'') + '|' + (sl.module||'') + '|' + (sl.day||'') + '|' + (sl.date||'');
         if (seen.has(key)) return;
         seen.add(key);
         myLogs.push(sl);
