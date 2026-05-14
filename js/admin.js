@@ -672,6 +672,38 @@ async function _collectAndSave() {
     // Yoga: separate save handler
     if (moduleId === 'yoga') { await _collectAndSaveYoga(); return; }
 
+    // ── BODY-PART MODE (stretching) — save under body-part keys ──
+    const defaultsRoot = window.APP_DATA_DEFAULT || window.APP_DATA;
+    const modDef       = defaultsRoot.modules?.[moduleId];
+    if (modDef?.usesBodyParts && Array.isArray(modDef.bodyParts)) {
+      const result = {
+        days: {},
+        usesBodyParts: true,
+        bodyParts:     modDef.bodyParts,
+      };
+      modDef.bodyParts.forEach(part => {
+        const dayEl = document.querySelector(`[data-day="${part.id}"]`);
+        if (!dayEl) {
+          result.days[part.id] = modDef.days?.[part.id] || [];
+          return;
+        }
+        result.days[part.id] = Array.from(dayEl.querySelectorAll('.ex-row')).map(row => ({
+          name:   _text(row, 'name'),
+          hold:   _text(row, 'hold'),
+          rounds: parseInt(_text(row, 'rounds')) || 1,
+          desc:   _text(row, 'desc'),
+          demo:   _text(row, 'demo'),
+          image:  _text(row, 'image'),
+        }));
+      });
+      Store.setContent('exercises_' + moduleId, result);
+      if (APP_DATA.modules[moduleId])                            APP_DATA.modules[moduleId].days = result.days;
+      if (window.APP_DATA_DEFAULT?.modules?.[moduleId])          window.APP_DATA_DEFAULT.modules[moduleId].days = result.days;
+      await Sheets.post('saveContent', { key: 'exercises_' + moduleId, value: result });
+      return;
+    }
+
+    // ── DAY-OF-WEEK MODE (default — gym, cardio, calisthenics, core) ──
     const days = getWeekDays();
     const gymDayLabels2 = {
       Monday:    'Monday — Chest 🫁',    Tuesday:   'Tuesday — Shoulders 🏋️',
@@ -909,6 +941,37 @@ function renderExerciseEditor(moduleId, body) {
   // Yoga uses progressive Day 1-90 — special renderer
   if (moduleId === 'yoga') { renderYogaProgressiveEditor(body); return; }
 
+  // ── BODY-PART MODE (stretching) — render body-part sections instead of weekday tabs ──
+  const defaultsRoot = window.APP_DATA_DEFAULT || window.APP_DATA;
+  const modDef       = defaultsRoot.modules?.[moduleId];
+  if (modDef?.usesBodyParts && Array.isArray(modDef.bodyParts)) {
+    body.innerHTML = `
+      <div style="font-size:13px;color:var(--text2);padding:0 16px 12px;line-height:1.5">
+        ✏️ <strong>Tap any field</strong> to edit. Stretches are grouped by body part. Applies to all users after saving.
+      </div>
+      ${modDef.bodyParts.map(part => {
+        const appDefault = modDef.days?.[part.id] || [];
+        const saved      = Store.getContent('exercises_' + moduleId);
+        const savedPart  = saved?.days?.[part.id] || [];
+        const exercises  = savedPart.length > appDefault.length ? savedPart : appDefault;
+        return `
+          <div style="margin-bottom:8px">
+            <div style="padding:10px 16px;background:rgba(103,58,183,0.18);font-weight:700;font-size:14px;
+              display:flex;justify-content:space-between;align-items:center;border-radius:10px 10px 0 0">
+              <span>${part.emoji || ''} ${part.name}</span>
+              <span style="font-size:12px;color:var(--text3)">${exercises.length} stretches</span>
+            </div>
+            <div data-day="${part.id}" style="padding:0 16px">
+              ${exercises.map((ex, i) => _exerciseCard(ex, i, part.id)).join('')}
+              <button class="add-exercise-btn" onclick="addExercise('${part.id}')">+ Add Stretch</button>
+            </div>
+          </div>`;
+      }).join('')}`;
+    activateEditing(body);
+    return;
+  }
+
+  // ── DAY-OF-WEEK MODE (default — cardio, gym, calisthenics, core) ──
   const days = getWeekDays();
   const gymDayLabels = {
     Monday:    'Monday — Chest 🫁',
