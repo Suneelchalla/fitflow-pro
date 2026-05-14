@@ -364,11 +364,39 @@ function renderModulePage(moduleId) {
   document.getElementById('module-title').textContent        = mod.name;
   document.getElementById('module-emoji-header').textContent = mod.emoji;
 
-  const days    = getWeekDays();
-  const today   = dayName();
-  const user    = APP.currentUser;
-  const logs    = Store.getModuleDayLogs(user.id, moduleId);
+  const user      = APP.currentUser;
+  const logs      = Store.getModuleDayLogs(user.id, moduleId);
   const todayDate = todayStr();
+
+  // ── BODY-PART MODE (stretching) — render body-part strip instead of weekday strip ──
+  if (mod.usesBodyParts && Array.isArray(mod.bodyParts) && mod.bodyParts.length) {
+    // Default to the first body part the user hasn't completed today,
+    // else just the first body part.
+    const firstUndone = mod.bodyParts.find(p => !logs.some(l => l.day === p.id && l.date === todayDate));
+    const initial = (firstUndone || mod.bodyParts[0]).id;
+
+    document.getElementById('day-tab-strip').innerHTML = mod.bodyParts.map(p => {
+      const done   = logs.some(l => l.day === p.id && l.date === todayDate);
+      const active = p.id === initial;
+      return `<button class="tab-btn ${active ? 'active' : ''}" onclick="selectDay('${p.id}', this)"
+                style="white-space:nowrap">${p.emoji || ''} ${p.name} ${done ? '✓' : ''}</button>`;
+    }).join('');
+
+    // Reset inner tabs to Workout
+    document.querySelectorAll('.module-inner-tab').forEach(t => t.classList.remove('active'));
+    document.querySelector('.module-inner-tab')?.classList.add('active');
+    document.querySelectorAll('.module-tab-content').forEach(el => el.classList.remove('active'));
+    document.getElementById('module-workout-tab')?.classList.add('active');
+
+    APP.currentDay = initial;
+    renderExercises(moduleId, initial);
+    updateCompleteBtn();
+    return;
+  }
+
+  // ── DAY-OF-WEEK MODE (default — cardio, gym, yoga, calisthenics, core) ──
+  const days  = getWeekDays();
+  const today = dayName();
 
   document.getElementById('day-tab-strip').innerHTML = days.map(d => {
     const isToday = d === today;
@@ -388,6 +416,20 @@ function renderModulePage(moduleId) {
   APP.currentDay = today;
   renderExercises(moduleId, today);
   updateCompleteBtn();
+}
+
+// ── BODY-PART LABEL HELPER ────────────────────────────────────────
+// For modules with body parts (stretching), converts a body-part id (e.g. 'neck')
+// into its display name (e.g. 'Neck'). Falls back to the raw value for legacy
+// day-name logs (e.g. 'Monday') so old history entries still render correctly.
+function _bodyPartLabel(moduleId, partId) {
+  if (!partId) return '';
+  const mod = (window.APP_DATA_DEFAULT || window.APP_DATA)?.modules?.[moduleId];
+  if (mod?.usesBodyParts && Array.isArray(mod.bodyParts)) {
+    const found = mod.bodyParts.find(p => p.id === partId);
+    if (found) return found.name;
+  }
+  return partId;
 }
 
 function selectDay(day, btn) {
@@ -1020,14 +1062,24 @@ function updateCompleteBtn() {
   const btn = document.getElementById('complete-day-btn');
   if (!btn) return;
 
+  // For body-part modules (stretching), show the part name in the button instead of "Day"
+  const modData = (window.APP_DATA_DEFAULT || window.APP_DATA)?.modules?.[mod];
+  const isBodyPartMode = !!modData?.usesBodyParts;
+  const partLabel = isBodyPartMode ? _bodyPartLabel(mod, day) : '';
+
   if (alreadyLogged) {
-    btn.textContent = '✓ Day Complete!';
+    btn.textContent = isBodyPartMode ? `✓ ${partLabel} Complete!` : '✓ Day Complete!';
     btn.className   = 'btn btn-outline btn-full';
     btn.disabled    = true;
   } else if (isGymModule) {
     // Gym: no set tracking — just show a clean "Log Workout" button
     btn.textContent = '🎉 Log Today\'s Workout';
     btn.className   = 'btn btn-accent btn-full';
+    btn.disabled    = false;
+  } else if (isBodyPartMode) {
+    // Stretching: track stretches checked off, button labels with body-part name
+    btn.textContent = allDone ? `🎉 Mark ${partLabel} Complete!` : `Mark ${partLabel} Complete (${doneSets}/${totalSets})`;
+    btn.className   = `btn ${allDone ? 'btn-accent' : 'btn-primary'} btn-full`;
     btn.disabled    = false;
   } else {
     btn.textContent = allDone ? '🎉 Complete Day!' : `Mark Day Complete (${doneSets}/${totalSets} sets)`;
@@ -1051,18 +1103,31 @@ function completeDay() {
 
   if (!logged) { showToast('Already logged today!', 'info'); return; }
 
-  showToast('🎉 ' + day + ' complete! Great work!', 'success');
+  // For body-part modules (stretching) show the part name in the toast
+  const modData = (window.APP_DATA_DEFAULT || window.APP_DATA)?.modules?.[mod];
+  const isBodyPartMode = !!modData?.usesBodyParts;
+  const friendlyLabel  = isBodyPartMode ? _bodyPartLabel(mod, day) : day;
+  showToast('🎉 ' + friendlyLabel + ' complete! Great work!', 'success');
   _launchConfetti();
   updateCompleteBtn();
 
-  // Refresh day tabs to show ✓ — without resetting selected day
-  const logs    = Store.getModuleDayLogs(user.id, mod);
+  // Refresh strip to show ✓ — different shape for body-parts vs days
+  const logs      = Store.getModuleDayLogs(user.id, mod);
   const todayDate = todayStr();
-  document.querySelectorAll('#day-tab-strip .tab-btn').forEach((btn, i) => {
-    const d    = getWeekDays()[i];
-    const done = logs.some(l => l.day === d && l.date === todayDate);
-    btn.textContent = d.slice(0, 3) + (done ? ' ✓' : '');
-  });
+  if (isBodyPartMode && Array.isArray(modData.bodyParts)) {
+    document.querySelectorAll('#day-tab-strip .tab-btn').forEach((btn, i) => {
+      const p    = modData.bodyParts[i];
+      if (!p) return;
+      const done = logs.some(l => l.day === p.id && l.date === todayDate);
+      btn.innerHTML = `${p.emoji || ''} ${p.name} ${done ? '✓' : ''}`;
+    });
+  } else {
+    document.querySelectorAll('#day-tab-strip .tab-btn').forEach((btn, i) => {
+      const d    = getWeekDays()[i];
+      const done = logs.some(l => l.day === d && l.date === todayDate);
+      btn.textContent = d.slice(0, 3) + (done ? ' ✓' : '');
+    });
+  }
 
   sheetsPost('logCompletion', { userId: user.id, email: user.email, module: mod, day, date: todayStr() });
   setTimeout(() => checkAndUnlockWorkoutAchievements(user.id), 800);
@@ -1223,15 +1288,21 @@ function renderModuleHistory(moduleId) {
   const logsWithModule = logs.map(l => ({ ...l, module: l.module || moduleId }));
 
   const logsHtml = logs.length
-    ? logs.slice(0, 30).map(l => `
+    ? logs.slice(0, 30).map(l => {
+        // For stretching, l.day is a body-part id (e.g. 'neck') — show the
+        // proper name. _bodyPartLabel falls back to raw value for legacy
+        // weekday-name logs, so old history entries still render correctly.
+        const dayLabel = _bodyPartLabel(l.module || moduleId, l.day);
+        return `
         <div class="user-row" style="margin-bottom:6px">
           <div class="user-avatar" style="font-size:18px">${getModuleEmoji(l.module || moduleId)}</div>
           <div class="user-info">
-            <div class="user-name">${l.day}</div>
+            <div class="user-name">${dayLabel}</div>
             <div class="user-email">${l.date}</div>
           </div>
           <span class="badge badge-green">✓ Done</span>
-        </div>`).join('')
+        </div>`;
+      }).join('')
     : '<div class="empty-state"><div class="empty-icon">📅</div><p>No completions yet.<br>Complete your first workout!</p></div>';
 
   container.innerHTML = `
