@@ -393,11 +393,13 @@ async function _syncUserLogs(userId) {
     const allLocal = Store.get('ff_logs', []) || [];
     const otherUsers = allLocal.filter(l => l.userId !== userId);
 
-    // Replace this user's logs with Sheet's copy (deduplicated by userId+module+date)
+    // Replace this user's logs with Sheet's copy (deduplicated by userId+module+day+date).
+    // `day` is included so stretching logs with different body parts on the same date
+    // (e.g. neck + hamstrings on Tuesday) are preserved as separate entries.
     const seen = new Set();
     const myLogs = [];
     fromSheet.forEach(sl => {
-      const key = (sl.userId||'') + '|' + (sl.module||'') + '|' + (sl.date||'');
+      const key = (sl.userId||'') + '|' + (sl.module||'') + '|' + (sl.day||'') + '|' + (sl.date||'');
       if (seen.has(key)) return;
       seen.add(key);
       myLogs.push(sl);
@@ -611,12 +613,18 @@ async function _autoSeedIfVersionChanged(user) {
 
     // Seed exercises for each module
     modules.forEach(mod => {
-      const days = APP_DATA.modules?.[mod]?.days;
+      const modDef = APP_DATA.modules?.[mod];
+      const days   = modDef?.days;
       if (days && Object.keys(days).length > 0) {
+        // Body-part modules (stretching) need their bodyParts metadata in the
+        // saved shape too — matches what admin._collectAndSave writes.
+        const value = modDef.usesBodyParts && Array.isArray(modDef.bodyParts)
+          ? { days, usesBodyParts: true, bodyParts: modDef.bodyParts }
+          : { days };
         seedPromises.push(
-          Sheets.post('saveContent', { key: 'exercises_' + mod, value: { days } })
+          Sheets.post('saveContent', { key: 'exercises_' + mod, value })
             .then(() => {
-              Store.setContent('exercises_' + mod, { days });
+              Store.setContent('exercises_' + mod, value);
               console.log('[FitFlow] Seeded exercises_' + mod);
             })
             .catch(e => console.warn('[FitFlow] Seed failed for exercises_' + mod, e.message))
