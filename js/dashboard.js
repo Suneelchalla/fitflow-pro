@@ -349,6 +349,18 @@ function renderModulePage(moduleId) {
   const mod = (window.APP_DATA_DEFAULT||window.APP_DATA).modules[moduleId];
   if (!mod) return;
 
+  // ── SAFETY: restore #exercises-list if yoga navigation destroyed it ──────────
+  // yoga's renderYogaDayView previously replaced moduleWorkoutTab.innerHTML
+  // entirely, removing #exercises-list and #complete-day-btn. The fix in
+  // renderYogaDayView preserves them, but this guard handles any edge case
+  // (e.g. cached old code, future regressions) so other modules always render.
+  const wTab = document.getElementById('module-workout-tab');
+  if (wTab && !document.getElementById('exercises-list')) {
+    wTab.innerHTML =
+      '<div id="exercises-list" style="display:flex;flex-direction:column;gap:14px;margin-bottom:16px"></div>' +
+      '<button id="complete-day-btn" class="btn btn-primary btn-full" onclick="completeDay()" style="margin-bottom:20px">Mark Day Complete</button>';
+  }
+
   document.getElementById('module-title').textContent        = mod.name;
   document.getElementById('module-emoji-header').textContent = mod.emoji;
 
@@ -405,10 +417,15 @@ function renderYogaProgressivePage() {
   );
   const totalDays = allDays.length;
 
-  // Option 1: Auto-jump to current day
+  // ── FIX: land on the first unfinished day that actually exists in schedule ──
+  // Old code: Math.min(completedCount + 1, totalDays) — used count, not max day
+  // number, so users with gaps would land on wrong day or a missing day.
   const yogaProgress  = Store.get('ff_yoga_progress_' + user.id) || {};
   const completedCount = Object.keys(yogaProgress).filter(d => yogaProgress[d]).length;
-  const currentDayNum = Math.min(completedCount + 1, totalDays);
+  const firstUnfinished = allDays.find(dk => !yogaProgress[dk]);
+  const currentDayNum = firstUnfinished
+    ? parseInt(firstUnfinished.replace('Day ',''))
+    : (allDays.length ? parseInt(allDays[allDays.length - 1].replace('Day ','')) : 1);
   APP.currentDay = 'Day ' + currentDayNum;
 
   const dayTabStrip = document.getElementById('day-tab-strip');
@@ -437,6 +454,11 @@ function renderYogaDayView(dayKey, allDays, yogaProgress, yogaData, user) {
   const moduleWorkoutTab = document.getElementById('module-workout-tab');
   if (!moduleWorkoutTab) return;
 
+  // ── FIX: disable arrows using max day number, not allDays.length (count) ──
+  const maxDayNum = allDays.length > 0
+    ? parseInt(allDays[allDays.length - 1].replace('Day ', ''))
+    : totalDays;
+
   // Top nav: prev | Day X (tap to pick) | next
   const dayTabStrip = document.getElementById('day-tab-strip');
   if (dayTabStrip) {
@@ -454,68 +476,89 @@ function renderYogaDayView(dayKey, allDays, yogaProgress, yogaData, user) {
       <button onclick="yogaNavigateDay(${dayNum+1})"
         style="background:var(--surface);border:1px solid var(--border);border-radius:50%;width:36px;height:36px;
         display:flex;align-items:center;justify-content:center;font-size:18px;color:var(--text2);flex-shrink:0;
-        ${dayNum>=totalDays?'opacity:0.3;pointer-events:none':''}">\u203a</button>
+        ${dayNum>=maxDayNum?'opacity:0.3;pointer-events:none':''}">\u203a</button>
     `;
   }
 
   if (!dayData) {
-    moduleWorkoutTab.innerHTML = `<div style="padding:40px 16px;text-align:center;color:var(--text3)">
-      <div style="font-size:48px;margin-bottom:12px">\U0001f9d8</div>
-      <div style="font-size:15px">Content for this day coming soon.</div></div>`;
+    // Preserve #exercises-list and #complete-day-btn so other modules still work
+    moduleWorkoutTab.innerHTML = `
+      <div id="exercises-list" style="display:flex;flex-direction:column;gap:14px;margin-bottom:16px">
+        <div style="padding:40px 16px;text-align:center;color:var(--text3)">
+          <div style="font-size:48px;margin-bottom:12px">🧘</div>
+          <div style="font-size:15px">Content for Day ${dayNum} coming soon.</div>
+        </div>
+      </div>
+      <button id="complete-day-btn" style="display:none;" onclick="completeDay()">Mark Day Complete</button>`;
     return;
   }
 
   const poses = dayData.poses || [];
 
+  // ── CRITICAL FIX: preserve #exercises-list and #complete-day-btn in the DOM ──
+  // Previously replaced moduleWorkoutTab.innerHTML entirely, destroying both
+  // child elements. Other modules (cardio, gym, etc.) call renderExercises()
+  // which does getElementById('exercises-list') — if null, returns silently,
+  // and the yoga content stays visible in those modules.
+  // Fix: yoga content lives inside #exercises-list; #complete-day-btn stays
+  // present (hidden); day-picker modal is kept after them inside moduleWorkoutTab.
+  const _pct = totalDays > 0 ? Math.round(completedCount / totalDays * 100) : 0;
+  const _nextDayNum = _findNextYogaDay(dayNum + 1, schedule, allDays);
+
   moduleWorkoutTab.innerHTML = `
-    <div style="margin:14px 16px 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-      <div style="display:inline-flex;align-items:center;gap:6px;background:${phaseColor}22;border:1px solid ${phaseColor}55;border-radius:50px;padding:4px 12px;">
-        <span style="width:7px;height:7px;border-radius:50%;background:${phaseColor};flex-shrink:0"></span>
-        <span style="font-size:11px;font-weight:600;color:${phaseColor}">${phase?.label||'Yoga'}</span>
+    <div id="exercises-list" style="display:flex;flex-direction:column;gap:0;margin-bottom:0">
+      <div style="margin:14px 16px 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+        <div style="display:inline-flex;align-items:center;gap:6px;background:${phaseColor}22;border:1px solid ${phaseColor}55;border-radius:50px;padding:4px 12px;">
+          <span style="width:7px;height:7px;border-radius:50%;background:${phaseColor};flex-shrink:0"></span>
+          <span style="font-size:11px;font-weight:600;color:${phaseColor}">${phase?.label||'Yoga'}</span>
+        </div>
+        ${isCompleted ? '<span style="background:rgba(46,125,70,0.2);border:1px solid var(--g3);border-radius:50px;padding:4px 12px;font-size:11px;color:var(--g5);">\u2705 Completed</span>' : ''}
       </div>
-      ${isCompleted ? '<span style="background:rgba(46,125,70,0.2);border:1px solid var(--g3);border-radius:50px;padding:4px 12px;font-size:11px;color:var(--g5);">\u2705 Completed</span>' : ''}
-    </div>
-    <div style="margin:0 16px 14px;background:linear-gradient(135deg,rgba(103,58,183,0.18),rgba(74,20,140,0.12));border:1px solid rgba(103,58,183,0.3);border-radius:12px;padding:12px 14px;">
-      <div style="font-size:10px;color:rgba(179,136,255,0.6);text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px">Today's Focus</div>
-      <div style="font-size:15px;font-weight:700;color:#ce93d8">${dayData.focus||''}</div>
-    </div>
-    <div style="margin:0 16px 16px;">
-      <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
-        <span style="font-size:11px;color:var(--text3)">Journey Progress</span>
-        <span style="font-size:11px;font-weight:600;color:#ce93d8">${Math.round(completedCount/totalDays*100)}%</span>
+      <div style="margin:0 16px 14px;background:linear-gradient(135deg,rgba(103,58,183,0.18),rgba(74,20,140,0.12));border:1px solid rgba(103,58,183,0.3);border-radius:12px;padding:12px 14px;">
+        <div style="font-size:10px;color:rgba(179,136,255,0.6);text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px">Today's Focus</div>
+        <div style="font-size:15px;font-weight:700;color:#ce93d8">${dayData.focus||''}</div>
       </div>
-      <div class="progress-bar"><div class="progress-fill" style="width:${completedCount/totalDays*100}%;background:linear-gradient(90deg,#7b1fa2,#ce93d8)"></div></div>
-    </div>
-    <div style="padding:0 16px;">
-      ${poses.map((pose,i) => `
-        <div class="exercise-card animate-in animate-in-${Math.min(i+1,5)}" style="margin-bottom:12px;border-color:rgba(103,58,183,0.25);">
-          <div style="background:linear-gradient(135deg,rgba(103,58,183,0.12),rgba(74,20,140,0.08));height:72px;display:flex;align-items:center;justify-content:center;">
-            <span style="font-family:var(--font-display);font-size:40px;color:rgba(179,136,255,0.5)">${(pose.name||'').charAt(0)}</span>
-          </div>
-          <div class="exercise-body">
-            <div class="exercise-name" style="margin-bottom:5px">${i+1}. ${pose.name}</div>
-            <div class="exercise-meta"><span>\u23f1 ${pose.hold||''}</span></div>
-            <div class="exercise-desc">${pose.desc||''}</div>
-            ${pose.demo?`<a href="${pose.demo}" target="_blank" rel="noopener" class="demo-link">\u25b6 Watch Demo</a>`:''}
-          </div>
-        </div>`).join('')}
-    </div>
-    <div style="padding:16px;padding-bottom:80px;">
-      ${isCompleted
-        ? `<div style="display:flex;align-items:center;gap:12px;padding:16px;background:rgba(46,125,70,0.12);border:1px solid var(--g3);border-radius:14px;">
-            <span style="font-size:24px">\u2705</span>
-            <div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--g5)">Day ${dayNum} Complete!</div><div style="font-size:11px;color:var(--text3)">Logged to your record</div></div>
-            ${dayNum<totalDays?`<button onclick="yogaNavigateDay(${dayNum+1})" style="background:linear-gradient(135deg,var(--g3),var(--g4));color:white;border:none;border-radius:10px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;flex-shrink:0;">Day ${dayNum+1} \u2192</button>`:''}
-          </div>`
-        : `<button onclick="completeYogaDay('${dayKey}')" id="yoga-complete-btn"
-            style="width:100%;padding:18px;background:linear-gradient(135deg,#7b1fa2,#9c27b0);color:white;border:none;border-radius:14px;font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 4px 20px rgba(123,31,162,0.35);">
-            🧘 Mark Day ${dayNum} Complete
-          </button>
-          <div style="text-align:center;margin-top:7px;font-size:11px;color:var(--text3)">Logs your session and unlocks Day ${Math.min(dayNum+1,totalDays)}</div>`
-      }
+      <div style="margin:0 16px 16px;">
+        <div style="display:flex;justify-content:space-between;margin-bottom:5px;">
+          <span style="font-size:11px;color:var(--text3)">Journey Progress</span>
+          <span style="font-size:11px;font-weight:600;color:#ce93d8">${_pct}%</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${_pct}%;background:linear-gradient(90deg,#7b1fa2,#ce93d8)"></div></div>
+      </div>
+      <div style="padding:0 16px;">
+        ${poses.map((pose,i) => `
+          <div class="exercise-card animate-in animate-in-${Math.min(i+1,5)}" style="margin-bottom:12px;border-color:rgba(103,58,183,0.25);">
+            <div style="background:linear-gradient(135deg,rgba(103,58,183,0.12),rgba(74,20,140,0.08));height:72px;display:flex;align-items:center;justify-content:center;">
+              <span style="font-family:var(--font-display);font-size:40px;color:rgba(179,136,255,0.5)">${(pose.name||'').charAt(0)}</span>
+            </div>
+            <div class="exercise-body">
+              <div class="exercise-name" style="margin-bottom:5px">${i+1}. ${pose.name}</div>
+              <div class="exercise-meta"><span>\u23f1 ${pose.hold||''}</span></div>
+              <div class="exercise-desc">${pose.desc||''}</div>
+              ${pose.demo?`<a href="${pose.demo}" target="_blank" rel="noopener" class="demo-link">\u25b6 Watch Demo</a>`:''}\
+            </div>
+          </div>`).join('')}
+      </div>
+      <div style="padding:16px;padding-bottom:80px;">
+        ${isCompleted
+          ? `<div style="display:flex;align-items:center;gap:12px;padding:16px;background:rgba(46,125,70,0.12);border:1px solid var(--g3);border-radius:14px;">
+              <span style="font-size:24px">\u2705</span>
+              <div style="flex:1"><div style="font-size:14px;font-weight:700;color:var(--g5)">Day ${dayNum} Complete!</div><div style="font-size:11px;color:var(--text3)">Logged to your record</div></div>
+              ${_nextDayNum?`<button onclick="yogaNavigateDay(${_nextDayNum})" style="background:linear-gradient(135deg,var(--g3),var(--g4));color:white;border:none;border-radius:10px;padding:9px 16px;font-size:13px;font-weight:600;cursor:pointer;flex-shrink:0;">Day ${_nextDayNum} \u2192</button>`:''}\
+            </div>`
+          : `<button onclick="completeYogaDay('${dayKey}')" id="yoga-complete-btn"
+              style="width:100%;padding:18px;background:linear-gradient(135deg,#7b1fa2,#9c27b0);color:white;border:none;border-radius:14px;font-size:16px;font-weight:700;cursor:pointer;box-shadow:0 4px 20px rgba(123,31,162,0.35);">
+              \ud83e\uddd8 Mark Day ${dayNum} Complete
+            </button>
+            <div style="text-align:center;margin-top:7px;font-size:11px;color:var(--text3)">Logs your session${_nextDayNum?' \u00b7 Day '+_nextDayNum+' unlocks':''}</div>`
+        }
+      </div>
     </div>
 
-    <!-- Day Picker Modal -->
+    <!-- #complete-day-btn must exist in DOM — renderModulePage/updateCompleteBtn need it -->
+    <button id="complete-day-btn" style="display:none;" onclick="completeDay()">Mark Day Complete</button>
+
+    <!-- Day Picker Modal (position:fixed) -->
     <div id="yoga-day-picker" onclick="if(event.target===this)closeYogaDayPicker()"
       style="display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.75);backdrop-filter:blur(6px);align-items:flex-end;justify-content:center;">
       <div style="width:100%;max-width:480px;background:var(--bg2);border-radius:24px 24px 0 0;border:1px solid var(--border);border-bottom:none;max-height:82vh;display:flex;flex-direction:column;">
@@ -549,6 +592,17 @@ function openYogaDayPicker() {
 function closeYogaDayPicker() {
   const p = document.getElementById('yoga-day-picker');
   if (p) p.style.display = 'none';
+}
+
+// Returns the nearest day number that actually exists in the schedule,
+// starting from startNum and searching forward. Used for the "next day →"
+// button after completing a yoga day (accounts for schedule gaps like Day 47).
+function _findNextYogaDay(startNum, schedule, allDays) {
+  for (let n = startNum; n <= startNum + 10; n++) {
+    if (schedule['Day ' + n]) return n;
+  }
+  const next = allDays.find(dk => parseInt(dk.replace('Day ','')) >= startNum);
+  return next ? parseInt(next.replace('Day ','')) : null;
 }
 
 function yogaPickerPhase(phaseIdx) {
@@ -611,8 +665,26 @@ function yogaNavigateDay(dayNum) {
   const yogaData  = savedYoga ? { ...baseYoga, schedule: savedYoga.schedule || baseYoga?.schedule } : baseYoga;
   const schedule  = yogaData?.schedule || {};
   const allDays   = Object.keys(schedule).sort((a,b) => parseInt(a.replace('Day ','')) - parseInt(b.replace('Day ','')));
-  const totalDays = allDays.length;
-  if (dayNum < 1 || dayNum > totalDays) return;
+
+  // ── FIX: use max day NUMBER, not allDays.length (count) ─────────────────────
+  // The schedule has gaps (e.g. Day 47, 49 are missing) so allDays.length = 53
+  // but day numbers go up to 60. The old check (dayNum > totalDays) blocked
+  // navigation to Days 56, 58, 59, 60 even though they exist in the schedule.
+  const maxDayNum = allDays.length > 0
+    ? parseInt(allDays[allDays.length - 1].replace('Day ', ''))
+    : 0;
+  if (dayNum < 1 || dayNum > maxDayNum) return;
+
+  // If this exact day doesn't exist in the schedule (gap), snap to nearest
+  if (!schedule['Day ' + dayNum]) {
+    const available = allDays.map(dk => parseInt(dk.replace('Day ', '')));
+    const nearest   = available.reduce((a, b) =>
+      Math.abs(b - dayNum) < Math.abs(a - dayNum) ? b : a
+    );
+    if (nearest === parseInt((APP.currentDay || 'Day 0').replace('Day ', ''))) return;
+    dayNum = nearest;
+  }
+
   const progress = Store.get('ff_yoga_progress_' + user.id) || {};
   renderYogaDayView('Day ' + dayNum, allDays, progress, yogaData, user);
   document.querySelector('.scroll-content')?.scrollTo?.(0,0);
@@ -647,6 +719,19 @@ function renderExercises(moduleId, day) {
   if (!moduleId || !day) return;
   const mod = (window.APP_DATA_DEFAULT||window.APP_DATA).modules[moduleId];
 
+  // ── SAFETY BACKSTOP: recreate #exercises-list if it was destroyed ────────────
+  let container = document.getElementById('exercises-list');
+  if (!container) {
+    const wTab = document.getElementById('module-workout-tab');
+    if (wTab) {
+      wTab.innerHTML =
+        '<div id="exercises-list" style="display:flex;flex-direction:column;gap:14px;margin-bottom:16px"></div>' +
+        '<button id="complete-day-btn" class="btn btn-primary btn-full" onclick="completeDay()" style="margin-bottom:20px">Mark Day Complete</button>';
+      container = document.getElementById('exercises-list');
+    }
+    if (!container) return;
+  }
+
   // Check for admin-saved overrides first, then fall back to built-in data
   const exOverride    = Store.getContent('exercises_' + moduleId);
   const mainExercises = exOverride?.days?.[day] || mod?.days?.[day] || [];
@@ -674,8 +759,7 @@ function renderExercises(moduleId, day) {
   }
 
   let prevSection = '';
-  const container = document.getElementById('exercises-list');
-  if (!container) return;
+  // container already resolved by the safety block above
 
   // Hold-based modules
   const isHoldBased = moduleId === 'yoga' || moduleId === 'stretching';
