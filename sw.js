@@ -1,17 +1,17 @@
 // ════════════════════════════════════════════════════════════════
-// FITFLOW PRO — Service Worker v46 (with OneSignal Push)
+// FITFLOW PRO — Service Worker v47 (with OneSignal Push)
 // Combines: PWA offline cache + OneSignal push notifications
 // ════════════════════════════════════════════════════════════════
 
 // Import OneSignal's service worker — handles push notifications
 importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
 
-const CACHE = 'fitflow-v107';
+const CACHE = 'fitflow-v108';
 const ASSETS = [
   './',
   './index.html',
   './css/style.css?v=75',
-  './js/data.js?v=76',
+  './js/data.js?v=77',
   './js/data-cali.js?v=75',
   './js/app.js?v=78',
   './js/auth.js?v=77',
