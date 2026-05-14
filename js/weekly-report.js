@@ -40,11 +40,13 @@ async function _loadAndRender() {
           if (isNaN(dt.getTime())) return null;
           return dt.getFullYear() + '-' + String(dt.getMonth()+1).padStart(2,'0') + '-' + String(dt.getDate()).padStart(2,'0');
         };
-        const seen = new Set(local.map(l => (l.userId||'')+'|'+(l.module||'')+'|'+(l.date||'')));
+        // Dedup includes `day` so stretching logs for different body parts on the
+        // same date are kept as separate entries (e.g. neck + hamstrings on Tuesday).
+        const seen = new Set(local.map(l => (l.userId||'')+'|'+(l.module||'')+'|'+(l.day||'')+'|'+(l.date||'')));
         res.logs.forEach(sl => {
           const correctDate = tsToLocal(sl.timestamp) || sl.date;
           const fixed = { ...sl, date: correctDate };
-          const key = (fixed.userId||'')+'|'+(fixed.module||'')+'|'+(fixed.date||'');
+          const key = (fixed.userId||'')+'|'+(fixed.module||'')+'|'+(fixed.day||'')+'|'+(fixed.date||'');
           if (!seen.has(key)) { local.push({ ...fixed, id: fixed.id||('log_'+Date.now()+Math.random()) }); seen.add(key); ch = true; }
         });
         if (ch) Store.set('ff_logs', local);
