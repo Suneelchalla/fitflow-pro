@@ -148,7 +148,7 @@ function doGet(e) {
       case 'getPlanProgress':      result = getPlanProgress(p.userId, p.planKey);                        break;
       case 'getContent':           result = { success:true, content:getContent(p.key) };                 break;
       case 'getAllContent':         result = getAllContent();                                              break;
-      case 'getFeedback':          result = getFeedback();                                               break;
+      case 'getFeedback':          result = getFeedback(p.userId);                                       break;
       case 'getFeedbackUnread':    result = getFeedbackUnread();                                         break;
       case 'getCustomWorkouts':    result = getCustomWorkouts(p.userId);                                 break;
       case 'getAllCustomWorkouts':  result = getAllCustomWorkouts();                                      break;
@@ -634,7 +634,7 @@ function getAllLogs() {
 // ════════════════════════════════════════════════════════════════
 function logRun(body) {
   const sh = getSheet(SHEETS.RUN_LOGS);
-  ensureHeaders(sh,['LogID','UserID','UserEmail','Date','Distance_km','Duration_sec','Pace_min_km','PlanType','Timestamp','ActivityType','CoordsJSON','Title','Description']);
+  ensureHeaders(sh,['LogID','UserID','UserEmail','Date','Distance_km','Duration_sec','Pace_min_km','PlanType','Timestamp','ActivityType','CoordsJSON','Title','Description','LocationName']);
   const data   = sh.getDataRange().getValues();
   const newId  = (body.id || ('run_'+Date.now())).toString();
   const userId = (body.userId||'').toString();
@@ -649,7 +649,12 @@ function logRun(body) {
   }
   let coordsJson = '[]';
   if (Array.isArray(body.coords) && body.coords.length) {
-    coordsJson = JSON.stringify(body.coords.map(c => ({ lat:c.lat, lon:c.lon })));
+    // Include ts so _calcKmSplits can compute per-km split times after a Sheets sync.
+    // Without ts, every coord is skipped by the `if (!c.ts) continue` guard and
+    // splits never render after the first login/reload replaces localStorage.
+    coordsJson = JSON.stringify(body.coords.map(c => ({
+      lat: c.lat, lon: c.lon, ...(c.ts ? { ts: c.ts } : {}),
+    })));
   }
   sh.appendRow([
     newId, userId, body.email||'', toYMD(body.date)||(body.date||''),
@@ -660,6 +665,7 @@ function logRun(body) {
     coordsJson,
     body.title||'',
     body.description||'',
+    body.locationName||'',
   ]);
   SpreadsheetApp.flush();
   return { success:true };
@@ -670,10 +676,11 @@ function getUserRunLogs(userId) {
   const data = sh.getDataRange().getValues();
   if (data.length<2) return [];
   const header    = data[0].map(h => (h||'').toString().trim().toLowerCase());
-  const actCol    = header.indexOf('activitytype');
-  const coordsCol = header.indexOf('coordsjson');
-  const titleCol  = header.indexOf('title');
-  const descCol   = header.indexOf('description');
+  const actCol      = header.indexOf('activitytype');
+  const coordsCol   = header.indexOf('coordsjson');
+  const titleCol    = header.indexOf('title');
+  const descCol     = header.indexOf('description');
+  const locationCol = header.indexOf('locationname');
   return data.slice(1)
     .filter(r => (r[RCOL.USER_ID]||'').toString() === userId.toString())
     .map(r => {
@@ -689,9 +696,10 @@ function getUserRunLogs(userId) {
         pace:         parseFloat(r[RCOL.PACE])    ||0,
         planType:     (r[RCOL.PLAN_TYPE]||'Free Run').toString(),
         timestamp:    toISOStr(r[RCOL.TIMESTAMP]),
-        activityType: actCol    >= 0 ? (r[actCol]   ||'run').toString() : 'run',
-        title:        titleCol  >= 0 ? (r[titleCol] ||'').toString()    : '',
-        description:  descCol   >= 0 ? (r[descCol]  ||'').toString()    : '',
+        activityType: actCol      >= 0 ? (r[actCol]      ||'run').toString() : 'run',
+        title:        titleCol    >= 0 ? (r[titleCol]    ||'').toString()    : '',
+        description:  descCol     >= 0 ? (r[descCol]     ||'').toString()    : '',
+        locationName: locationCol >= 0 ? (r[locationCol] ||'').toString()    : '',
         coords,
       };
     });
@@ -702,10 +710,11 @@ function getAllRunLogs() {
   const data = sh.getDataRange().getValues();
   if (data.length<2) return [];
   const header    = data[0].map(h => (h||'').toString().trim().toLowerCase());
-  const actCol    = header.indexOf('activitytype');
-  const coordsCol = header.indexOf('coordsjson');
-  const titleCol  = header.indexOf('title');
-  const descCol   = header.indexOf('description');
+  const actCol      = header.indexOf('activitytype');
+  const coordsCol   = header.indexOf('coordsjson');
+  const titleCol    = header.indexOf('title');
+  const descCol     = header.indexOf('description');
+  const locationCol = header.indexOf('locationname');
   return data.slice(1).map(r => {
     let coords = [];
     if (coordsCol >= 0 && r[coordsCol]) { try { coords = JSON.parse(r[coordsCol]); } catch {} }
@@ -719,9 +728,10 @@ function getAllRunLogs() {
       pace:         parseFloat(r[6])||0,
       planType:     (r[7]||'Free Run').toString(),
       timestamp:    toISOStr(r[8]),
-      activityType: actCol    >= 0 ? (r[actCol]   ||'run').toString() : 'run',
-      title:        titleCol  >= 0 ? (r[titleCol] ||'').toString()    : '',
-      description:  descCol   >= 0 ? (r[descCol]  ||'').toString()    : '',
+      activityType: actCol      >= 0 ? (r[actCol]      ||'run').toString() : 'run',
+      title:        titleCol    >= 0 ? (r[titleCol]    ||'').toString()    : '',
+      description:  descCol     >= 0 ? (r[descCol]     ||'').toString()    : '',
+      locationName: locationCol >= 0 ? (r[locationCol] ||'').toString()    : '',
       coords,
     };
   });
@@ -935,14 +945,24 @@ function _ensureFeedbackCols(sh) {
   ensureHeaders(sh, ['FeedbackID','UserID','Name','Email','Category','Rating','Message','Date','Timestamp','AdminReply','AdminReplyAt','AdminRead']);
 }
 
-function getFeedback() {
+function getFeedback(userId) {
   const sh   = getSheet(SHEETS.FEEDBACK);
   _ensureFeedbackCols(sh);
   const data = sh.getDataRange().getValues();
   if (data.length < 2) return { success:true, feedback:[] };
+
+  // If userId is provided → user is calling: return ONLY their own feedback.
+  // If no userId → admin is calling: return all feedback.
+  const filterByUser = userId && userId.toString().trim().length > 0;
+
+  const rows = data.slice(1).filter(r => {
+    if (!filterByUser) return true;                                    // admin: all rows
+    return (r[1]||'').toString().trim() === userId.toString().trim();  // user: own rows only
+  });
+
   return {
     success:  true,
-    feedback: data.slice(1).reverse().map(r => ({
+    feedback: rows.reverse().map(r => ({
       id:           (r[0]||'').toString(),
       userId:       (r[1]||'').toString(),
       name:         (r[2]||'').toString(),
