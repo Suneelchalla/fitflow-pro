@@ -1,26 +1,26 @@
 // ════════════════════════════════════════════════════════════════
-// FITFLOW PRO — Service Worker v47 (with OneSignal Push)
+// FITFLOW PRO — Service Worker v48 (with OneSignal Push)
 // Combines: PWA offline cache + OneSignal push notifications
 // ════════════════════════════════════════════════════════════════
 
 // Import OneSignal's service worker — handles push notifications
 importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
 
-const CACHE = 'fitflow-v108';
+const CACHE = 'fitflow-v109';
 const ASSETS = [
   './',
   './index.html',
   './css/style.css?v=75',
-  './js/data.js?v=77',
+  './js/data.js?v=78',
   './js/data-cali.js?v=75',
   './js/app.js?v=78',
-  './js/auth.js?v=77',
-  './js/dashboard.js?v=85',
+  './js/auth.js?v=78',
+  './js/dashboard.js?v=86',
   './js/running.js?v=84',
   './js/admin.js?v=79',
   './push.js?v=7',
   './js/custom-workouts.js?v=75',
-  './js/weekly-report.js?v=76',
+  './js/weekly-report.js?v=77',
   './manifest.json',
   './privacy.html',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
