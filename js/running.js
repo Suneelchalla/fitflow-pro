@@ -553,14 +553,19 @@ const LockScreen = {
   _updateMeta() {
     const s = APP.runSession;
     if (!s) return;
-    const elapsed  = _calcElapsed(s);
-    const meta     = ACTIVITY_META[s.activityType || _activityType] || ACTIVITY_META.run;
-    // Use actual activity emoji + label — not hardcoded "🏃 Running"
-    const statusIcon = s.paused ? '⏸' : meta.emoji;
-    const statusText = s.paused ? 'Paused' : meta.label;  // "Walk", "Run", "Cycle"
+    if (!('mediaSession' in navigator)) return;
+    const meta = ACTIVITY_META[s.activityType || _activityType] || ACTIVITY_META.run;
+    // ── FIX: keep MediaSession metadata STATIC ────────────────────────────────
+    // Previously set live distance/pace here, which caused a second "Now Playing"
+    // notification to appear alongside the SW activity notification — two cards in
+    // the notification shade with slightly different numbers (10 s vs 3 s intervals).
+    // The SW notification (startActivityNotification) handles live stats display.
+    // MediaSession here only provides: (a) silent-audio GPS keepalive, and
+    // (b) the lock-screen action handler that re-opens the app.
+    // A static title prevents the OS from rendering it as a competing live tracker.
     navigator.mediaSession.metadata = new MediaMetadata({
-      title:   `${statusIcon} ${statusText}  ${fmtTime(elapsed)}  ·  ${s.distance.toFixed(2)} km`,
-      artist:  `Pace ${fmtPace(s.distance, elapsed)} /km  ·  ${Math.round(s.distance * meta.kcalPerKm)} kcal`,
+      title:   `${s.paused ? '⏸' : meta.emoji} ${meta.label} — FitFlow Pro`,
+      artist:  s.paused ? 'Paused' : 'Activity in progress',
       album:   'FitFlow Pro',
       artwork: [{ src: _lockScreenArtwork(), sizes: '512x512', type: 'image/svg+xml' }],
     });
@@ -1521,7 +1526,7 @@ function stopRun() {
   const splitsEl = document.getElementById('sum-km-splits');
   if (splitsEl) {
     const meta = ACTIVITY_META[s.activityType || _activityType] || ACTIVITY_META.run;
-    splitsEl.innerHTML = _renderKmSplits(APP.gpsCoords, s.distance, meta.color);
+    splitsEl.innerHTML = _renderKmSplits(APP.gpsCoords, s.distance, meta.color, elapsed);
   }
   _renderRunRouteMap(APP.gpsCoords);
   // Transition to save screen after map loads
@@ -2657,50 +2662,65 @@ function _buildRunCalendar(logs, year, month) {
 }
 
 // ── KM SPLITS ────────────────────────────────────────────────────
-function _calcKmSplits(coords, totalDistance) {
+function _calcKmSplits(coords, totalDistance, totalDurationSec) {
   if (!coords || coords.length < 2) return [];
 
+  // ── FIX: synthesize timestamps when real ones are missing ─────────────────
+  // GAS logRun now stores ts, but older synced logs or legacy Sheets rows may
+  // still lack it. When ts is absent but duration is known, assign synthetic ts
+  // values spaced proportionally by array index so split times stay correct.
+  const hasTs = coords.some(c => c.ts);
+  let getTs;
+  if (hasTs) {
+    getTs = i => coords[i].ts;
+  } else if (totalDurationSec > 0) {
+    // Linear interpolation: coord[0] = 0, coord[last] = totalDurationSec * 1000
+    const base  = 1_000_000_000;   // arbitrary epoch offset (avoids 0 falsy check)
+    const scale = (totalDurationSec * 1000) / Math.max(coords.length - 1, 1);
+    getTs = i => base + i * scale;
+  } else {
+    return [];   // no ts and no duration → can't calculate split times
+  }
+
   const splits  = [];
-  let distAcc   = 0;       // accumulated distance in km
-  let kmMark    = 1;       // next km boundary to cross
-  let kmStart   = coords[0].ts; // timestamp when this km started
+  let distAcc   = 0;
+  let kmMark    = 1;
+  let kmStart   = getTs(0);
 
   for (let i = 1; i < coords.length; i++) {
     const c    = coords[i];
     const prev = coords[i - 1];
-    if (!c.ts || !prev.ts) continue;
+    const cTs  = getTs(i);
+    if (!cTs) continue;
 
     const d = haversine(prev.lat, prev.lon, c.lat, c.lon);
-    if (d <= 0 || d > 0.5) continue; // skip bad points
+    if (d <= 0 || d > 0.5) continue;
 
     distAcc += d;
 
-    // Crossed a km boundary?
     if (distAcc >= kmMark) {
-      const kmEndTs   = c.ts;
-      const kmTimeSec = Math.round((kmEndTs - kmStart) / 1000);
+      const kmTimeSec = Math.round((cTs - kmStart) / 1000);
       splits.push({
         km:      kmMark,
         timeSec: kmTimeSec,
         pace:    kmTimeSec > 0 ? fmtPace(1, kmTimeSec) : '--:--',
       });
       kmMark++;
-      kmStart = c.ts;
+      kmStart = cTs;
     }
   }
 
-  // Last partial km (if > 0.1km remaining)
+  // Last partial km (if > 0.1 km remaining)
   const lastKmDist = distAcc - (kmMark - 1);
   if (lastKmDist >= 0.1 && coords.length > 0) {
-    const lastTs    = coords[coords.length - 1].ts;
+    const lastTs    = getTs(coords.length - 1);
     const kmTimeSec = Math.round((lastTs - kmStart) / 1000);
-    // Extrapolate pace for a full km
     const extrapolatedSec = lastKmDist > 0 ? Math.round(kmTimeSec / lastKmDist) : 0;
     splits.push({
-      km:       kmMark,
-      timeSec:  kmTimeSec,
-      pace:     extrapolatedSec > 0 ? fmtPace(1, extrapolatedSec) : '--:--',
-      partial:  true,
+      km:        kmMark,
+      timeSec:   kmTimeSec,
+      pace:      extrapolatedSec > 0 ? fmtPace(1, extrapolatedSec) : '--:--',
+      partial:   true,
       partialKm: parseFloat(lastKmDist.toFixed(2)),
     });
   }
@@ -2708,8 +2728,8 @@ function _calcKmSplits(coords, totalDistance) {
   return splits;
 }
 
-function _renderKmSplits(coords, totalDistance, color) {
-  const splits = _calcKmSplits(coords, totalDistance);
+function _renderKmSplits(coords, totalDistance, color, totalDurationSec) {
+  const splits = _calcKmSplits(coords, totalDistance, totalDurationSec);
   if (!splits || splits.length < 2) return ''; // need at least 2 splits to show
 
   // Find fastest and slowest for bar scaling
@@ -3029,7 +3049,7 @@ function _showRunDetail(idx) {
       ${!hasMap ? `<div style="text-align:center;font-size:13px;color:var(--text3);padding:8px 0">No GPS route for this activity</div>` : ''}
 
       <!-- Km splits -->
-      ${r.coords && r.coords.length >= 2 ? _renderKmSplits(r.coords, r.distance, meta.color) : ''}
+      ${r.coords && r.coords.length >= 2 ? _renderKmSplits(r.coords, r.distance, meta.color, r.duration) : ''}
 
       <!-- PB & motivation for this run -->
       <div id="run-detail-pb-badges" style="margin-top:8px"></div>
@@ -3052,12 +3072,17 @@ function _showRunDetail(idx) {
         const smoothedCoords = _smoothCoordsForDisplay(r.coords);
         const latlngs = smoothedCoords.map(c => [c.lat, c.lon]);
         _detailMapInst = L.map(mapEl, {
-          zoomControl:     false,
+          zoomControl:        false,
           attributionControl: false,
-          dragging:        true,
+          // ── FIX: dragging:false prevents Leaflet's drag handler from registering
+          // a global document-level pointerdown listener that intercepts touches on
+          // elements BELOW the map (e.g. the Generate Activity Card button) after
+          // the modal scrolls and Leaflet's internal bounding-box tracking goes stale.
+          // Users don't need to pan the summary detail map — route is fixed.
+          dragging:        false,
           scrollWheelZoom: false,
           tap:             false,
-          touchZoom:       true,
+          touchZoom:       false,
           doubleClickZoom: false,
         });
 
@@ -4325,9 +4350,14 @@ function _openCardEditorModal(session, meta, drawCoords, photoImg) {
   _cardEditor.meta     = meta;
   _cardEditor.routeCoords = drawCoords || [];
   _cardEditor.photoImg = photoImg || null;
-  // Always reset element positions/scale/rotation on every open
-  _cardEditor.route = { x: 0.04, y: 0.04, w: 0.42, h: 0.42, scale: 1, rot: 0 };
-  _cardEditor.stats = { x: 0.04, y: 0.62, w: 0.88, h: 0.26, scale: 1, rot: 0 };
+  // ── FIX: default route and stats now share the same width (92%) and same
+  // left/right edges (x:0.04 → 0.96) so they line up vertically by default.
+  // Old defaults had route at w:0.42 (narrow, top-left) while stats was w:0.88,
+  // making the card look unbalanced — route ended at 46% while stats ended at 92%.
+  // New layout: route fills top half (52% tall), stats fills lower band (28% tall),
+  // 2% gap between them. Users can still drag/pinch to reposition.
+  _cardEditor.route = { x: 0.04, y: 0.04, w: 0.92, h: 0.52, scale: 1, rot: 0 };
+  _cardEditor.stats = { x: 0.04, y: 0.58, w: 0.92, h: 0.28, scale: 1, rot: 0 };
   _cardEditor.logo  = { x: 0.35, y: 0.04, w: 0.60, h: 0.06, scale: 1, rot: 0 };
 
   // Compute display size from window — no layout dependency
@@ -4632,8 +4662,9 @@ function _selectCardEl(key) {
 }
 
 function _resetCardElPositions() {
-  _cardEditor.route = { x: 0.04, y: 0.04, w: 0.42, h: 0.42, scale: 1, rot: 0 };
-  _cardEditor.stats = { x: 0.04, y: 0.62, w: 0.88, h: 0.26, scale: 1, rot: 0 };
+  // Same aligned defaults as initial open — full-width route + stats, 2% gap
+  _cardEditor.route = { x: 0.04, y: 0.04, w: 0.92, h: 0.52, scale: 1, rot: 0 };
+  _cardEditor.stats = { x: 0.04, y: 0.58, w: 0.92, h: 0.28, scale: 1, rot: 0 };
   _cardEditor.logo  = { x: 0.35, y: 0.04, w: 0.60, h: 0.06, scale: 1, rot: 0 };
   _cardEditorRedraw();
 }
