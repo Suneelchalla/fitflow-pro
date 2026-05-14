@@ -32,6 +32,41 @@ const ACTIVITY_META = {
 };
 let _activityType = 'run';   // selected on idle screen, saved with run
 
+// ── START LOCATION (reverse geocoding) ───────────────────────────
+// Fetched once per run from Nominatim (free, no API key) on the first
+// good GPS fix after warmup. Result stored in APP.runSession.locationName
+// and saved to the run log so it shows on history cards.
+let _locationFetched = false;  // reset to false in _doStartRun each time
+
+async function _reverseGeocode(lat, lon) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}&format=json&zoom=14&accept-language=en`;
+    const ctrl = new AbortController();
+    const tid  = setTimeout(() => ctrl.abort(), 6000);
+    const res  = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(tid);
+    if (!res.ok) return null;
+    const data = await res.json();
+    const addr = data.address || {};
+    // Build a concise "Area, City" label from the most specific available fields
+    const area = addr.suburb || addr.neighbourhood || addr.quarter
+               || addr.village || addr.hamlet || '';
+    const city = addr.city || addr.town || addr.county
+               || addr.state_district || '';
+    if (area && city) return `${area}, ${city}`;
+    if (area) return area;
+    if (city) return city;
+    // Last-resort: take first two comma-parts of the full display_name
+    if (data.display_name) {
+      const parts = data.display_name.split(',').map(s => s.trim()).filter(Boolean);
+      return parts.slice(0, 2).join(', ');
+    }
+    return null;
+  } catch {
+    return null;   // timeout, offline, or parse error — silently skip
+  }
+}
+
 // ── MAP TILE STYLES ────────────────────────────────────────────────
 var _mapStyle = 'dark'; // 'dark' | 'light' | 'satellite'
 
@@ -568,6 +603,7 @@ function _saveRunSession() {
     distance:     APP.runSession.distance,
     paused:       APP.runSession.paused,
     activityType: APP.runSession.activityType || _activityType,
+    locationName: APP.runSession.locationName || '',
     coords:       coordsToSave,
   });
 }
@@ -613,9 +649,12 @@ function _tryRecoverRunSession() {
     distance:     saved.distance    || 0,
     paused:       true,   // ← always paused on recovery, regardless of saved state
     activityType: saved.activityType || 'run',
+    locationName: saved.locationName || '',
   };
   APP.gpsCoords  = saved.coords || [];
   _activityType  = APP.runSession.activityType;
+  // Location was already fetched in the previous session — don't refetch
+  _locationFetched = !!(saved.locationName);
 
   _startRunTimerLoop();
   // Do NOT call startGPS() here — user must press Resume explicitly.
@@ -1177,10 +1216,12 @@ function _doStartRun() {
     distance:     0,
     paused:       false,
     activityType: _activityType,
+    locationName: '',   // filled by _reverseGeocode on first post-warmup GPS fix
   };
   APP.gpsCoords    = [];
   _gpsWarmupCount  = 0;
   _gpsLastGoodFix  = null;
+  _locationFetched = false;   // allow geocoding for this new run
   _currentGpsSpeed = null;
   _userPanned      = false;  // reset pan lock so map auto-centers from first GPS fix
   _rotationEnabled = true;   // re-enable rotation for new activity
@@ -1304,6 +1345,16 @@ function startGPS() {
       }
 
       // FIX #2c: Compute distance from last GOOD fix (using smoothed coords)
+      // ── Fetch start location once on the first post-warmup fix ────────────
+      if (!_locationFetched && APP.runSession) {
+        _locationFetched = true;
+        _reverseGeocode(lat, lon).then(name => {
+          if (name && APP.runSession) {
+            APP.runSession.locationName = name;
+            _saveRunSession();  // persist so it survives background/kill
+          }
+        });
+      }
       if (_gpsLastGoodFix) {
         const d = haversine(_gpsLastGoodFix.lat, _gpsLastGoodFix.lon, lat, lon);
         if (d >= GPS_MIN_DISTANCE_KM) {
@@ -1551,6 +1602,7 @@ function saveRun() {
     planType:     activityTitle,
     title:        activityTitle,
     description:  activityDesc,
+    locationName: s.locationName || '',   // start-area from reverse geocoding
     timestamp:    new Date().toISOString(),
     // Save coords for history detail map (thin to max 500 points to keep storage small)
     coords:       APP.gpsCoords.length > 500
@@ -2509,7 +2561,8 @@ function renderRunHistory() {
               </div>
               <div>
                 <div style="font-weight:700;font-size:14px">${meta.label} · ${r.planType || 'Free Activity'}</div>
-                ${timeStr ? `<div style="font-size:11px;color:var(--text3)">${timeStr}</div>` : ''}
+                ${r.locationName ? `<div style="font-size:11px;color:var(--text3);margin-top:1px">📍 ${r.locationName}</div>` : (timeStr ? `<div style="font-size:11px;color:var(--text3)">${timeStr}</div>` : '')}
+                ${r.locationName && timeStr ? `<div style="font-size:11px;color:var(--text3)">${timeStr}</div>` : ''}
               </div>
             </div>
             <div style="font-size:12px;color:var(--text3)">${hasMap ? '🗺 ' : ''}›</div>
@@ -2951,8 +3004,11 @@ function _showRunDetail(idx) {
         </div>
       </div>
 
-      <!-- Date + time -->
-      <div style="font-size:13px;color:var(--text3);margin-bottom:18px">${dateStr}${timeStr ? ' at ' + timeStr : ''}</div>
+      <!-- Date + time + start location -->
+      <div style="font-size:13px;color:var(--text3);margin-bottom:18px">
+        ${dateStr}${timeStr ? ' at ' + timeStr : ''}
+        ${r.locationName ? `<div style="margin-top:5px;display:flex;align-items:center;gap:5px"><span style="font-size:14px">📍</span><span style="font-size:13px;color:var(--text2);font-weight:500">${r.locationName}</span></div>` : ''}
+      </div>
 
       <!-- Stats grid — Strava-style 2 column -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--border);border-radius:14px;overflow:hidden;margin-bottom:16px">
