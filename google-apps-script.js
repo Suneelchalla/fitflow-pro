@@ -593,9 +593,15 @@ function logCompletion(body) {
   const module = (body.module||'').toString();
   const day    = (body.day   ||'').toString();
   const date   = toYMD(body.date) || (body.date||'').toString();
+  // Dedup on userId+module+day+date (matches frontend Store.addLog).
+  // Including `day` is required for body-part modules (stretching) where a user
+  // can complete multiple body parts on the same date — each is a separate log.
+  // For other modules the day value is a weekday name; users only ever log
+  // today, so this also prevents the same weekday-date pair from duplicating.
   for (let i = 1; i < data.length; i++) {
     if ((data[i][1]||'').toString() === userId &&
         (data[i][3]||'').toString() === module &&
+        (data[i][4]||'').toString() === day &&
         toYMD(data[i][5]) === date) {
       return { success:true, duplicate:true };
     }
