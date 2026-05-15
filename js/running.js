@@ -584,36 +584,53 @@ async function _killAllActivityNotifications() {
   }
 }
 
-// Apply bearing rotation — rotates ONLY the marker arrow to show direction of travel.
+// Apply bearing rotation for course-up display.
 //
-// Why not the map tiles? Leaflet 1.9 has no native rotation support. Setting
-// `transform: rotate()` on mapPane gets overwritten by Leaflet's own setView()
-// pan animation, which sets `transform: translate3d(...)` on the same element.
-// The result: rotation flickers in and never sticks — the symptom you saw as
-// "map going sideways" while the marker correctly pointed up.
+// Primary path: leaflet-rotate plugin's `_liveMap.setBearing(deg)` rotates the
+// tiles + overlay + polylines in one shot, and the plugin auto-counter-rotates
+// markers so the user dot's arrow stays pointing up (= direction of travel).
 //
-// For true course-up rotation, install the leaflet-rotate plugin and pass
-// `{ rotate: true }` to L.map(). Until then we use the Google-Maps-walking-mode
-// approach: north-up map with a heading-aware arrow on the user dot.
+// Fallback path: if the plugin failed to load (network blocked, CDN down),
+// we keep the previous Google-Maps-walking-mode behaviour — map stays
+// north-up, only the marker arrow rotates to show heading.
 function _applyMapRotation(bearing) {
   if (!_liveMap || !_rotationEnabled || _userPanned) return;
   _mapBearing = bearing;
 
-  // Counter-rotate marker so the arrow always points in direction of travel
-  if (_liveMarker && _liveMarker._icon) {
-    _liveMarker._icon.style.transform =
-      (_liveMarker._icon.style.transform || '').replace(/\s*rotate\([^)]*\)/g, '')
-      + ' rotate(' + bearing + 'deg)';
+  if (typeof _liveMap.setBearing === 'function') {
+    // Plugin loaded — rotate the whole map. Plugin keeps markers upright,
+    // so the arrow in our user-dot icon (positioned at the top of the icon
+    // HTML) automatically points up-on-screen = direction of travel.
+    try { _liveMap.setBearing(bearing); } catch (e) { /* swallow */ }
+    // Belt-and-suspenders: if any prior code left a manual rotate on the
+    // marker, strip it so we don't double-rotate.
+    if (_liveMarker && _liveMarker._icon) {
+      const t = _liveMarker._icon.style.transform || '';
+      if (/rotate\(/.test(t)) {
+        _liveMarker._icon.style.transform = t.replace(/\s*rotate\([^)]*\)/g, '').trim();
+      }
+    }
+  } else {
+    // Fallback: rotate only the marker arrow (north-up map, like Google Maps walking)
+    if (_liveMarker && _liveMarker._icon) {
+      _liveMarker._icon.style.transform =
+        (_liveMarker._icon.style.transform || '').replace(/\s*rotate\([^)]*\)/g, '')
+        + ' rotate(' + bearing + 'deg)';
+    }
   }
 }
 
-// Reset marker arrow to point north (visual "no heading" state)
+// Reset map to north-up (e.g. when user manually pans).
 function _resetMapRotation() {
   _mapBearing = 0;
   _bearingHistory = [];
+  if (_liveMap && typeof _liveMap.setBearing === 'function') {
+    try { _liveMap.setBearing(0); } catch (e) { /* swallow */ }
+  }
+  // Always clear any manual marker rotation
   if (_liveMarker && _liveMarker._icon) {
     _liveMarker._icon.style.transform =
-      (_liveMarker._icon.style.transform || '').replace(/\s*rotate\([^)]*\)/g, '');
+      (_liveMarker._icon.style.transform || '').replace(/\s*rotate\([^)]*\)/g, '').trim();
   }
 }
 
@@ -1227,13 +1244,43 @@ function renderRunningTabs(tab) {
 }
 
 // ── LEAFLET LOADER ────────────────────────────────────────────────
-// Loads Leaflet JS from CDN once, then calls the callback
+// Loads Leaflet JS from CDN once + the leaflet-rotate plugin, then calls cb.
+// Leaflet itself has no native rotation support — the plugin adds
+// map.setBearing() which we use to rotate tiles for course-up mode.
 function _loadLeaflet(cb) {
-  if (window.L) { cb(); return; }
-  const s = document.createElement('script');
-  s.src = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
-  s.onload = cb;
-  document.head.appendChild(s);
+  // If both are already loaded, run callback synchronously
+  if (window.L && typeof L.Map.prototype.setBearing === 'function') { cb(); return; }
+
+  const loadScript = (src) => new Promise((resolve, reject) => {
+    const existing = Array.from(document.scripts).find(s => s.src === src);
+    if (existing) {
+      // Already in DOM — either loaded or loading. If it has an onload already,
+      // wait for the next tick; otherwise add our handler.
+      if (existing.dataset.loaded === '1') return resolve();
+      existing.addEventListener('load', resolve, { once: true });
+      existing.addEventListener('error', reject, { once: true });
+      return;
+    }
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload  = () => { s.dataset.loaded = '1'; resolve(); };
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+
+  const leafletUrl = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js';
+  const rotateUrl  = 'https://unpkg.com/[email protected]/dist/leaflet-rotate-src.js';
+
+  const ensureLeaflet = window.L ? Promise.resolve() : loadScript(leafletUrl);
+  ensureLeaflet
+    .then(() => loadScript(rotateUrl))
+    .then(cb)
+    .catch(() => {
+      // Plugin failed to load — call cb anyway so the map still renders,
+      // just without rotation. _applyMapRotation has a graceful fallback path.
+      console.warn('[leaflet] rotate plugin failed to load — map will be north-up only');
+      cb();
+    });
 }
 
 // ── TWO-FINGER MAP ROTATION GESTURE ──────────────────────────────
@@ -1280,6 +1327,16 @@ function _initLiveMap() {
       touchZoom:          true,    // pinch to zoom
       doubleClickZoom:    false,
       bounceAtZoomLimits: false,
+      // ── leaflet-rotate plugin options ──────────────────────────────
+      // rotate         : enable bearing-based rotation of tiles + overlay
+      // rotateControl  : false because course-up is automatic from GPS bearing
+      // touchRotate    : true so user can manually two-finger-twist if desired
+      // bearing        : initial bearing (0 = north up)
+      // These options are no-ops if the plugin failed to load.
+      rotate:        true,
+      rotateControl: false,
+      touchRotate:   true,
+      bearing:       0,
     }).setView(startCoord, 17);
 
     // Set dark background so the container never flashes white during tile load/zoom.
