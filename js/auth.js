@@ -1570,14 +1570,18 @@ async function handleGoogleLogin(response) {
       // Use the backend's isNew flag (NOT the u_g_ prefix — every Google user has that)
       const isBrandNewUser = res.isNew === true;
       if (isBrandNewUser && googleUser.role !== 'ADMIN') {
-        // Brand new user — go through onboarding to set up profile
+        // Brand new user — go through onboarding to set up profile.
+        // Stamp the sessionToken onto the user so multi-device detection
+        // works immediately for new Google signups (otherwise it would only
+        // start working after their next login).
+        if (res.sessionToken) googleUser.sessionToken = res.sessionToken;
         APP.currentUser = googleUser;
         Store.saveSession(googleUser);
         if (typeof _refreshMyPlanNav === 'function') _refreshMyPlanNav();
         startOnboarding();
       } else {
         // Existing user (or admin) — go straight to dashboard
-        await completeLogin(googleUser);
+        await completeLogin(googleUser, res.sessionToken);
       }
     } else {
       if (errEl) errEl.textContent = res?.error || 'Google login failed. Please try again.';
