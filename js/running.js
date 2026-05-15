@@ -1233,13 +1233,18 @@ function _tryRecoverRunSession() {
 
   _startRunTimerLoop();
   // Do NOT call startGPS() here — user must press Resume explicitly.
-  LockScreen.start();
+  // Do NOT call LockScreen.start() here either — old behaviour started silent
+  // audio + media session for every paused recovery, holding background
+  // resources for a run the user may have forgotten about. The recovered
+  // session is paused, so it should be fully idle. togglePauseRun() will
+  // restart LockScreen + GPS keep-alive when the user taps Resume.
   // Re-apply UI lock state if the session was locked when backgrounded.
   // Delay slightly so the run-active UI has rendered and the lock button exists.
   if (APP.runSession.locked) {
     setTimeout(() => _applyActivityLock(true), 150);
   }
   showToast('Previous session restored. Tap Resume to continue. 🏃', 'info', 4000);
+  _updateRunInProgressBanner();
 }
 
 // ── PAGE INIT ─────────────────────────────────────────────────────
@@ -2011,6 +2016,11 @@ function _doStartRun() {
       ov.style.display = 'none';
     }
   }, 30000);
+
+  // Make sure the run-in-progress banner state is current — if the user later
+  // navigates away from the running page mid-run, the 1s interval keeps it
+  // refreshed, but this call ensures any stale banner is cleared right now.
+  if (typeof _updateRunInProgressBanner === 'function') _updateRunInProgressBanner();
 }
 
 // ── TIMER LOOP ────────────────────────────────────────────────────
@@ -2241,7 +2251,11 @@ function togglePauseRun() {
   if (!APP.runSession) return;
 
   if (!APP.runSession.paused) {
-    // → PAUSING
+    // → PAUSING — release ALL background resources, not just watchPosition.
+    // Old behaviour kept wake-lock + silent-audio + GPS keep-alive interval
+    // running while paused, which (a) drained battery, and (b) kept the OS
+    // location pin lit because the keep-alive ticks every 10 s. A paused run
+    // should be fully idle. Resume re-acquires everything in ~1 s.
     APP.runSession.paused   = true;
     APP.runSession.pausedAt = Date.now();
     if (APP.runWatchId != null) {
@@ -2249,8 +2263,12 @@ function togglePauseRun() {
       APP.runWatchId = null;
     }
     _setGpsBadge(false);
+    _releaseWakeLock();             // also stops _gpsKeepAlive via the function
+    _stopGpsKeepAlive();            // defensive — make sure it's gone
+    stopActivityNotification();     // remove live notification from shade
+    LockScreen.stop();              // stop silent audio + clear media session
   } else {
-    // → RESUMING
+    // → RESUMING — re-acquire everything that pause released.
     if (APP.runSession.pausedAt) {
       APP.runSession.totalPaused += (Date.now() - APP.runSession.pausedAt);
     }
@@ -2261,11 +2279,15 @@ function togglePauseRun() {
     _currentGpsSpeed = null;
     _kalman.reset();   // fresh filter state after pause — GPS may have drifted
     startGPS();
+    _requestWakeLock();             // re-acquire screen wake lock + keep-alive
+    LockScreen.start();             // restart silent audio + media session
+    startActivityNotification();    // restore live notification
   }
 
   _saveRunSession();
   LockScreen.refresh();
   _updateRunControls();
+  _updateRunInProgressBanner();
 }
 
 // Show correct control row based on paused state
@@ -2504,7 +2526,164 @@ function discardRun() {
   document.getElementById('run-idle').style.display = 'flex';
   // Re-show global bottom-nav now that we're back to the idle/tab UI
   window.refreshBottomNav?.();
+  // Banner should disappear now that APP.runSession is null
+  if (typeof _updateRunInProgressBanner === 'function') _updateRunInProgressBanner();
 }
+
+// ── RUN-IN-PROGRESS BANNER ──────────────────────────────────────
+// A persistent pill that shows on every non-running page whenever an active
+// or paused run session is alive. Without it, users tapped the in-run back
+// arrow, ended up on dashboard, and had no idea their run was still polling
+// GPS in the background. The pill has two actions: "Return" (back to the
+// running page) and "End" (fully clear the session — calls discardRun()).
+const _BANNER_ID = 'run-in-progress-banner';
+
+function _updateRunInProgressBanner() {
+  const existing = document.getElementById(_BANNER_ID);
+  const onRunningPage = APP.currentPage === 'page-running';
+  const sessionAlive  = !!APP.runSession;
+
+  // Hide / remove when: no session, OR currently viewing the run page itself
+  if (!sessionAlive || onRunningPage) {
+    if (existing) existing.remove();
+    return;
+  }
+
+  // Compute live snapshot for the label
+  const s        = APP.runSession;
+  const meta     = ACTIVITY_META[s.activityType || _activityType] || ACTIVITY_META.run;
+  const elapsed  = _calcElapsed(s);
+  const distTxt  = (s.distance || 0).toFixed(2) + ' km';
+  const timeTxt  = fmtTime(elapsed);
+  const stateTag = s.paused ? '⏸ Paused' : `${meta.emoji} ${meta.label}`;
+
+  if (existing) {
+    // Repaint label in place — preserves entry animation, no DOM churn
+    const lbl = existing.querySelector('[data-banner-label]');
+    if (lbl) lbl.textContent = `${stateTag}  ·  ${distTxt}  ·  ${timeTxt}`;
+    return;
+  }
+
+  // Build the banner from scratch
+  const el = document.createElement('div');
+  el.id = _BANNER_ID;
+  el.style.cssText = `
+    position:fixed;left:12px;right:12px;
+    bottom:calc(env(safe-area-inset-bottom,0px) + 76px);
+    z-index:9990;
+    background:rgba(7,21,16,0.96);
+    border:1px solid rgba(67,160,90,0.5);
+    border-radius:14px;
+    padding:10px 12px 10px 14px;
+    display:flex;align-items:center;gap:10px;
+    box-shadow:0 8px 24px rgba(0,0,0,0.5);
+    backdrop-filter:blur(10px);
+    font-family:var(--font-body);
+    animation:_rbnFadeIn .25s ease;
+  `;
+  el.innerHTML = `
+    <div style="flex:1;min-width:0">
+      <div style="font-size:10px;font-weight:700;color:var(--g5);text-transform:uppercase;letter-spacing:.08em">Run in progress</div>
+      <div data-banner-label style="font-size:13px;color:#fff;font-weight:500;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${stateTag}  ·  ${distTxt}  ·  ${timeTxt}</div>
+    </div>
+    <button data-banner-return aria-label="Return to run"
+      style="flex-shrink:0;border:none;background:linear-gradient(135deg,#2e7d46,#43a05a);color:#fff;font-size:12px;font-weight:700;padding:8px 12px;border-radius:10px;cursor:pointer">
+      Return
+    </button>
+    <button data-banner-end aria-label="End run and clear"
+      style="flex-shrink:0;border:1px solid rgba(229,57,53,0.5);background:transparent;color:#ef9a9a;font-size:12px;font-weight:600;padding:8px 10px;border-radius:10px;cursor:pointer">
+      End
+    </button>
+  `;
+  // One-time CSS keyframe injection
+  if (!document.getElementById('_rbnKf')) {
+    const st = document.createElement('style');
+    st.id = '_rbnKf';
+    st.textContent = '@keyframes _rbnFadeIn{from{transform:translateY(12px);opacity:0}to{transform:translateY(0);opacity:1}}';
+    document.head.appendChild(st);
+  }
+  document.body.appendChild(el);
+
+  el.querySelector('[data-banner-return]').addEventListener('click', e => {
+    e.stopPropagation();
+    if (typeof openModule === 'function') openModule('running');
+    else showPage('page-running');
+  });
+  el.querySelector('[data-banner-end]').addEventListener('click', e => {
+    e.stopPropagation();
+    if (typeof showConfirm === 'function') {
+      showConfirm(
+        'End run?',
+        'This clears the saved session — distance and route will be lost.',
+        'End run',
+        'Keep',
+        () => { discardRun(); _updateRunInProgressBanner(); },
+        null,
+        'danger'
+      );
+    } else if (confirm('End run? Saved session will be discarded.')) {
+      discardRun(); _updateRunInProgressBanner();
+    }
+  });
+}
+
+// Refresh the banner every second so the live time/distance stay current
+// while the user is on dashboard / other pages with an active run alive.
+// Also self-heals if a page transition happens — re-adds the banner when
+// returning from page-running, removes it when leaving for page-running.
+setInterval(() => {
+  if (!APP.runSession && !document.getElementById(_BANNER_ID)) return; // nothing to do
+  _updateRunInProgressBanner();
+}, 1000);
+
+// ── EXIT-ACTIVE-RUN CONFIRMATION ────────────────────────────────
+// Replacement for the old in-active-run back-arrow handler, which navigated
+// straight to dashboard while leaving GPS, wake-lock and silent audio all
+// still firing in the background. Now: pause first (which fully releases
+// every background resource via the rewritten togglePauseRun), then navigate.
+// The persistent banner lets the user resume or end the run from anywhere.
+function exitActiveRunWithConfirm() {
+  if (!APP.runSession) {
+    showPage('page-dashboard');
+    if (typeof refreshDashboard === 'function') refreshDashboard();
+    return;
+  }
+  if (typeof showConfirm === 'function') {
+    showConfirm(
+      'Pause and exit?',
+      'Your run will be paused and GPS will stop. Return any time from the banner.',
+      'Pause & Exit',
+      'Stay',
+      () => {
+        if (APP.runSession && !APP.runSession.paused) togglePauseRun();
+        showPage('page-dashboard');
+        if (typeof refreshDashboard === 'function') refreshDashboard();
+        _updateRunInProgressBanner();
+      },
+      null,
+      null
+    );
+  } else if (confirm('Pause run and go back?')) {
+    if (APP.runSession && !APP.runSession.paused) togglePauseRun();
+    showPage('page-dashboard');
+    if (typeof refreshDashboard === 'function') refreshDashboard();
+    _updateRunInProgressBanner();
+  }
+}
+
+// ── BOOT-TIME ORPHAN CLEANUP ────────────────────────────────────
+// Defensive belt-and-suspenders: in case any previous app version (or a
+// previous SW lifecycle in the same TWA process) left a wake lock or GPS
+// keep-alive interval running without a matching APP.runSession, kill
+// them on every module load. This runs BEFORE _tryRecoverRunSession decides
+// whether to restore a session, so it never interferes with legitimate
+// recovery — but it does free any orphan GPS-affecting resource.
+(function _orphanCleanup() {
+  try {
+    if (typeof _stopGpsKeepAlive === 'function') _stopGpsKeepAlive();
+    if (_wakeLock) { try { _wakeLock.release(); } catch {} _wakeLock = null; }
+  } catch {}
+})();
 
 // ── BACKGROUND / FOREGROUND RECOVERY ─────────────────────────────
 document.addEventListener('visibilitychange', () => {
