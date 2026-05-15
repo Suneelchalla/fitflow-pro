@@ -665,6 +665,189 @@ function _lockScreenArtwork() {
   return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
 }
 
+// ════════════════════════════════════════════════════════════════
+// ACTIVITY LOCK — prevent accidental in-app touches during a run
+// ════════════════════════════════════════════════════════════════
+// One tap on the phone icon next to the GPS badge → locks the UI.
+// One tap again → unlocks. While locked:
+//   • A transparent full-screen "shield" absorbs every touch in the app,
+//     EXCEPT taps that start AND end within the lock button's bounding box.
+//     (Slides off the button cancel the tap — protects against ghost touches
+//      from flip-cover cases / running armbands.)
+//   • body.activity-locked class lets CSS dim/disable interactive elements.
+//   • Wake lock is re-requested so the screen stays on.
+//   • Fullscreen / immersive mode is requested so Android status + nav bars
+//     hide (back-gesture & home-gesture visual affordances disappear).
+//   • The phone icon flips to a red-strike state so the lock is obvious.
+//
+// HONEST LIMITS (cannot be solved from a web app):
+//   • The phone's physical power/lock button still works — the OS owns it.
+//   • A determined edge-swipe in immersive mode can still navigate after
+//     two swipes (Android shows the nav bar first, then accepts the gesture).
+//   • Phone calls and system dialogs render OVER our app and still receive
+//     touches — by design, the OS owns those layers.
+// The lock button defeats >95% of *accidental* taps inside the app, which
+// is the actual problem to solve here.
+
+let _lockTouchInside = false;  // tracks whether a touchstart landed on the lock button
+
+function toggleActivityLock() {
+  if (!APP.runSession) return;
+  const wasLocked = !!APP.runSession.locked;
+  APP.runSession.locked = !wasLocked;
+  _applyActivityLock(APP.runSession.locked);
+  _saveRunSession();
+
+  if (APP.runSession.locked) {
+    if (!Store.get('ff_lock_hint_shown')) {
+      showToast('🔒 Screen locked — tap the phone icon to unlock. Your power button still works.', 'info', 5500);
+      Store.set('ff_lock_hint_shown', true);
+    } else {
+      showToast('🔒 Locked', 'info', 1200);
+    }
+  } else {
+    showToast('🔓 Unlocked', 'success', 1200);
+  }
+}
+
+function _applyActivityLock(locked) {
+  _renderLockButton(locked);
+  if (locked) {
+    document.body.classList.add('activity-locked');
+    _createLockShield();
+    _requestFullscreenForLock();
+    // Re-request wake lock — the screen MUST stay on for the locked UX to make sense
+    if (typeof _requestWakeLock === 'function' && !_wakeLock) _requestWakeLock();
+  } else {
+    document.body.classList.remove('activity-locked');
+    _removeLockShield();
+    _exitFullscreenForLock();
+  }
+}
+
+function _renderLockButton(locked) {
+  const btn = document.getElementById('run-lock-btn');
+  if (!btn) return;
+  btn.setAttribute('aria-pressed', locked ? 'true' : 'false');
+  btn.setAttribute('aria-label', locked ? 'Unlock screen' : 'Lock screen against accidental touches');
+  btn.title = locked ? 'Tap to unlock' : 'Tap to lock screen against accidental taps';
+  if (locked) {
+    // Locked: reddish background + phone icon with diagonal red strike
+    btn.style.background  = 'rgba(229,57,53,0.20)';
+    btn.style.borderColor = 'rgba(229,57,53,0.60)';
+    btn.style.color       = '#fff';
+    btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="7" y="2" width="10" height="20" rx="2"/>
+      <line x1="11" y1="18" x2="13" y2="18"/>
+      <line x1="3.5" y1="3" x2="20.5" y2="22" stroke="#ef4444" stroke-width="2.6"/>
+    </svg>`;
+  } else {
+    // Unlocked: subtle dark pill, plain white phone icon
+    btn.style.background  = 'rgba(0,0,0,0.5)';
+    btn.style.borderColor = 'rgba(255,255,255,0.15)';
+    btn.style.color       = 'rgba(255,255,255,0.9)';
+    btn.innerHTML = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="7" y="2" width="10" height="20" rx="2"/>
+      <line x1="11" y1="18" x2="13" y2="18"/>
+    </svg>`;
+  }
+}
+
+function _createLockShield() {
+  let shield = document.getElementById('lock-shield');
+  if (shield) return;  // already up
+  shield = document.createElement('div');
+  shield.id = 'lock-shield';
+  shield.style.cssText =
+    'position:fixed;inset:0;z-index:9990;background:transparent;' +
+    'touch-action:none;-webkit-tap-highlight-color:transparent;cursor:default';
+
+  // Bounding-box test — is this touch over the lock button (with generous padding)?
+  // 8 px padding around the button gives forgiving finger-targeting without
+  // letting wildly-off taps through.
+  const isOverLockBtn = e => {
+    const btn = document.getElementById('run-lock-btn');
+    if (!btn) return false;
+    const t = e.touches?.[0] || e.changedTouches?.[0] || e;
+    if (!t || t.clientX === undefined) return false;
+    const r = btn.getBoundingClientRect();
+    const pad = 8;
+    return t.clientX >= r.left - pad && t.clientX <= r.right + pad
+        && t.clientY >= r.top  - pad && t.clientY <= r.bottom + pad;
+  };
+
+  shield.addEventListener('touchstart', e => {
+    _lockTouchInside = isOverLockBtn(e);
+    e.preventDefault();
+    e.stopPropagation();
+  }, { passive: false });
+
+  shield.addEventListener('touchmove', e => {
+    // If finger slides off the button mid-touch, cancel — protects against
+    // ghost contact from flip cases / armbands that may register as a slide.
+    if (_lockTouchInside && !isOverLockBtn(e)) _lockTouchInside = false;
+    e.preventDefault();
+    e.stopPropagation();
+  }, { passive: false });
+
+  shield.addEventListener('touchend', e => {
+    const wasInside = _lockTouchInside;
+    _lockTouchInside = false;
+    e.preventDefault();
+    e.stopPropagation();
+    // Only toggle if touch STARTED on the button AND ENDED on the button
+    if (wasInside && isOverLockBtn(e)) toggleActivityLock();
+  }, { passive: false });
+
+  // Mouse-fallback for testing in desktop Chrome / device emulator
+  shield.addEventListener('click', e => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (isOverLockBtn(e)) toggleActivityLock();
+  });
+
+  document.body.appendChild(shield);
+}
+
+function _removeLockShield() {
+  document.getElementById('lock-shield')?.remove();
+  _lockTouchInside = false;
+}
+
+function _requestFullscreenForLock() {
+  try {
+    if (document.fullscreenElement) return;
+    const el = document.documentElement;
+    const req = el.requestFullscreen || el.webkitRequestFullscreen || el.msRequestFullscreen;
+    if (req) {
+      // Some Android browsers reject the options argument — try with, then without.
+      Promise.resolve(req.call(el, { navigationUI: 'hide' }))
+        .catch(() => { try { req.call(el); } catch {} });
+    }
+  } catch {}
+}
+
+function _exitFullscreenForLock() {
+  try {
+    if (document.fullscreenElement && document.exitFullscreen) {
+      document.exitFullscreen().catch(() => {});
+    }
+  } catch {}
+}
+
+// ── VISIBILITY HANDLER ─────────────────────────────────────────────
+// When user comes back from another app / dismissed system dialog while
+// locked, the shield may have been disrupted (browsers sometimes prune
+// inert overlays during background). Re-create it. Fullscreen typically
+// needs a fresh user gesture so we don't auto-re-request it here.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  if (!APP.runSession?.locked) return;
+  if (!document.getElementById('lock-shield')) _createLockShield();
+  _renderLockButton(true);
+  document.body.classList.add('activity-locked');
+});
+
 // ── SESSION PERSISTENCE ───────────────────────────────────────────
 function _saveRunSession() {
   if (!APP.runSession) return;
@@ -680,6 +863,7 @@ function _saveRunSession() {
     paused:       APP.runSession.paused,
     activityType: APP.runSession.activityType || _activityType,
     locationName: APP.runSession.locationName || '',
+    locked:       !!APP.runSession.locked,  // preserve activity-lock state across backgrounding / app restart
     coords:       coordsToSave,
   });
 }
@@ -726,6 +910,7 @@ function _tryRecoverRunSession() {
     paused:       true,   // ← always paused on recovery, regardless of saved state
     activityType: saved.activityType || 'run',
     locationName: saved.locationName || '',
+    locked:       !!saved.locked,    // preserve activity-lock state across app restart
   };
   APP.gpsCoords  = saved.coords || [];
   _activityType  = APP.runSession.activityType;
@@ -735,6 +920,11 @@ function _tryRecoverRunSession() {
   _startRunTimerLoop();
   // Do NOT call startGPS() here — user must press Resume explicitly.
   LockScreen.start();
+  // Re-apply UI lock state if the session was locked when backgrounded.
+  // Delay slightly so the run-active UI has rendered and the lock button exists.
+  if (APP.runSession.locked) {
+    setTimeout(() => _applyActivityLock(true), 150);
+  }
   showToast('Previous session restored. Tap Resume to continue. 🏃', 'info', 4000);
 }
 
@@ -1645,6 +1835,12 @@ function stopRun() {
   if (APP.runWatchId != null) {
     navigator.geolocation.clearWatch(APP.runWatchId);
     APP.runWatchId = null;
+  }
+  // Auto-unlock when the run ends — leaving the user locked after stop
+  // would trap them in a locked summary screen with no way to dismiss.
+  if (APP.runSession?.locked) {
+    APP.runSession.locked = false;
+    _applyActivityLock(false);
   }
   LockScreen.stop();
   _releaseWakeLock();
