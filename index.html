@@ -2042,6 +2042,10 @@ window.addEventListener('DOMContentLoaded', function() {
           <button class="btn btn-primary btn-full btn-lg" onclick="startRun()">▶ Start</button>
         </div>
 
+        <!-- Warm-Up + Cool-Down cards — populated by _renderActivityWarmupCooldown.
+             Swaps content when user taps Run / Walk / Cycle pills above. -->
+        <div id="run-warmup-cooldown"></div>
+
       </div>
 
       <!-- PLANS TAB -->
@@ -2984,7 +2988,7 @@ window.addEventListener('DOMContentLoaded', function() {
 <script src="js/app.js?v=79"></script>
 <script src="js/auth.js?v=77"></script>
 <script src="js/dashboard.js?v=83"></script>
-<script src="js/running.js?v=87"></script>
+<script src="js/running.js?v=89"></script>
 <script src="js/admin.js?v=78"></script>
 <script src="push.js?v=7"></script>
 <script src="js/custom-workouts.js?v=75"></script>
