@@ -569,6 +569,13 @@ textarea.form-input { resize: vertical; min-height: 90px; line-height: 1.5; }
 /* ── RESPONSIVE SAFE AREA ──────────────────────────────────────── */
 .pb-nav { padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
 
+/* Page-running's scroll container is #run-idle (it has its own flex layout
+   instead of using .scroll-content). Apply the same bottom-padding so tab
+   content doesn't slip behind the global bottom-nav. */
+#page-running #run-idle {
+  padding-bottom: calc(80px + env(safe-area-inset-bottom));
+}
+
 /* ── GRADIENT CARDS ────────────────────────────────────────────── */
 .grad-cardio  { background: linear-gradient(135deg, #1a3328, #0f4a20); }
 .grad-gym     { background: linear-gradient(135deg, #1a2d38, #0f3a4a); }
