@@ -1621,8 +1621,23 @@ function _initLiveMap() {
     // render tiles correctly — causing the blank white area on first zoom.
     setTimeout(() => { if (_liveMap) _liveMap.invalidateSize({ animate: false }); }, 150);
 
-    // Always get real current position to centre map correctly on start
-    // Even if we have cached coords (resumed session), re-centre to latest location
+    // ── BOOTSTRAP FIX (Strava-style) ─────────────────────────────────
+    // The map already has SOME starting view from the fallback chain above
+    // (cached → recent run → wide world). This call refines that view to the
+    // user's CURRENT position as fast as possible — typically 0.5–1 s, even
+    // indoors with no satellite signal — by using lenient options:
+    //   • enableHighAccuracy:false → network location (WiFi + cell towers),
+    //                                returns near-instantly
+    //   • maximumAge:60000         → accept any OS-cached fix from the last
+    //                                minute (usually returns synchronously)
+    //   • timeout:8000             → don't block forever — the precise
+    //                                watchPosition in startGPS() carries on
+    //                                regardless
+    // This call does NOT contribute to route building or distance —
+    // _gpsLastGoodFix / APP.gpsCoords are reserved for high-accuracy fixes
+    // from watchPosition. So a slightly imprecise network fix just orients
+    // the map; when satellite GPS locks moments later, the marker snaps to
+    // the precise position. Exactly how Strava / Google Maps behave.
     navigator.geolocation.getCurrentPosition(
       pos => {
         const { latitude: lat, longitude: lon } = pos.coords;
@@ -1631,17 +1646,20 @@ function _initLiveMap() {
           if (_liveMarker) _liveMarker.setLatLng([lat, lon]);
           _userPanned = false;  // ensure auto-center re-engages after map set
         }
+        // Clear the spinner — we have a position to show
+        const ov = document.getElementById('run-gps-overlay');
+        if (ov && ov.style.display !== 'none') ov.style.display = 'none';
+        // Cache so the next cold start opens at this location with NO spinner
+        try { Store.set('ff_last_known_coord', { lat, lon }); } catch {}
       },
       () => {
-        // GPS unavailable — if we have a known coord use it, else fallback view
-        if (_liveMap) {
-          if (lastCoord) {
-            _liveMap.setView(lastCoord, 17, { animate: false });
-          }
-          // If no coord at all, watchPosition will centre once it gets a fix
+        // Bootstrap failed (rare — usually means location services are off).
+        // If we have any previous coord, use it; otherwise wait for watchPosition.
+        if (_liveMap && lastCoord) {
+          _liveMap.setView(lastCoord, 17, { animate: false });
         }
       },
-      { enableHighAccuracy: true, timeout: 8000, maximumAge: 5000 }
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
     );
   });
 }
@@ -1993,9 +2011,19 @@ function _doStartRun() {
   // Hide global bottom-nav while a run is active (full-screen map)
   window.refreshBottomNav?.();
 
-  // Re-show the Acquiring-GPS overlay (in case it was hidden by a previous run)
+  // Only show "Acquiring GPS" overlay if we have NO position to display.
+  // With a cached or recent location, the map already shows the user's area
+  // (set by _initLiveMap's fallback chain) — a spinner just hides useful info
+  // while we wait for a real fix. This is how Strava / Google Maps behave:
+  // the map appears instantly with the last-known position, and the marker
+  // snaps when high-accuracy GPS locks. The bootstrap getCurrentPosition in
+  // _initLiveMap (lenient options) hides the overlay within ~1s on first-ever
+  // runs too. The 30s safety timer below is a belt-and-suspenders fallback.
   const gpsOverlay = document.getElementById('run-gps-overlay');
-  if (gpsOverlay) gpsOverlay.style.display = 'flex';
+  if (gpsOverlay) {
+    const hasPositionHint = !!Store.get('ff_last_known_coord');
+    gpsOverlay.style.display = hasPositionHint ? 'none' : 'flex';
+  }
 
   // Always force-sync the control buttons to the current session state so the UI
   // is correct regardless of any prior display state (fixes Pause+Stop both showing)
