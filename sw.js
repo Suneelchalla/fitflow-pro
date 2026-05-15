@@ -7,7 +7,7 @@
 // Import OneSignal's service worker — handles push notifications
 importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
 
-const CACHE = 'fitflow-v120';
+const CACHE = 'fitflow-v121';
 const ASSETS = [
   './',
   './index.html',
@@ -17,7 +17,7 @@ const ASSETS = [
   './js/app.js?v=79',
   './js/auth.js?v=80',
   './js/dashboard.js?v=86',
-  './js/running.js?v=92',
+  './js/running.js?v=93',
   './js/admin.js?v=80',
   './push.js?v=7',
   './js/custom-workouts.js?v=75',
@@ -28,6 +28,10 @@ const ASSETS = [
   // it from CDN before the live map can render. Causes blank map on first run.
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
+  // leaflet-rotate plugin — enables map.setBearing() so we can rotate tiles
+  // for course-up GPS display. If this fails to load, the map falls back to
+  // north-up with only the marker arrow showing direction of travel.
+  'https://unpkg.com/[email protected]/dist/leaflet-rotate-src.js',
   'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap'
 ];
 
