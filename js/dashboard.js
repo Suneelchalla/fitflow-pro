@@ -2042,7 +2042,7 @@ async function _syncHistoryThenRender() {
       if (myLogs.length !== before) dataChanged = true;
     }
 
-    // Run logs — REPLACE strategy
+    // Run logs — MERGE strategy (see _syncUserRunLogs in auth.js for full rationale)
     if (rr?.success && Array.isArray(rr.logs)) {
       const fromSheet = rr.logs.map(r => ({
         ...r,
@@ -2051,6 +2051,16 @@ async function _syncHistoryThenRender() {
       }));
       const allLocal = Store.get('ff_runlogs', []) || [];
       const otherUsers = allLocal.filter(l => l.userId !== user.id);
+
+      // Index local logs by id so we can preserve soft fields that the Sheet
+      // didn't return (e.g. locationName from BigDataCloud geocoding — the
+      // deployed Apps Script may be an older version without LocationName
+      // column logic, in which case it'd come back '' and wipe the local value)
+      const localById = new Map();
+      allLocal
+        .filter(l => l.userId === user.id && l.id)
+        .forEach(l => localById.set(l.id, l));
+
       const seenIds = new Set();
       const seenKeys = new Set();
       const myRuns = [];
@@ -2060,6 +2070,15 @@ async function _syncHistoryThenRender() {
         if (seenKeys.has(key)) return;
         if (r.id) seenIds.add(r.id);
         seenKeys.add(key);
+
+        // Preserve soft fields when Sheet's copy is empty but local has them
+        const localMatch = r.id ? localById.get(r.id) : null;
+        if (localMatch) {
+          if (!r.locationName && localMatch.locationName) r.locationName = localMatch.locationName;
+          if (!r.title        && localMatch.title)        r.title        = localMatch.title;
+          if (!r.description  && localMatch.description)  r.description  = localMatch.description;
+        }
+
         myRuns.push(r);
       });
       const before = Store.getUserRunLogs(user.id).length;
