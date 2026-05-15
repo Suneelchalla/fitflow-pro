@@ -155,6 +155,64 @@ function _renderActivityWarmupCooldown(activityType) {
     <div style="display:flex;flex-direction:column;gap:9px">
       ${cardHtml(data.warmup,   true)}
       ${cardHtml(data.cooldown, false)}
+    </div>
+    ${_renderRecentActivitiesPreviewHTML(type, meta)}`;
+}
+
+// Recent activities of the selected type — rendered below warmup/cooldown
+// on the Log tab. Fills the empty space below cool-down with content that's
+// actually relevant (your last few runs/walks/cycles of the current type),
+// and gives the user a one-tap shortcut to revisit them.
+function _renderRecentActivitiesPreviewHTML(type, meta) {
+  const user = APP.currentUser;
+  if (!user) return '';
+  const allRuns = Store.getUserRunLogs(user.id) || [];
+  if (allRuns.length === 0) return '';
+
+  // Sort by recency (newest first) — same ordering _showRunDetail expects
+  const sorted = allRuns.slice().sort((a, b) =>
+    (b.timestamp || b.date || '').localeCompare(a.timestamp || a.date || ''));
+  const recent = sorted.filter(r => (r.activityType || 'run') === type).slice(0, 3);
+  if (recent.length === 0) return '';
+
+  const cards = recent.map(r => {
+    const idx     = sorted.indexOf(r);  // index in the sorted list, what _showRunDetail wants
+    const dt      = r.timestamp ? new Date(r.timestamp) : new Date(r.date);
+    const dateStr = isNaN(dt.getTime()) ? '' : dt.toLocaleDateString('en-IN', { day:'numeric', month:'short' });
+    const distStr = (r.distance || 0).toFixed(2) + ' km';
+    const timeStr = fmtTime(r.duration || 0);
+    const title   = r.title || _getDefaultActivityTitle(type);
+    const locLine = r.locationName
+      ? `<div style="font-size:11px;color:var(--text3);margin-top:2px;
+            overflow:hidden;text-overflow:ellipsis;white-space:nowrap">📍 ${r.locationName}</div>`
+      : '';
+    return `
+      <div onclick="_showRunDetail(${idx})"
+        style="background:var(--surface);border:1px solid var(--border);
+          border-radius:11px;padding:10px 12px;cursor:pointer;
+          display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div style="min-width:0;flex:1">
+          <div style="font-size:13px;font-weight:700;color:var(--text);
+            overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${title}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">${dateStr} · ${timeStr}</div>
+          ${locLine}
+        </div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:15px;font-weight:700;color:${meta.color};line-height:1">${distStr}</div>
+        </div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div style="margin-top:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <div style="font-size:11px;color:var(--text3);font-weight:700;
+          text-transform:uppercase;letter-spacing:.08em">Recent ${meta.label}s</div>
+        <button onclick="renderRunningTabs('history')"
+          style="background:transparent;border:none;color:${meta.color};
+            font-size:12px;font-weight:600;cursor:pointer;padding:4px 0">View all →</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:7px">${cards}</div>
     </div>`;
 }
 
@@ -2900,6 +2958,25 @@ function switchMyPlanInfoTab(tab) {
 function renderTrainingPlans() {
   const plans     = (window.APP_DATA_DEFAULT||window.APP_DATA).running.plans;
   const active    = getActivePlan();
+
+  // Auto-select the user's active plan so the detail panel (current week's
+  // training schedule) renders below the plan cards. Without this, users
+  // landing on the Plans tab see 4 plan cards and then a big empty page,
+  // even though their own plan's week-by-week schedule is one tap away.
+  if (active && !APP.selectedPlan) {
+    APP.selectedPlan = active.planKey;
+    // Compute the current week from startDate, capped to plan.weeks
+    const plan = plans[active.planKey];
+    if (active.startDate && plan) {
+      const start = new Date(active.startDate);
+      const now   = new Date();
+      const days  = Math.floor((now - start) / (1000 * 60 * 60 * 24));
+      APP.selectedPlanWeek = Math.max(1, Math.min(plan.weeks, Math.floor(days / 7) + 1));
+    } else {
+      APP.selectedPlanWeek = 1;
+    }
+  }
+
   const container = document.getElementById('training-plans-list');
   container.innerHTML = `
     <div style="font-size:13px;color:var(--text2);margin-bottom:12px;line-height:1.5">
