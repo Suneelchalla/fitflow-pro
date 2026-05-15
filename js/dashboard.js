@@ -93,9 +93,15 @@ function getModuleOrder(userId) {
   const saved   = Store.get('ff_module_order_' + userId);
   // All users always get all modules — no filtering by onboarding selection
   if (saved && Array.isArray(saved) && saved.length > 0) {
+    // DEDUPE the saved order. A long-fixed reorder bug could write the same id
+    // twice into ff_module_order_*, which then renders the same module tile
+    // twice on the dashboard (e.g. "Running & Walking" shown twice). Dedupe
+    // here on every read so the bad data self-heals once any module ordering
+    // operation triggers a re-save.
+    const dedupedSaved = [...new Set(saved)];
     // Restore saved order; add any new modules not yet in saved list
-    let ordered = saved.map(id => ALL_MODULES.find(m => m.id === id)).filter(Boolean);
-    const missing = ALL_MODULES.filter(m => !saved.includes(m.id));
+    let ordered = dedupedSaved.map(id => ALL_MODULES.find(m => m.id === id)).filter(Boolean);
+    const missing = ALL_MODULES.filter(m => !dedupedSaved.includes(m.id));
     ordered = [...ordered, ...missing];
     // Safety: if saved order has no real modules, reset to all
     const realModules = ordered.filter(m => !m.id.startsWith('custom_') && m.id !== 'weekly_report');
@@ -112,7 +118,8 @@ function getModuleOrder(userId) {
 }
 
 function saveModuleOrder(userId, modules) {
-  const order = modules.map(m => m.id);
+  // Dedupe defensively — never persist duplicate module ids
+  const order = [...new Set(modules.map(m => m.id))];
   Store.set('ff_module_order_' + userId, order);
   sheetsPost('saveContent', { key: 'module_order_' + userId, value: order });
 }
