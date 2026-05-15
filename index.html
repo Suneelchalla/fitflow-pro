@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
     <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="css/style.css?v=75">
+<link rel="stylesheet" href="css/style.css?v=76">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
   <!-- Google Identity Services (One Tap + Sign In With Google) -->
   <script src="https://accounts.google.com/gsi/client" async></script>
@@ -1914,14 +1914,8 @@ window.addEventListener('DOMContentLoaded', function() {
     </div>
   </div>
 
-  <!-- Bottom nav -->
-  <nav class="bottom-nav" style="position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px">
-    <button class="nav-item active" data-nav="home" onclick="navTo('home')"><span class="nav-icon">🏠</span>Home</button>
-    <button class="nav-item" data-nav="history" onclick="navTo('history')"><span class="nav-icon">📅</span>History</button>
-    <button class="nav-item" data-nav="running" onclick="navTo('running')"><span class="nav-icon">🏃</span>Run</button>
-    <button id="nav-myplan" class="nav-item" data-nav="myplan" onclick="navTo('myplan')" style="display:none"><span class="nav-icon" id="nav-myplan-icon">🎯</span><span id="nav-myplan-label">My Plan</span></button>
-    <button id="nav-admin" class="nav-item" data-nav="admin" onclick="navTo('admin')" style="display:none"><span class="nav-icon">⚙️</span>Admin</button>
-  </nav>
+  <!-- (Bottom nav was here — moved to body level so it stays visible on
+       Run page, History page, My Plan, Admin too.) -->
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
@@ -2410,7 +2404,7 @@ window.addEventListener('DOMContentLoaded', function() {
     <h2 id="myplan-title">🎯 My Plan</h2>
     <div></div>
   </div>
-  <div class="scroll-content" style="padding:16px">
+  <div class="scroll-content pb-nav" style="padding:16px">
     <div id="myplan-content">
       <div class="loader-wrap"><div class="loader"></div></div>
     </div>
@@ -2462,7 +2456,7 @@ window.addEventListener('DOMContentLoaded', function() {
 <!-- PAGE: ADMIN — Desktop-Style Web Layout                          -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <div id="page-admin" class="page">
-  <div class="scroll-content admin-page-wrapper">
+  <div class="scroll-content admin-page-wrapper pb-nav">
 
     <!-- Admin Header (full-width across top) -->
     <div class="admin-header">
@@ -3012,6 +3006,18 @@ window.addEventListener('DOMContentLoaded', function() {
 </div>
 
 <!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- GLOBAL BOTTOM NAV — sibling of all pages, visibility toggled
+     by _syncNav() in app.js so it hides on login/onboarding/run-active -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<nav class="bottom-nav" id="global-bottom-nav" style="position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:480px;display:none">
+  <button class="nav-item active" data-nav="home" onclick="navTo('home')"><span class="nav-icon">🏠</span>Home</button>
+  <button class="nav-item" data-nav="history" onclick="navTo('history')"><span class="nav-icon">📅</span>History</button>
+  <button class="nav-item" data-nav="running" onclick="navTo('running')"><span class="nav-icon">🏃</span>Run</button>
+  <button id="nav-myplan" class="nav-item" data-nav="myplan" onclick="navTo('myplan')" style="display:none"><span class="nav-icon" id="nav-myplan-icon">🎯</span><span id="nav-myplan-label">My Plan</span></button>
+  <button id="nav-admin" class="nav-item" data-nav="admin" onclick="navTo('admin')" style="display:none"><span class="nav-icon">⚙️</span>Admin</button>
+</nav>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
 <!-- MODAL: Plan Completion Certificate                              -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <div id="modal-plan-complete" class="modal-overlay">
@@ -3034,10 +3040,10 @@ window.addEventListener('DOMContentLoaded', function() {
      handler already deletes any cache that isn't the current version. -->
 <script src="js/data.js?v=75"></script>
 <script src="js/data-cali.js?v=75"></script>
-<script src="js/app.js?v=79"></script>
-<script src="js/auth.js?v=80"></script>
-<script src="js/dashboard.js?v=83"></script>
-<script src="js/running.js?v=93"></script>
+<script src="js/app.js?v=80"></script>
+<script src="js/auth.js?v=81"></script>
+<script src="js/dashboard.js?v=87"></script>
+<script src="js/running.js?v=94"></script>
 <script src="js/admin.js?v=80"></script>
 <script src="push.js?v=7"></script>
 <script src="js/custom-workouts.js?v=75"></script>
