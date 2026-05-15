@@ -164,17 +164,59 @@ function _renderActivityWarmupCooldown(activityType) {
 // and saved to the run log so it shows on history cards.
 let _locationFetched = false;  // reset to false in _doStartRun each time
 
+// Reverse-geocode a lat/lon to a short "Area, City" label.
+//
+// Strategy: try BigDataCloud's client API first (free, no API key, no rate
+// limit, no User-Agent requirement — friendly to browsers and TWA WebViews),
+// fall back to OpenStreetMap Nominatim if BigDataCloud is unreachable.
+//
+// Nominatim was the previous primary, but it has strict usage limits
+// (1 req/sec, requires identifying User-Agent which browsers can't set),
+// so requests from a TWA/PWA often return 403 with no obvious signal —
+// that was almost certainly why no activities had a locationName.
 async function _reverseGeocode(lat, lon) {
+  // ── 1. PRIMARY: BigDataCloud (client API) ──────────────────────────
   try {
-    const url = `https://nominatim.openstreetmap.org/reverse?lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}&format=json&zoom=14&accept-language=en`;
+    const url  = `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${lat.toFixed(6)}&longitude=${lon.toFixed(6)}&localityLanguage=en`;
     const ctrl = new AbortController();
     const tid  = setTimeout(() => ctrl.abort(), 6000);
     const res  = await fetch(url, { signal: ctrl.signal });
     clearTimeout(tid);
-    if (!res.ok) return null;
+    if (res.ok) {
+      const data = await res.json();
+      // Preferred fields: locality (neighbourhood), city, principalSubdivision (state/region)
+      const area = (data.locality && data.locality !== data.city) ? data.locality : '';
+      const city = data.city || data.principalSubdivision || data.countryName || '';
+      if (area && city) return `${area}, ${city}`;
+      if (city)         return city;
+      if (area)         return area;
+      // Last resort: walk localityInfo administrative names from most-specific outward
+      const admin = data.localityInfo && data.localityInfo.administrative;
+      if (Array.isArray(admin) && admin.length) {
+        const named = admin.map(a => a.name).filter(Boolean);
+        if (named.length >= 2) return named.slice(-2).reverse().join(', ');
+        if (named.length === 1) return named[0];
+      }
+    } else {
+      console.warn('[reverseGeocode] BigDataCloud returned HTTP', res.status);
+    }
+  } catch (e) {
+    console.warn('[reverseGeocode] BigDataCloud failed:', e?.message || e);
+  }
+
+  // ── 2. FALLBACK: Nominatim (OSM) ───────────────────────────────────
+  try {
+    const url  = `https://nominatim.openstreetmap.org/reverse?lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}&format=json&zoom=14&accept-language=en`;
+    const ctrl = new AbortController();
+    const tid  = setTimeout(() => ctrl.abort(), 6000);
+    const res  = await fetch(url, { signal: ctrl.signal });
+    clearTimeout(tid);
+    if (!res.ok) {
+      console.warn('[reverseGeocode] Nominatim returned HTTP', res.status);
+      return null;
+    }
     const data = await res.json();
     const addr = data.address || {};
-    // Build a concise "Area, City" label from the most specific available fields
     const area = addr.suburb || addr.neighbourhood || addr.quarter
                || addr.village || addr.hamlet || '';
     const city = addr.city || addr.town || addr.county
@@ -188,8 +230,9 @@ async function _reverseGeocode(lat, lon) {
       return parts.slice(0, 2).join(', ');
     }
     return null;
-  } catch {
-    return null;   // timeout, offline, or parse error — silently skip
+  } catch (e) {
+    console.warn('[reverseGeocode] Nominatim failed:', e?.message || e);
+    return null;
   }
 }
 
@@ -541,22 +584,22 @@ async function _killAllActivityNotifications() {
   }
 }
 
-// Apply bearing rotation to live map — rotates tiles+polyline, counter-rotates marker
+// Apply bearing rotation — rotates ONLY the marker arrow to show direction of travel.
+//
+// Why not the map tiles? Leaflet 1.9 has no native rotation support. Setting
+// `transform: rotate()` on mapPane gets overwritten by Leaflet's own setView()
+// pan animation, which sets `transform: translate3d(...)` on the same element.
+// The result: rotation flickers in and never sticks — the symptom you saw as
+// "map going sideways" while the marker correctly pointed up.
+//
+// For true course-up rotation, install the leaflet-rotate plugin and pass
+// `{ rotate: true }` to L.map(). Until then we use the Google-Maps-walking-mode
+// approach: north-up map with a heading-aware arrow on the user dot.
 function _applyMapRotation(bearing) {
   if (!_liveMap || !_rotationEnabled || _userPanned) return;
   _mapBearing = bearing;
 
-  // Rotate the entire map pane (tiles + polyline) around the centre
-  const pane = _liveMap.getPanes().mapPane;
-  if (pane) {
-    // Get map container centre so rotation is around the user dot
-    const size = _liveMap.getSize();
-    pane.style.transformOrigin = size.x / 2 + 'px ' + size.y / 2 + 'px';
-    pane.style.transform = 'rotate(' + (-bearing) + 'deg)';
-    pane.style.willChange = 'transform';
-  }
-
-  // Counter-rotate marker so the arrow always points in direction of travel (up on screen)
+  // Counter-rotate marker so the arrow always points in direction of travel
   if (_liveMarker && _liveMarker._icon) {
     _liveMarker._icon.style.transform =
       (_liveMarker._icon.style.transform || '').replace(/\s*rotate\([^)]*\)/g, '')
@@ -564,14 +607,13 @@ function _applyMapRotation(bearing) {
   }
 }
 
-// Reset map rotation to north-up
+// Reset marker arrow to point north (visual "no heading" state)
 function _resetMapRotation() {
   _mapBearing = 0;
   _bearingHistory = [];
-  const pane = _liveMap?.getPanes()?.mapPane;
-  if (pane) {
-    pane.style.transform = '';
-    pane.style.transformOrigin = '';
+  if (_liveMarker && _liveMarker._icon) {
+    _liveMarker._icon.style.transform =
+      (_liveMarker._icon.style.transform || '').replace(/\s*rotate\([^)]*\)/g, '');
   }
 }
 
@@ -1148,6 +1190,12 @@ function initRunningPage() {
     document.getElementById('run-idle')?.style.setProperty('display','none');
     document.getElementById('run-active')?.classList.remove('hidden');
     document.getElementById('run-summary')?.classList.add('hidden');
+    // Recovering an in-progress run: if we already have coords, the map will
+    // render them — no need to show the "Acquiring GPS…" overlay.
+    const _gpsOvRec = document.getElementById('run-gps-overlay');
+    if (_gpsOvRec) {
+      _gpsOvRec.style.display = (APP.gpsCoords && APP.gpsCoords.length > 0) ? 'none' : 'flex';
+    }
     const pauseBtn = document.getElementById('pause-run-btn');
     if (pauseBtn) pauseBtn.textContent = '⏸ Pause'; // reset label — controls swap handles state
     _updateRunControls();
@@ -1193,44 +1241,16 @@ function _loadLeaflet(cb) {
 var _gestureStartAngle = null;
 var _gestureStartBearing = 0;
 
+// Two-finger rotation gesture detection.
+//
+// Currently a no-op for map rotation because Leaflet 1.9 has no native rotation
+// support — see _applyMapRotation() for the full explanation. We keep the
+// listeners registered as harmless no-ops so they don't interfere with Leaflet's
+// own pinch-to-zoom gesture handling. To re-enable manual rotation, install
+// leaflet-rotate and replace the pane transforms with _liveMap.setBearing().
 function _attachMapRotationGesture(container) {
-  function _getTouchAngle(t1, t2) {
-    return Math.atan2(t2.clientY - t1.clientY, t2.clientX - t1.clientX) * 180 / Math.PI;
-  }
-
-  container.addEventListener('touchstart', e => {
-    if (e.touches.length === 2) {
-      _gestureStartAngle  = _getTouchAngle(e.touches[0], e.touches[1]);
-      _gestureStartBearing = _mapBearing;
-    }
-  }, { passive: true });
-
-  container.addEventListener('touchmove', e => {
-    if (e.touches.length === 2 && _gestureStartAngle !== null) {
-      const currentAngle = _getTouchAngle(e.touches[0], e.touches[1]);
-      const delta        = _gestureStartAngle - currentAngle;
-      const newBearing   = ((_gestureStartBearing + delta) + 360) % 360;
-      _mapBearing        = newBearing;
-      // Apply rotation directly without smoothing (user is controlling it)
-      const pane = _liveMap?.getPanes()?.mapPane;
-      if (pane) {
-        const size = _liveMap.getSize();
-        pane.style.transformOrigin = size.x / 2 + 'px ' + size.y / 2 + 'px';
-        pane.style.transform = 'rotate(' + (-newBearing) + 'deg)';
-      }
-      if (_liveMarker && _liveMarker._icon) {
-        _liveMarker._icon.style.transform =
-          (_liveMarker._icon.style.transform || '').replace(/\s*rotate\([^)]*\)/g, '')
-          + ' rotate(' + newBearing + 'deg)';
-      }
-    }
-  }, { passive: true });
-
-  container.addEventListener('touchend', e => {
-    if (e.touches.length < 2) {
-      _gestureStartAngle = null;
-    }
-  }, { passive: true });
+  // Intentionally empty — gesture-based rotation requires leaflet-rotate.
+  return;
 }
 
 // ── LIVE MAP (during active run) ──────────────────────────────────
@@ -1485,6 +1505,12 @@ function _redrawLivePolyline() {
 function _updateLiveMap(lat, lon) {
   if (!_liveMap) return;
   const pos = [lat, lon];
+
+  // First real GPS fix arrived — hide the "Acquiring GPS…" overlay
+  const gpsOverlay = document.getElementById('run-gps-overlay');
+  if (gpsOverlay && gpsOverlay.style.display !== 'none') {
+    gpsOverlay.style.display = 'none';
+  }
 
   // ── COURSE-UP ROTATION ─────────────────────────────────────────
   // Compute bearing from the last anchor → current position. Bearing at low
@@ -1793,30 +1819,39 @@ function _doStartRun() {
   const labelEl = document.getElementById('run-active-label');
   if (labelEl) labelEl.textContent = meta.emoji + ' ' + meta.label;
 
-  // Single shared function to transition idle → active and begin tracking
-  function _activateRunUI() {
-    document.getElementById('run-idle').style.display = 'none';
-    document.getElementById('run-active').classList.remove('hidden');
-    // Always force-sync the control buttons to the current session state so the UI
-    // is correct regardless of any prior display state (fixes Pause+Stop both showing)
-    _updateRunControls();
-    _startRunTimerLoop();
-    _initLiveMap();
-    startGPS();          // always start watchPosition — GPS may warm up after UI shows
-    _requestWakeLock();
-    // LockScreen.start() already called synchronously in startRun() — don't call again
-    startActivityNotification(); // show live stats in notification bar + lock screen
-  }
+  // ── ACTIVATE UI IMMEDIATELY ────────────────────────────────────────
+  // Previously we awaited getCurrentPosition() before showing the active
+  // UI — but that callback can take up to 15s to fire on a cold GPS start,
+  // and during that wait the user sees nothing happen after tapping Start.
+  // Instead: switch to active UI right now, show an "Acquiring GPS…" overlay
+  // above the map, and let watchPosition (inside startGPS) get the first fix
+  // asynchronously. _updateLiveMap() hides the overlay on the first real fix.
+  document.getElementById('run-idle').style.display = 'none';
+  document.getElementById('run-active').classList.remove('hidden');
 
-  navigator.geolocation.getCurrentPosition(
-    () => { _activateRunUI(); },
-    () => {
-      // Timeout / denied on first fix — still activate and let watchPosition keep trying
-      showToast('Searching for GPS… 📡', 'info');
-      _activateRunUI();
-    },
-    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-  );
+  // Re-show the Acquiring-GPS overlay (in case it was hidden by a previous run)
+  const gpsOverlay = document.getElementById('run-gps-overlay');
+  if (gpsOverlay) gpsOverlay.style.display = 'flex';
+
+  // Always force-sync the control buttons to the current session state so the UI
+  // is correct regardless of any prior display state (fixes Pause+Stop both showing)
+  _updateRunControls();
+  _startRunTimerLoop();
+  _initLiveMap();
+  startGPS();          // always start watchPosition — GPS may warm up after UI shows
+  _requestWakeLock();
+  // LockScreen.start() already called synchronously in startRun() — don't call again
+  startActivityNotification(); // show live stats in notification bar + lock screen
+
+  // Safety: if GPS hasn't produced any accurate fix in 30s (e.g. indoor / weak
+  // signal), force-hide the overlay anyway so the user isn't permanently locked
+  // out of the map UI. They can still finish/pause the run from the controls.
+  setTimeout(() => {
+    const ov = document.getElementById('run-gps-overlay');
+    if (ov && ov.style.display !== 'none' && APP.runSession) {
+      ov.style.display = 'none';
+    }
+  }, 30000);
 }
 
 // ── TIMER LOOP ────────────────────────────────────────────────────
@@ -1899,6 +1934,15 @@ function startGPS() {
         if (_liveMarker) _liveMarker.setLatLng([lat, lon]);
         if (!_userPanned && _liveMap) {
           _liveMap.setView([lat, lon], _liveMap.getZoom(), { animate: false });
+        }
+        // Hide the "Acquiring GPS…" overlay as soon as ANY fix arrives —
+        // even during warmup. Otherwise the user stares at the spinner for
+        // 4 fixes (~4s) before seeing the map, even though GPS is responding.
+        // Gated on _liveMap existing so we don't unmask a blank container
+        // while Leaflet itself is still loading on a fresh cold start.
+        if (_liveMap) {
+          const _gpsOv = document.getElementById('run-gps-overlay');
+          if (_gpsOv && _gpsOv.style.display !== 'none') _gpsOv.style.display = 'none';
         }
         return;
       }
