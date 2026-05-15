@@ -529,7 +529,11 @@ async function _syncUserProfile(userId) {
         Store.set('ff_cali_challenge_' + userId, value);
       }
       if (key === 'module_order_' + userId) {
-        Store.set('ff_module_order_' + userId, value);
+        // Dedupe on the way in too — Sheets may hold a duplicate id from a
+        // long-fixed reorder bug, which would otherwise restore the
+        // "Running & Walking shown twice" symptom on every login.
+        const clean = Array.isArray(value) ? [...new Set(value)] : value;
+        Store.set('ff_module_order_' + userId, clean);
       }
       // Progressive overload weights (pl_userId_module_exercise)
       if (key.startsWith('pl_' + userId + '_')) {
