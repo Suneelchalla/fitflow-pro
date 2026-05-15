@@ -136,11 +136,17 @@ function _renderActivityWarmupCooldown(activityType) {
           <span style="color:#ffffff">Click Here to Watch Demo</span>
         </button>
         <button onclick="event.stopPropagation();window.open('${item.search}','_blank','noopener,noreferrer')"
-          aria-label="More ${isWarmup ? 'warm-up' : 'cool-down'} videos"
-          title="More videos"
-          style="padding:11px 13px;border:1px solid rgba(67,160,90,0.35);border-radius:12px;
-            background:rgba(67,160,90,0.08);color:#a5c8ac;font-size:14px;cursor:pointer;
-            font-weight:700;touch-action:manipulation;-webkit-tap-highlight-color:transparent">⋯</button>
+          aria-label="Browse more ${isWarmup ? 'warm-up' : 'cool-down'} videos on YouTube"
+          title="Browse more videos on YouTube"
+          style="padding:0;width:46px;height:42px;border:1px solid rgba(67,160,90,0.35);border-radius:12px;
+            background:rgba(67,160,90,0.08);cursor:pointer;flex-shrink:0;
+            display:flex;align-items:center;justify-content:center;
+            touch-action:manipulation;-webkit-tap-highlight-color:transparent">
+          <svg width="24" height="17" viewBox="0 0 24 17" aria-hidden="true">
+            <path fill="#ff0000" d="M23.5 2.65a3 3 0 0 0-2.12-2.12C19.5 0 12 0 12 0S4.5 0 2.62.53A3 3 0 0 0 .5 2.65 31.4 31.4 0 0 0 0 8.5a31.4 31.4 0 0 0 .5 5.85 3 3 0 0 0 2.12 2.12C4.5 17 12 17 12 17s7.5 0 9.38-.53a3 3 0 0 0 2.12-2.12A31.4 31.4 0 0 0 24 8.5a31.4 31.4 0 0 0-.5-5.85Z"/>
+            <path fill="#ffffff" d="M9.6 12.14V4.86l6.3 3.64-6.3 3.64Z"/>
+          </svg>
+        </button>
       </div>
     </div>`;
 
@@ -422,6 +428,76 @@ function _chaikinSmooth(latlngs, iterations) {
     pts = out;
   }
   return pts;
+}
+
+// ── RAMER–DOUGLAS–PEUCKER POLYLINE SIMPLIFICATION ─────────────────
+// Why: Chaikin smoothing bends through every point. When GPS jitter offsets
+// a point a couple of metres off a straight road, Chaikin doesn't fix it —
+// it draws a smooth curve THROUGH the offset point, producing visible wobble.
+//
+// RDP first collapses points that lie roughly on a straight line between
+// their neighbours into just the endpoints. Chaikin then has fewer points
+// to bend through and the resulting line tracks the road much more cleanly.
+//
+// Tolerance is in metres. ~4m is conservative — preserves real turns,
+// removes typical jitter (which is usually 1-3m off a straight path).
+
+// Equirectangular metres per degree for a small bbox — accurate enough for
+// short polyline segments (sub-km), and far cheaper than haversine inside
+// a tight loop.
+function _latLonToMeters(lat0) {
+  const M_PER_DEG_LAT = 111320;
+  const M_PER_DEG_LON = 111320 * Math.cos(lat0 * Math.PI / 180);
+  return { mLat: M_PER_DEG_LAT, mLon: M_PER_DEG_LON };
+}
+
+// Perpendicular distance from point p to the line segment a-b, in metres.
+function _perpDistMeters(p, a, b, mLat, mLon) {
+  const ax = a[1] * mLon, ay = a[0] * mLat;
+  const bx = b[1] * mLon, by = b[0] * mLat;
+  const px = p[1] * mLon, py = p[0] * mLat;
+  const dx = bx - ax, dy = by - ay;
+  const len2 = dx * dx + dy * dy;
+  if (len2 < 1e-9) {
+    // a == b → just distance to a
+    const ddx = px - ax, ddy = py - ay;
+    return Math.sqrt(ddx * ddx + ddy * ddy);
+  }
+  // Project p onto line, clamp to segment, return distance to projection
+  let t = ((px - ax) * dx + (py - ay) * dy) / len2;
+  t = Math.max(0, Math.min(1, t));
+  const projx = ax + t * dx, projy = ay + t * dy;
+  const ddx = px - projx, ddy = py - projy;
+  return Math.sqrt(ddx * ddx + ddy * ddy);
+}
+
+function _simplifyRDP(latlngs, epsilonMeters) {
+  if (!latlngs || latlngs.length < 3) return latlngs ? latlngs.slice() : [];
+  const eps = (epsilonMeters != null) ? epsilonMeters : 4;
+  const { mLat, mLon } = _latLonToMeters(latlngs[0][0]);
+
+  // Iterative RDP using a stack — avoids recursion depth issues on long runs
+  const keep = new Array(latlngs.length).fill(false);
+  keep[0] = true;
+  keep[latlngs.length - 1] = true;
+  const stack = [[0, latlngs.length - 1]];
+  while (stack.length) {
+    const [s, e] = stack.pop();
+    let maxDist = 0, maxIdx = -1;
+    const a = latlngs[s], b = latlngs[e];
+    for (let i = s + 1; i < e; i++) {
+      const d = _perpDistMeters(latlngs[i], a, b, mLat, mLon);
+      if (d > maxDist) { maxDist = d; maxIdx = i; }
+    }
+    if (maxDist > eps && maxIdx > -1) {
+      keep[maxIdx] = true;
+      stack.push([s, maxIdx]);
+      stack.push([maxIdx, e]);
+    }
+  }
+  const out = [];
+  for (let i = 0; i < latlngs.length; i++) if (keep[i]) out.push(latlngs[i]);
+  return out;
 }
 
 // ── KILL ALL ACTIVITY NOTIFICATIONS (across ALL service worker registrations) ──
@@ -1391,10 +1467,15 @@ function _initLiveMap() {
 function _redrawLivePolyline() {
   if (!_liveMap || !_livePolylineMain) return;
   const raw = APP.gpsCoords.map(c => [c.lat, c.lon]);
+  // First simplify to drop GPS jitter — points that sit within ~4m of the
+  // line between their neighbours get collapsed away. This is the difference
+  // between Chaikin smoothing a wobbly line into a smooth wobble versus
+  // smoothing a clean straight line into a clean straight line.
+  const simplified = raw.length > 3 ? _simplifyRDP(raw, 4) : raw;
   // For very long runs (>1500 raw points), 2 Chaikin iterations = 6000+ points
   // which starts to lag on lower-end Android. Drop to 1 iteration past that.
-  const iters = raw.length > 1500 ? 1 : 2;
-  const smoothed = _chaikinSmooth(raw, iters);
+  const iters = simplified.length > 1500 ? 1 : 2;
+  const smoothed = _chaikinSmooth(simplified, iters);
   _livePolylineShadow?.setLatLngs(smoothed);
   _livePolylineMain.setLatLngs(smoothed);
   _livePolylineHilite?.setLatLngs(smoothed);
@@ -3606,10 +3687,11 @@ function _showRunDetail(idx) {
 
         L.tileLayer(_getTileLayer(_mapStyle), { maxZoom: 19 }).addTo(_detailMapInst);
 
-        // Chaikin-smooth the route for a flowing curve, then render as a "3D pipe"
-        // (3 stacked polylines — shadow, main, highlight) coloured per activity:
-        // green for run, blue for walk, yellow for cycle.
-        const chaikinPath = _chaikinSmooth(latlngs, 2);
+        // Simplify first to drop residual GPS jitter, then Chaikin-smooth for
+        // flowing curves. Same approach as the live map — gives clean, road-
+        // hugging lines instead of wobbly arcs between jitter points.
+        const simplified  = latlngs.length > 3 ? _simplifyRDP(latlngs, 4) : latlngs;
+        const chaikinPath = _chaikinSmooth(simplified, 2);
         L.polyline(chaikinPath, {
           color: 'rgba(0,0,0,0.45)', weight: 10, opacity: 1,
           lineCap: 'round', lineJoin: 'round', interactive: false,
@@ -3647,9 +3729,16 @@ function _showRunDetail(idx) {
 // Captures: map, activity title, date/location, 6 stat cells, all km splits,
 //           FitFlow Pro watermark.
 // Skips:    PB badges section (per user request).
-function _downloadRunDetailCard() {
+async function _downloadRunDetailCard() {
   const r = window._currentRunDetailLog;
   if (!r) { showToast('Could not capture — re-open this activity', 'error'); return; }
+
+  // Tile fetch can take a few seconds on slow networks — let the user know
+  // something's happening rather than the button just sitting there.
+  let progressToastId = null;
+  if (r.coords && r.coords.length >= 2) {
+    showToast('Generating share image…', 'info');
+  }
 
   const type     = r.activityType || 'run';
   const meta     = ACTIVITY_META[type] || ACTIVITY_META.run;
@@ -3675,29 +3764,69 @@ function _downloadRunDetailCard() {
 
   // ── MAP REGION (top 38%) ────────────────────────────────────────
   const mapY = 0, mapH = Math.round(H * 0.38);  // 0 → 730
-  // Map backing (subtle gradient effect with flat shades — no canvas gradient
-  // to keep render quick).
-  ctx.fillStyle = '#0a1f15';
-  ctx.fillRect(0, mapY, W, mapH);
-  // Subtle grid for "map" feel
-  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
-  ctx.lineWidth   = 1;
-  for (let x = 0; x < W; x += 80) {
-    ctx.beginPath(); ctx.moveTo(x, mapY); ctx.lineTo(x, mapY + mapH); ctx.stroke();
+
+  // Try real map tiles first. If that succeeds, the function paints both
+  // the tile background AND the route in one shot, all in Mercator so the
+  // route follows the streets it was actually recorded on. If tile fetch
+  // fails (offline, CORS, etc.), fall back to the legacy grid + route.
+  let tilesDrawn = false;
+  if (r.coords && r.coords.length >= 2) {
+    tilesDrawn = await _drawMapWithTiles(ctx, r.coords, 0, mapY, W, mapH, meta.color);
   }
-  for (let y = mapY; y < mapY + mapH; y += 80) {
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  if (!tilesDrawn) {
+    // ── Fallback: subtle grid + route on plain dark backing ──────
+    ctx.fillStyle = '#0a1f15';
+    ctx.fillRect(0, mapY, W, mapH);
+    ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+    ctx.lineWidth   = 1;
+    for (let gx = 0; gx < W; gx += 80) {
+      ctx.beginPath(); ctx.moveTo(gx, mapY); ctx.lineTo(gx, mapY + mapH); ctx.stroke();
+    }
+    for (let gy = mapY; gy < mapY + mapH; gy += 80) {
+      ctx.beginPath(); ctx.moveTo(0, gy); ctx.lineTo(W, gy); ctx.stroke();
+    }
+    if (r.coords && r.coords.length >= 2) {
+      _drawRouteOnCanvas(ctx, r.coords, 40, mapY + 40, W - 80, mapH - 80, meta.color);
+    } else {
+      ctx.fillStyle = 'rgba(255,255,255,0.4)';
+      ctx.font      = '600 32px DM Sans, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('No GPS route recorded', W / 2, mapY + mapH / 2);
+    }
   }
 
-  // Route — reuse the existing canvas route drawer (Catmull-Rom smoothed bezier).
-  // Colour matches the activity: run=green, walk=blue, cycle=yellow.
-  if (r.coords && r.coords.length >= 2) {
-    _drawRouteOnCanvas(ctx, r.coords, 40, mapY + 40, W - 80, mapH - 80, meta.color);
-  } else {
-    ctx.fillStyle = 'rgba(255,255,255,0.4)';
-    ctx.font      = '600 32px DM Sans, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('No GPS route recorded', W / 2, mapY + mapH / 2);
+  // Soft fade at the bottom of the map so the title region feels connected
+  const fadeH = 80;
+  const grad  = ctx.createLinearGradient(0, mapH - fadeH, 0, mapH);
+  grad.addColorStop(0, 'rgba(7,21,16,0)');
+  grad.addColorStop(1, '#071510');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, mapH - fadeH, W, fadeH);
+
+  // Location pill overlaid on the map — small, top-left, only if we have it.
+  // Drawn AFTER tiles so it sits on top of them.
+  if (r.locationName) {
+    const pillText = '📍 ' + r.locationName;
+    ctx.font = '600 22px DM Sans, sans-serif';
+    const tw = ctx.measureText(pillText).width;
+    const pillX = 28, pillY = 28, pillH = 44, pillW = Math.min(W - 56, tw + 32);
+    _cardRoundRect(ctx, pillX, pillY, pillW, pillH, 22);
+    ctx.fillStyle = 'rgba(7,21,16,0.78)';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)';
+    ctx.lineWidth   = 1;
+    ctx.stroke();
+    ctx.fillStyle = '#e8f5e9';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    // Clip text to pill width so very long location strings don't overflow
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(pillX + 14, pillY, pillW - 28, pillH);
+    ctx.clip();
+    ctx.fillText(pillText, pillX + 16, pillY + pillH / 2 + 1);
+    ctx.restore();
+    ctx.textBaseline = 'alphabetic';
   }
 
   // ── CONTENT REGION ──────────────────────────────────────────────
@@ -3731,18 +3860,11 @@ function _downloadRunDetailCard() {
   ctx.fillText(r.planType || 'Free Activity', iconX + iconSize + 22, cy + 68);
   cy += iconSize + 24;
 
-  // Date + location
+  // Date row — location is now shown as a pill overlay on the map above
   ctx.fillStyle  = '#5a8a65';
   ctx.font       = '500 22px DM Sans, sans-serif';
   ctx.fillText(dateStr + (timeStr ? '  at  ' + timeStr : ''), 64, cy);
-  cy += 30;
-  if (r.locationName) {
-    ctx.fillStyle = '#a5c8ac';
-    ctx.font      = '600 22px DM Sans, sans-serif';
-    ctx.fillText('📍 ' + r.locationName, 64, cy + 20);
-    cy += 36;
-  }
-  cy += 26;
+  cy += 56;
 
   // ── STAT GRID (2 cols × 3 rows) ─────────────────────────────────
   const stats = [
@@ -4521,6 +4643,184 @@ function _cardRoundRect(ctx, x, y, w, h, r) {
   ctx.lineTo(x, y+r);
   ctx.quadraticCurveTo(x, y, x+r, y);
   ctx.closePath();
+}
+
+// ── MAP TILE RENDERING (for downloaded share card) ────────────────
+// Fetches CartoDB dark tiles (the same source the live map uses) into the
+// canvas so the downloaded share image shows actual streets — not a plain
+// dark grid. Route is projected in the SAME Mercator space as the tiles so
+// it lines up with the roads it was recorded on.
+//
+// Returns true on success; false if the tiles couldn't be loaded (network,
+// CORS, etc.) so the caller can fall back to the legacy grid renderer.
+
+const _TILE_SIZE      = 512;   // CartoDB @2x tiles — sharper output
+const _TILE_SUBDOMAINS = ['a', 'b', 'c', 'd'];
+
+function _lon2tilex(lon, z) { return (lon + 180) / 360 * Math.pow(2, z); }
+function _lat2tiley(lat, z) {
+  const r = lat * Math.PI / 180;
+  return (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * Math.pow(2, z);
+}
+
+function _pickTileZoom(minLat, maxLat, minLon, maxLon, targetW, targetH) {
+  // Find the largest zoom level at which the bbox still fits inside the target
+  // canvas area (with 8% padding for visual breathing room).
+  const pad = 0.92;   // 1 - 0.08
+  for (let z = 18; z >= 3; z--) {
+    const pxW = (_lon2tilex(maxLon, z) - _lon2tilex(minLon, z)) * _TILE_SIZE;
+    const pxH = (_lat2tiley(minLat, z) - _lat2tiley(maxLat, z)) * _TILE_SIZE;
+    if (pxW <= targetW * pad && pxH <= targetH * pad) return z;
+  }
+  return 3;
+}
+
+function _loadTileImage(url) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';   // required to draw onto canvas without tainting
+    img.onload  = () => resolve(img);
+    img.onerror = () => resolve(null);
+    img.src = url;
+  });
+}
+
+// Draws real OSM-style map tiles + the route on top, all aligned in the same
+// Mercator projection. (x, y, w, h) is the canvas region to fill.
+async function _drawMapWithTiles(ctx, coords, x, y, w, h, routeColor) {
+  if (!coords || coords.length < 2) return false;
+  try {
+    // Same simplify+smooth pipeline as the on-screen route so the downloaded
+    // card matches what the user saw on the detail map.
+    const raw        = coords.map(c => [c.lat, c.lon]);
+    const simplified = raw.length > 3 ? _simplifyRDP(raw, 4) : raw;
+    const smoothed   = _chaikinSmooth(simplified, 2);
+    if (smoothed.length < 2) return false;
+
+    const lats = smoothed.map(p => p[0]);
+    const lons = smoothed.map(p => p[1]);
+    let minLat = Math.min(...lats), maxLat = Math.max(...lats);
+    let minLon = Math.min(...lons), maxLon = Math.max(...lons);
+
+    // Add 12% padding to the bbox so the route doesn't kiss the edges
+    const padLat = (maxLat - minLat) * 0.12 || 0.001;
+    const padLon = (maxLon - minLon) * 0.12 || 0.001;
+    minLat -= padLat; maxLat += padLat;
+    minLon -= padLon; maxLon += padLon;
+
+    const z = _pickTileZoom(minLat, maxLat, minLon, maxLon, w, h);
+    const tileXMinF = _lon2tilex(minLon, z);
+    const tileXMaxF = _lon2tilex(maxLon, z);
+    const tileYMinF = _lat2tiley(maxLat, z);   // tiles count top→down
+    const tileYMaxF = _lat2tiley(minLat, z);
+
+    const tileXMin = Math.floor(tileXMinF);
+    const tileXMax = Math.floor(tileXMaxF);
+    const tileYMin = Math.floor(tileYMinF);
+    const tileYMax = Math.floor(tileYMaxF);
+
+    // bbox in pixel coords at the chosen zoom
+    const bboxPxW = (tileXMaxF - tileXMinF) * _TILE_SIZE;
+    const bboxPxH = (tileYMaxF - tileYMinF) * _TILE_SIZE;
+
+    // Uniform scale to fit bbox in (w, h), centred within the region
+    const scale   = Math.min(w / bboxPxW, h / bboxPxH);
+    const drawW   = bboxPxW * scale;
+    const drawH   = bboxPxH * scale;
+    const offsetX = x + (w - drawW) / 2;
+    const offsetY = y + (h - drawH) / 2;
+
+    // Fetch all tiles in parallel
+    const tilePromises = [];
+    const tileMeta = [];
+    for (let tx = tileXMin; tx <= tileXMax; tx++) {
+      for (let ty = tileYMin; ty <= tileYMax; ty++) {
+        const subdomain = _TILE_SUBDOMAINS[(tx + ty) % _TILE_SUBDOMAINS.length];
+        const url = `https://${subdomain}.basemaps.cartocdn.com/dark_all/${z}/${tx}/${ty}@2x.png`;
+        tilePromises.push(_loadTileImage(url));
+        tileMeta.push({ tx, ty });
+      }
+    }
+    const images = await Promise.all(tilePromises);
+
+    // Fail-fast: if more than half the tiles failed, abandon and let the
+    // caller fall back to the legacy grid renderer.
+    const loaded = images.filter(Boolean).length;
+    if (loaded < images.length * 0.5) return false;
+
+    // Clip drawing to the map region — tiles can overflow at the edges
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(x, y, w, h);
+    ctx.clip();
+
+    // Subtle backing colour visible through tile gaps
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillRect(x, y, w, h);
+
+    // Draw each tile at its computed pixel position
+    images.forEach((img, idx) => {
+      if (!img) return;
+      const { tx, ty } = tileMeta[idx];
+      const px = offsetX + (tx * _TILE_SIZE - tileXMinF * _TILE_SIZE) * scale;
+      const py = offsetY + (ty * _TILE_SIZE - tileYMinF * _TILE_SIZE) * scale;
+      const tw = _TILE_SIZE * scale;
+      ctx.drawImage(img, px, py, tw, tw);
+    });
+
+    // Subtle dark overlay — keeps the map readable when the route sits on top
+    ctx.fillStyle = 'rgba(7,21,16,0.18)';
+    ctx.fillRect(x, y, w, h);
+
+    // ── ROUTE — projected in the SAME Mercator space as the tiles ──
+    const toCanvasX = lon => offsetX + (_lon2tilex(lon, z) * _TILE_SIZE - tileXMinF * _TILE_SIZE) * scale;
+    const toCanvasY = lat => offsetY + (_lat2tiley(lat, z) * _TILE_SIZE - tileYMinF * _TILE_SIZE) * scale;
+
+    const pts = smoothed.map(p => ({ px: toCanvasX(p[1]), py: toCanvasY(p[0]) }));
+    const n   = pts.length;
+    const minDim = Math.min(w, h);
+    const dotR   = Math.max(6, Math.round(minDim * 0.025));
+
+    // Shadow / glow under the route
+    ctx.strokeStyle = routeColor;
+    ctx.lineCap     = 'round';
+    ctx.lineJoin    = 'round';
+    ctx.globalAlpha = 0.40;
+    ctx.shadowColor = routeColor;
+    ctx.shadowBlur  = Math.round(minDim * 0.05);
+    ctx.lineWidth   = Math.max(8, Math.round(minDim * 0.026));
+    ctx.beginPath();
+    pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.px, p.py) : ctx.lineTo(p.px, p.py));
+    ctx.stroke();
+
+    // Main route line
+    ctx.globalAlpha = 1;
+    ctx.shadowBlur  = 0;
+    ctx.lineWidth   = Math.max(5, Math.round(minDim * 0.016));
+    ctx.beginPath();
+    pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.px, p.py) : ctx.lineTo(p.px, p.py));
+    ctx.stroke();
+
+    // Start dot (green) and end dot (red), both with white ring
+    const drawDot = (p, fill) => {
+      ctx.shadowBlur  = dotR * 1.4;
+      ctx.shadowColor = fill;
+      ctx.fillStyle   = fill;
+      ctx.beginPath(); ctx.arc(p.px, p.py, dotR, 0, Math.PI * 2); ctx.fill();
+      ctx.shadowBlur  = 0;
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth   = Math.max(2, dotR * 0.35);
+      ctx.stroke();
+    };
+    drawDot(pts[0],   '#2d9e5a');
+    drawDot(pts[n-1], '#ef5350');
+
+    ctx.restore();
+    return true;
+  } catch (err) {
+    console.warn('[ShareCard] Tile render failed:', err.message);
+    return false;
+  }
 }
 
 function _drawRouteOnCanvas(ctx, coords, x, y, w, h, color) {
