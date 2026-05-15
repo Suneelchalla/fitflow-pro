@@ -972,11 +972,13 @@ function _initLiveMap() {
 
     // ── "3D PIPE" POLYLINE — 3 stacked layers for depth & smoothness ──
     // Bottom layer: dark shadow (gives the pipe its "raised off the map" feel)
-    // Middle layer: main FitFlow green stroke
+    // Middle layer: activity-themed stroke (green/blue/yellow per run/walk/cycle)
     // Top layer:    subtle white highlight (the "shine" on the pipe top)
     // All use lineCap/lineJoin:round so corners look like a continuous tube,
     // and we apply Chaikin smoothing to the coords before setting them, so
     // even noisy GPS data renders as a smooth curve.
+    const _liveMeta = ACTIVITY_META[APP.runSession?.activityType || _activityType] || ACTIVITY_META.run;
+    const _liveColor = _liveMeta.color;  // run=#43a05a, walk=#1e88e5, cycle=#f0c040
     _livePolylineShadow = L.polyline([], {
       color:        'rgba(0,0,0,0.45)',
       weight:       11,
@@ -987,7 +989,7 @@ function _initLiveMap() {
       interactive:  false,
     }).addTo(_liveMap);
     _livePolylineMain = L.polyline([], {
-      color:        '#2d9e5a',
+      color:        _liveColor,
       weight:       7,
       opacity:      1,
       lineCap:      'round',
@@ -1011,7 +1013,8 @@ function _initLiveMap() {
     // In course-up mode the screen's up direction IS the direction of travel,
     // so an upward arrow inside the marker is always meaningful. The marker
     // icon is counter-rotated by _applyMapRotation so the arrow stays upright
-    // regardless of map rotation.
+    // regardless of map rotation. Color matches the activity (run=green,
+    // walk=blue, cycle=yellow) for instant visual identity.
     if (!document.getElementById('ff-marker-keyframes')) {
       const kf = document.createElement('style');
       kf.id   = 'ff-marker-keyframes';
@@ -1023,15 +1026,15 @@ function _initLiveMap() {
       className: '',
       html: `<div style="position:relative;width:36px;height:36px;pointer-events:none">
         <div style="position:absolute;top:50%;left:50%;width:30px;height:30px;
-          margin:-15px 0 0 -15px;border-radius:50%;background:#2d9e5a;
+          margin:-15px 0 0 -15px;border-radius:50%;background:${_liveColor};
           animation:_ffMarkerPulse 2s ease-in-out infinite"></div>
         <div style="position:absolute;top:50%;left:50%;width:14px;height:14px;
-          margin:-7px 0 0 -7px;border-radius:50%;background:#2d9e5a;
+          margin:-7px 0 0 -7px;border-radius:50%;background:${_liveColor};
           border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.45)"></div>
         <div style="position:absolute;top:-3px;left:50%;width:0;height:0;
           margin-left:-7px;
           border-left:7px solid transparent;border-right:7px solid transparent;
-          border-bottom:11px solid #2d9e5a;
+          border-bottom:11px solid ${_liveColor};
           filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))"></div>
       </div>`,
       iconSize:   [36, 36],
@@ -3287,15 +3290,15 @@ function _showRunDetail(idx) {
         L.tileLayer(_getTileLayer(_mapStyle), { maxZoom: 19 }).addTo(_detailMapInst);
 
         // Chaikin-smooth the route for a flowing curve, then render as a "3D pipe"
-        // (3 stacked polylines — shadow, main, highlight) so the line looks like
-        // a raised tube instead of a flat pixel-jagged stroke.
+        // (3 stacked polylines — shadow, main, highlight) coloured per activity:
+        // green for run, blue for walk, yellow for cycle.
         const chaikinPath = _chaikinSmooth(latlngs, 2);
         L.polyline(chaikinPath, {
           color: 'rgba(0,0,0,0.45)', weight: 10, opacity: 1,
           lineCap: 'round', lineJoin: 'round', interactive: false,
         }).addTo(_detailMapInst);
         L.polyline(chaikinPath, {
-          color: '#2d9e5a',          weight: 6,  opacity: 1,
+          color: meta.color,          weight: 6,  opacity: 1,
           lineCap: 'round', lineJoin: 'round', interactive: false,
         }).addTo(_detailMapInst);
         L.polyline(chaikinPath, {
@@ -3303,14 +3306,14 @@ function _showRunDetail(idx) {
           lineCap: 'round', lineJoin: 'round', interactive: false,
         }).addTo(_detailMapInst);
 
-        // Start marker — green
+        // Start marker — matches activity color
         L.circleMarker(latlngs[0], {
-          radius: 6, fillColor: '#2d9e5a', color: '#fff', weight: 2, fillOpacity: 1,
+          radius: 6, fillColor: meta.color, color: '#fff', weight: 2, fillOpacity: 1,
         }).addTo(_detailMapInst);
 
-        // Finish marker — green
+        // Finish marker — matches activity color
         L.circleMarker(latlngs[latlngs.length - 1], {
-          radius: 6, fillColor: '#2d9e5a', color: '#fff', weight: 2, fillOpacity: 1,
+          radius: 6, fillColor: meta.color, color: '#fff', weight: 2, fillOpacity: 1,
         }).addTo(_detailMapInst);
 
         _detailMapInst.fitBounds(L.latLngBounds(latlngs).pad(0.15));
@@ -3369,9 +3372,10 @@ function _downloadRunDetailCard() {
     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
   }
 
-  // Route — reuse the existing canvas route drawer (Catmull-Rom smoothed bezier)
+  // Route — reuse the existing canvas route drawer (Catmull-Rom smoothed bezier).
+  // Colour matches the activity: run=green, walk=blue, cycle=yellow.
   if (r.coords && r.coords.length >= 2) {
-    _drawRouteOnCanvas(ctx, r.coords, 40, mapY + 40, W - 80, mapH - 80, '#2d9e5a');
+    _drawRouteOnCanvas(ctx, r.coords, 40, mapY + 40, W - 80, mapH - 80, meta.color);
   } else {
     ctx.fillStyle = 'rgba(255,255,255,0.4)';
     ctx.font      = '600 32px DM Sans, sans-serif';
@@ -4048,15 +4052,15 @@ function _renderRunRouteMap(coords) {
 
     L.tileLayer(_getTileLayer(_mapStyle), { maxZoom: 19 }).addTo(_sumMap);
 
-    // Chaikin-smooth + 3D-pipe (shadow / main / highlight) — consistent visual
-    // language with the live map and history detail.
+    // Chaikin-smooth + 3D-pipe (shadow / main / highlight) — coloured per
+    // activity (run=green, walk=blue, cycle=yellow) for visual identity.
     const sumPath = _chaikinSmooth(latlngs, 2);
     L.polyline(sumPath, {
       color: 'rgba(0,0,0,0.45)', weight: 10, opacity: 1,
       lineCap: 'round', lineJoin: 'round', interactive: false,
     }).addTo(_sumMap);
     L.polyline(sumPath, {
-      color: '#2d9e5a',          weight: 6,  opacity: 1,
+      color: meta.color,          weight: 6,  opacity: 1,
       lineCap: 'round', lineJoin: 'round', interactive: false,
     }).addTo(_sumMap);
     L.polyline(sumPath, {
@@ -4064,14 +4068,14 @@ function _renderRunRouteMap(coords) {
       lineCap: 'round', lineJoin: 'round', interactive: false,
     }).addTo(_sumMap);
 
-    // Start marker — green
+    // Start marker — matches activity colour
     L.circleMarker(latlngs[0], {
-      radius: 6, fillColor: '#2d9e5a', color: '#fff', weight: 2, fillOpacity: 1,
+      radius: 6, fillColor: meta.color, color: '#fff', weight: 2, fillOpacity: 1,
     }).addTo(_sumMap);
 
-    // Finish marker — green
+    // Finish marker — matches activity colour
     L.circleMarker(latlngs[latlngs.length - 1], {
-      radius: 6, fillColor: '#2d9e5a', color: '#fff', weight: 2, fillOpacity: 1,
+      radius: 6, fillColor: meta.color, color: '#fff', weight: 2, fillOpacity: 1,
     }).addTo(_sumMap);
 
     _sumMap.fitBounds(L.latLngBounds(latlngs).pad(0.15));
