@@ -1376,8 +1376,46 @@ function _initLiveMap() {
       ? [APP.gpsCoords[APP.gpsCoords.length - 1].lat, APP.gpsCoords[APP.gpsCoords.length - 1].lon]
       : null;
 
-    // Start map at last known coord or placeholder — will fly to real location immediately
-    const startCoord = lastCoord || [0, 0];
+    // ── PICK SENSIBLE STARTING COORD ─────────────────────────────────
+    // Old behaviour was to fall back to [0, 0] (Atlantic Ocean) at zoom 17 if
+    // we had no live coord — which made the tile servers return their
+    // "Map data not available" placeholder while the user waited for GPS.
+    // Now we walk a fallback chain: live → cached last known → most recent run →
+    // wide land-area view (zoom 2). The first three load tiles immediately.
+    let startCoord    = lastCoord;
+    let startZoom     = 17;
+    let fallbackUsed  = false;
+
+    if (!startCoord) {
+      const cached = Store.get('ff_last_known_coord');
+      if (cached && cached.lat != null && cached.lon != null) {
+        startCoord = [cached.lat, cached.lon];
+      }
+    }
+    if (!startCoord && APP.currentUser) {
+      // Walk recent run logs (newest first) until we find one with coords
+      const runs = Store.getUserRunLogs(APP.currentUser.id);
+      for (let i = runs.length - 1; i >= 0; i--) {
+        const c = runs[i] && runs[i].coords;
+        if (Array.isArray(c) && c.length) {
+          const last = c[c.length - 1];
+          if (last && last.lat != null && last.lon != null) {
+            startCoord = [last.lat, last.lon];
+            // Cache for future cold starts so we don't walk run logs again
+            Store.set('ff_last_known_coord', { lat: last.lat, lon: last.lon });
+            break;
+          }
+        }
+      }
+    }
+    if (!startCoord) {
+      // No coord history at all — use a wide land-area view that has tiles
+      // everywhere (so no "Map data not available" placeholder). The user's
+      // location will set proper view on the first GPS fix.
+      startCoord   = [20, 78];   // northern hemisphere land — South Asia / Africa swath
+      startZoom    = 2;
+      fallbackUsed = true;
+    }
 
     _liveMap = L.map(container, {
       zoomControl:        false,
@@ -1398,7 +1436,7 @@ function _initLiveMap() {
       rotateControl: false,
       touchRotate:   true,
       bearing:       0,
-    }).setView(startCoord, 17);
+    }).setView(startCoord, startZoom);
 
     // Set dark background so the container never flashes white during tile load/zoom.
     // Leaflet's default background is white — this overrides it immediately.
@@ -1756,7 +1794,8 @@ const _kalman = new GpsKalmanFilter();
 
 // FIX #2: GPS warm-up state — skip first N fixes while device acquires lock
 const GPS_WARMUP_FIXES    = 4;    // discard first 4 positions (device triangulating)
-const GPS_MIN_ACCURACY_M  = 35;   // reject if worse than 35 m — tighter for better route accuracy
+const GPS_MIN_ACCURACY_M  = 65;   // steady-state reject threshold (was 35 — too tight, rejected every fix during a cold start indoors / in a city, so the map never came alive)
+const GPS_COLD_ACCURACY_M = 120;  // lenient threshold used for the very first fixes — guarantees first fix lands so map recenters and "Acquiring GPS" overlay hides
 const GPS_MIN_DISTANCE_KM = 0.001; // ignore movement < 1 m (was 4 m — too high for slow walking)
 
 let _gpsWarmupCount  = 0;          // counts received fixes during warmup phase
@@ -2033,8 +2072,18 @@ function startGPS() {
       const { latitude: rawLat, longitude: rawLon, accuracy } = pos.coords;
       const nowTs = Date.now();
 
-      // FIX #2a: Reject inaccurate fixes
-      if (accuracy > GPS_MIN_ACCURACY_M) return;
+      // FIX #2a: Progressive accuracy gate.
+      // The first few fixes on a cold GPS lock often come in at 50–100 m accuracy
+      // (especially indoors / in cities) — rejecting them all keeps the map blank
+      // and the user stares at "Acquiring GPS…" forever. So: use a lenient
+      // threshold (GPS_COLD_ACCURACY_M = 120 m) until we have at least 3 fixes
+      // through, then tighten to GPS_MIN_ACCURACY_M (65 m) for the route itself.
+      // The Kalman filter smooths the noisier early fixes regardless.
+      const _gate = (_gpsWarmupCount < 3 ? GPS_COLD_ACCURACY_M : GPS_MIN_ACCURACY_M);
+      if (accuracy > _gate) {
+        _setGpsBadge(false);  // signal "GPS responding but signal is weak" instead of nothing
+        return;
+      }
 
       _setGpsBadge(true);
 
@@ -2050,10 +2099,19 @@ function startGPS() {
       if (_gpsWarmupCount < GPS_WARMUP_FIXES) {
         _gpsWarmupCount++;
         _gpsLastGoodFix = { lat, lon, ts: nowTs };
-        // Move marker + re-centre map but do NOT draw the polyline yet
+        // Cache for the next cold start so the map opens at the right place
+        // instead of falling back to a wide world view. Cheap LS write — at
+        // most GPS_WARMUP_FIXES times per run.
+        try { Store.set('ff_last_known_coord', { lat, lon }); } catch {}
+        // Move marker + re-centre map but do NOT draw the polyline yet.
+        // If the map opened with the wide fallback view (zoom 2 — no GPS history),
+        // snap to street-level zoom 17 on the first real fix. Otherwise preserve
+        // whatever zoom the user / previous session had.
         if (_liveMarker) _liveMarker.setLatLng([lat, lon]);
         if (!_userPanned && _liveMap) {
-          _liveMap.setView([lat, lon], _liveMap.getZoom(), { animate: false });
+          const currentZoom = _liveMap.getZoom();
+          const targetZoom  = currentZoom < 10 ? 17 : currentZoom;
+          _liveMap.setView([lat, lon], targetZoom, { animate: false });
         }
         // Hide the "Acquiring GPS…" overlay as soon as ANY fix arrives —
         // even during warmup. Otherwise the user stares at the spinner for
@@ -2114,6 +2172,28 @@ function startGPS() {
     err => {
       if (!APP.runSession || APP.runSession.paused) return;
       _setGpsBadge(false);
+
+      // Grace window: Android Chrome / TWA can fire a transient err.code === 1
+      // (PERMISSION_DENIED) within the first 1–2 seconds of watchPosition,
+      // even when permission is fully granted, while the OS location service
+      // is waking up. Suppress these so users don't see a misleading
+      // "Location access denied" toast at 00:02 when GPS is actually fine.
+      // After 5 s any error is real and surfaces normally.
+      const elapsedMs = APP.runSession.startTime
+        ? Date.now() - APP.runSession.startTime
+        : Infinity;
+      const inGraceWindow = elapsedMs < 5000;
+      const noFixYet      = !_gpsLastGoodFix;
+      if (inGraceWindow && noFixYet) {
+        // For code 3 (timeout) we still need to retry, just don't show the toast.
+        if (err.code === 3) {
+          setTimeout(() => {
+            if (APP.runSession && !APP.runSession.paused) startGPS();
+          }, 2000);
+        }
+        return;
+      }
+
       let msg = 'GPS signal lost.';
       if (err.code === 1) msg = 'Location access denied. Running in time-only mode.';
       else if (err.code === 3) msg = 'GPS timeout — retrying…';
@@ -2125,7 +2205,10 @@ function startGPS() {
       }
     },
 
-    { enableHighAccuracy: true, maximumAge: 1000, timeout: 30000 }
+    // Shorter timeout — 30 s matched the safety force-hide so users waited
+    // the full 30 s before any error fired. 15 s gives a clearer error path
+    // while still being long enough for a normal cold lock to succeed.
+    { enableHighAccuracy: true, maximumAge: 1000, timeout: 15000 }
   );
 }
 
