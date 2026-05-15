@@ -223,7 +223,7 @@ function doGet(e) {
       case 'getRunLogs':           result = { success:true, logs:getUserRunLogs(p.userId) };             break;
       case 'getAllRunLogs':         result = { success:true, logs:getAllRunLogs() };                      break;
       case 'deleteRunLog':         result = deleteRunLog(p.logId, p.userId);                             break;
-      case 'getActivePlan':        result = getActivePlan(p.userId);                                     break;
+      case 'getActivePlan':        result = getActivePlan(p.userId, p.planKey);                          break;
       case 'getPlanProgress':      result = getPlanProgress(p.userId, p.planKey);                        break;
       case 'getContent':           result = { success:true, content:getContent(p.key) };                 break;
       case 'getAllContent':         result = getAllContent();                                              break;
@@ -1230,20 +1230,25 @@ function getHydrationLogs(userId) {
 // ════════════════════════════════════════════════════════════════
 // PLAN MANAGEMENT
 // ════════════════════════════════════════════════════════════════
-function getActivePlan(userId) {
+function getActivePlan(userId, planKey) {
   if (!userId) return { success:false, error:'userId required.' };
   const sh   = getSheet('PlanProgress');
   const data = sh.getDataRange().getValues();
   if (data.length<2) return { success:true, plan:null };
+  // Optional planKey filter — when caller wants a specific plan (e.g. 'crosstraining')
+  // it returns ONLY that plan or null. Without filter, returns the first REGISTERED
+  // plan for backward compat with existing single-plan callers (running plan).
+  const filterKey = planKey ? planKey.toString() : null;
   for (let i=1;i<data.length;i++) {
     const row = data[i];
-    if ((row[1]||'').toString()===userId.toString() && (row[11]||'').toString()==='REGISTERED') {
-      return { success:true, plan:{
-        planKey:      (row[3]||'').toString(),
-        startDate:    (row[4]||'').toString(),
-        registeredAt: (row[5]||'').toString(),
-      }};
-    }
+    if ((row[1]||'').toString()!==userId.toString()) continue;
+    if ((row[11]||'').toString()!=='REGISTERED') continue;
+    if (filterKey && (row[3]||'').toString() !== filterKey) continue;
+    return { success:true, plan:{
+      planKey:      (row[3]||'').toString(),
+      startDate:    (row[4]||'').toString(),
+      registeredAt: (row[5]||'').toString(),
+    }};
   }
   return { success:true, plan:null };
 }
@@ -1276,8 +1281,15 @@ function savePlanRegistration(body) {
   const sh   = getSheet('PlanProgress');
   ensureHeaders(sh,['RecordID','UserID','UserEmail','PlanKey','StartDate','RegisteredAt','Week','Day','CompletedDate','DistanceKm','DurationSec','Status','Timestamp']);
   const data = sh.getDataRange().getValues();
+  // Dedup on userId + planKey + 'REGISTERED'.
+  // Previously this matched ONLY on userId + 'REGISTERED', which meant
+  // registering a second plan (e.g. crosstraining when running plan exists)
+  // would overwrite the first one. Now each plan gets its own REGISTERED row.
+  const planKeyStr = planKey.toString();
   for (let i=1;i<data.length;i++) {
-    if ((data[i][1]||'').toString()===userId.toString()&&(data[i][11]||'').toString()==='REGISTERED') {
+    if ((data[i][1]||'').toString()===userId.toString() &&
+        (data[i][3]||'').toString()===planKeyStr &&
+        (data[i][11]||'').toString()==='REGISTERED') {
       sh.getRange(i+1,1,1,13).setValues([[data[i][0],userId,email||'',planKey,startDate||'',
         registeredAt||new Date().toISOString(),0,0,'',0,0,'REGISTERED',new Date().toISOString()]]);
       SpreadsheetApp.flush();
@@ -1313,16 +1325,20 @@ function savePlanDayCompletion(body) {
 }
 
 function clearActivePlan(body) {
-  const { userId } = body;
+  const { userId, planKey } = body;
   if (!userId) return { success:false, error:'userId required.' };
   const sh   = getSheet('PlanProgress');
   const data = sh.getDataRange().getValues();
+  // Optional planKey: with filter, only clear that specific plan. Without filter,
+  // clears the first REGISTERED plan (backward compat).
+  const filterKey = planKey ? planKey.toString() : null;
   for (let i=1;i<data.length;i++) {
-    if ((data[i][1]||'').toString()===userId.toString()&&(data[i][11]||'').toString()==='REGISTERED') {
-      sh.getRange(i+1,12).setValue('UNREGISTERED');
-      SpreadsheetApp.flush();
-      return { success:true };
-    }
+    if ((data[i][1]||'').toString()!==userId.toString()) continue;
+    if ((data[i][11]||'').toString()!=='REGISTERED') continue;
+    if (filterKey && (data[i][3]||'').toString()!==filterKey) continue;
+    sh.getRange(i+1,12).setValue('UNREGISTERED');
+    SpreadsheetApp.flush();
+    return { success:true };
   }
   return { success:true };
 }
