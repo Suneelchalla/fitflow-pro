@@ -91,15 +91,24 @@ const ALL_MODULES = [
 
 function getModuleOrder(userId) {
   const saved   = Store.get('ff_module_order_' + userId);
-  // All users always get all modules — no filtering by onboarding selection
   if (saved && Array.isArray(saved) && saved.length > 0) {
-    // DEDUPE the saved order. A long-fixed reorder bug could write the same id
-    // twice into ff_module_order_*, which then renders the same module tile
-    // twice on the dashboard (e.g. "Running & Walking" shown twice). Dedupe
-    // here on every read so the bad data self-heals once any module ordering
-    // operation triggers a re-save.
     const dedupedSaved = [...new Set(saved)];
-    // Restore saved order; add any new modules not yet in saved list
+
+    // ── AUTO-HEAL: if we detected duplicate ids, push the cleaned list to
+    // BOTH localStorage AND Sheets so the bad data is wiped permanently.
+    // Without this, Sheets sync keeps restoring the duplicate on every open.
+    if (dedupedSaved.length !== saved.length) {
+      console.log('[modules] auto-healing duplicate ids:',
+                  saved.length, '→', dedupedSaved.length, saved);
+      Store.set('ff_module_order_' + userId, dedupedSaved);
+      try {
+        sheetsPost('saveContent', { key: 'module_order_' + userId, value: dedupedSaved });
+      } catch (e) {
+        console.warn('[modules] Sheets push failed (will retry next reorder):', e?.message);
+      }
+    }
+
+    // Restore (deduped) order; add any new modules not yet in saved list
     let ordered = dedupedSaved.map(id => ALL_MODULES.find(m => m.id === id)).filter(Boolean);
     const missing = ALL_MODULES.filter(m => !dedupedSaved.includes(m.id));
     ordered = [...ordered, ...missing];
