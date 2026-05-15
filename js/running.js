@@ -1228,6 +1228,9 @@ function initRunningPage() {
   renderRunningTabs('log');
   renderRunHistory();
   _initCardSwipe();  // attach swipe-to-change-activity on the start card (once only)
+  // Sync global bottom-nav visibility — handles session-recovery case
+  // (run-active visible → nav hidden) vs cold open (run-idle → nav visible)
+  window.refreshBottomNav?.();
 }
 
 function renderRunningTabs(tab) {
@@ -1885,6 +1888,8 @@ function _doStartRun() {
   // asynchronously. _updateLiveMap() hides the overlay on the first real fix.
   document.getElementById('run-idle').style.display = 'none';
   document.getElementById('run-active').classList.remove('hidden');
+  // Hide global bottom-nav while a run is active (full-screen map)
+  window.refreshBottomNav?.();
 
   // Re-show the Acquiring-GPS overlay (in case it was hidden by a previous run)
   const gpsOverlay = document.getElementById('run-gps-overlay');
@@ -2170,6 +2175,7 @@ function stopRun() {
   // Switch active → summary
   document.getElementById('run-active').classList.add('hidden');
   document.getElementById('run-summary').classList.remove('hidden');
+  window.refreshBottomNav?.();
 
   // Update summary header label
   const sumLabel = document.getElementById('sum-activity-label');
@@ -2355,6 +2361,8 @@ function discardRun() {
   document.getElementById('run-save-screen')?.classList.add('hidden');
   document.getElementById('run-active')?.classList.add('hidden');
   document.getElementById('run-idle').style.display = 'flex';
+  // Re-show global bottom-nav now that we're back to the idle/tab UI
+  window.refreshBottomNav?.();
 }
 
 // ── BACKGROUND / FOREGROUND RECOVERY ─────────────────────────────
@@ -6032,3 +6040,78 @@ function _exportCardFromEditor(mode) {
 function _generateActivityCard() {
   _initCardEditor();
 }
+
+// ════════════════════════════════════════════════════════════════════
+// ONE-TIME BACKFILL: fill locationName on past runs that have coords
+// but no locationName (because they were saved before geocoding worked).
+//
+// Usage from Chrome remote-debug DevTools console:
+//   backfillRunLocations()
+//
+// What it does:
+//   1. Reads the current user's run logs from localStorage.
+//   2. For each log where locationName is empty but coords[0] exists,
+//      reverse-geocodes the start coordinate via _reverseGeocode().
+//   3. Writes the result back to localStorage. The defensive merge in
+//      auth.js _syncUserRunLogs protects this value from being wiped
+//      when Sheets sync next runs (even if the deployed Apps Script
+//      doesn't store LocationName yet).
+//   4. Pauses ~1.1 s between requests to stay polite to the geocoder.
+//   5. Reports progress in console + toast.
+//
+// This is intentionally a console function, not a UI button — it's a
+// one-shot migration utility, not a feature.
+// ════════════════════════════════════════════════════════════════════
+window.backfillRunLocations = async function () {
+  const user = APP.currentUser;
+  if (!user) { console.warn('[backfill] not logged in'); return; }
+
+  const all = Store.get('ff_runlogs', []) || [];
+  const mine = all.filter(l => l.userId === user.id);
+  const candidates = mine.filter(l =>
+    (!l.locationName || l.locationName.trim() === '') &&
+    Array.isArray(l.coords) && l.coords.length > 0 &&
+    typeof l.coords[0].lat === 'number' && typeof l.coords[0].lon === 'number'
+  );
+
+  if (candidates.length === 0) {
+    console.log('[backfill] nothing to do — all runs already have locations');
+    if (typeof showToast === 'function') showToast('No runs to backfill ✅', 'info');
+    return;
+  }
+
+  console.log('[backfill] starting on', candidates.length, 'run(s)…');
+  if (typeof showToast === 'function') showToast(`Backfilling ${candidates.length} run(s)…`, 'info');
+
+  let filled = 0, failed = 0;
+  for (let i = 0; i < candidates.length; i++) {
+    const log = candidates[i];
+    const { lat, lon } = log.coords[0];
+    try {
+      const name = await _reverseGeocode(lat, lon);
+      if (name) {
+        log.locationName = name;
+        filled++;
+        console.log(`[backfill] (${i+1}/${candidates.length}) ${log.id} → ${name}`);
+      } else {
+        failed++;
+        console.warn(`[backfill] (${i+1}/${candidates.length}) ${log.id} → no result`);
+      }
+    } catch (e) {
+      failed++;
+      console.warn(`[backfill] (${i+1}/${candidates.length}) ${log.id} → error:`, e?.message || e);
+    }
+    // Persist after each one so progress survives interruptions
+    Store.set('ff_runlogs', all);
+    // Politeness delay between requests (BigDataCloud is forgiving, but still)
+    if (i < candidates.length - 1) await new Promise(r => setTimeout(r, 1100));
+  }
+
+  console.log(`[backfill] done — filled ${filled}, failed ${failed}`);
+  if (typeof showToast === 'function') {
+    showToast(`Backfill done: ${filled} filled, ${failed} failed`, filled > 0 ? 'success' : 'info');
+  }
+  // Re-render history so the new locations appear in the UI
+  if (typeof renderRunHistory === 'function') renderRunHistory();
+  if (typeof renderGlobalHistory === 'function') renderGlobalHistory();
+};
