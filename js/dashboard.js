@@ -80,13 +80,14 @@ function renderDashboardStats() {
 
 // ── MODULE ORDER STORAGE ─────────────────────────────────────────
 const ALL_MODULES = [
-  { id: 'cardio',       name: 'Home Cardio',      emoji: '🏠',    color: 'grad-cardio',  sub: '8-9 exercises · 6 days' },
-  { id: 'gym',          name: 'Gym Workouts',      emoji: '🏋️',   color: 'grad-gym',     sub: '8 exercises · 6 days' },
-  { id: 'yoga',         name: 'Yoga',              emoji: '🧘',    color: 'grad-yoga',    sub: '8-12 poses · 6 days' },
-  { id: 'running',      name: 'Running & Walking', emoji: '🏃',    color: 'grad-running', sub: 'GPS tracker + plans' },
-  { id: 'stretching',   name: 'Stretching',        emoji: '🙆',    color: 'grad-stretch', sub: '10 body parts · 100 stretches' },
-  { id: 'calisthenics', name: 'Calisthenics',      emoji: '🤸‍♂️', color: 'grad-cali',    sub: '3 levels · skill tree' },
-  { id: 'core',         name: 'Core & Abs',        emoji: '🔥',    color: 'grad-core',    sub: '6 exercises · 6 days' },
+  { id: 'cardio',        name: 'Home Cardio',       emoji: '🏠',    color: 'grad-cardio',     sub: '8-9 exercises · 6 days' },
+  { id: 'gym',           name: 'Gym Workouts',      emoji: '🏋️',    color: 'grad-gym',        sub: '8 exercises · 6 days' },
+  { id: 'yoga',          name: 'Yoga',              emoji: '🧘',    color: 'grad-yoga',       sub: '8-12 poses · 6 days' },
+  { id: 'running',       name: 'Running & Walking', emoji: '🏃',    color: 'grad-running',    sub: 'GPS tracker + plans' },
+  { id: 'stretching',    name: 'Stretching',        emoji: '🙆',    color: 'grad-stretch',    sub: '10 body parts · 100 stretches' },
+  { id: 'calisthenics',  name: 'Calisthenics',      emoji: '🤸‍♂️', color: 'grad-cali',       sub: '3 levels · skill tree' },
+  { id: 'crosstraining', name: 'Cross Training',    emoji: '💪',    color: 'grad-crosstrain', sub: '8-week plan · 4×/wk' },
+  { id: 'core',          name: 'Core & Abs',        emoji: '🔥',    color: 'grad-core',       sub: '6 exercises · 6 days' },
 ];
 
 function getModuleOrder(userId) {
@@ -359,6 +360,7 @@ function openModule(moduleId) {
   if (APP.currentUser) Store.set('ff_last_module_' + APP.currentUser.id, moduleId);
   if (moduleId === 'running') { showPage('page-running'); initRunningPage(); return; }
   if (moduleId === 'calisthenics') { showPage('page-calisthenics'); if (typeof initCalisthenicsPage === 'function') initCalisthenicsPage(); return; }
+  if (moduleId === 'crosstraining') { showPage('page-cross-training'); if (typeof initCrossTrainingPage === 'function') initCrossTrainingPage(); return; }
   if (moduleId === 'yoga') { showPage('page-module'); renderYogaProgressivePage(); return; }
   showPage('page-module');
   renderModulePage(moduleId);
@@ -2218,8 +2220,8 @@ function _launchConfetti() {
   }
 }
 
-function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🙆', running: '🏃', calisthenics: '🤸‍♂️', core: '🔥' }[mod] || '💪'; }
-function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics', core: 'Core & Abs' }[mod] || mod; }
+function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🙆', running: '🏃', calisthenics: '🤸‍♂️', crosstraining: '💪', core: '🔥' }[mod] || '💪'; }
+function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics', crosstraining: 'Cross Training', core: 'Core & Abs' }[mod] || mod; }
 // Activity-aware emoji/label for GPS activities (run / walk / cycle)
 function _getActivityEmoji(activityType) {
   return ({ run: '🏃', walk: '🚶', cycle: '🚴' })[activityType] || '🏃';
