@@ -1132,6 +1132,7 @@ function renderOnboardingStep(step) {
             { id:'stretching',  emoji:'🤸',   name:'Stretching',       sub:'Flexibility & recovery' },
             { id:'running',     emoji:'🏃',   name:'Running & Walking',sub:'GPS tracking + plans' },
             { id:'calisthenics',emoji:'🤸‍♂️',name:'Calisthenics',    sub:'Bodyweight skills & progressions' },
+            { id:'crosstraining',emoji:'💪', name:'Cross Training',   sub:'8-week run-strength plan' },
             { id:'core',        emoji:'🔥',   name:'Core & Abs',       sub:'6-day ab workout programme' },
           ].map(m => `
             <div onclick="toggleOnboardModule('${m.id}',this)"
