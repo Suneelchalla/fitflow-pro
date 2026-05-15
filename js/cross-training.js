@@ -16,6 +16,14 @@ function initCrossTrainingPage() {
 }
 
 // ── PLAN REGISTRATION ─────────────────────────────────────────────
+//
+// Cross Training plan registration writes to the same PlanProgress sheet
+// that running plans use — keyed by planKey:'crosstraining'. Two reasons:
+//   1. Consistent with running plans (admin sees all plans in one sheet)
+//   2. Doesn't clutter the global Content sheet with per-user records
+// The Apps Script's savePlanRegistration was updated to dedup on
+// userId + planKey so a user can have both a running plan AND a Cross
+// Training plan active simultaneously without one overwriting the other.
 function _ctPlanKey(uid) { return 'ff_ct_plan_' + uid; }
 function getCtPlan() {
   const u = APP.currentUser;
@@ -24,15 +32,18 @@ function getCtPlan() {
 function registerCtPlan() {
   const u = APP.currentUser;
   if (!u) return;
-  Store.set(_ctPlanKey(u.id), {
-    startDate: todayStr(),
-    startedAt: Date.now(),
-  });
-  // Best-effort sync to sheets (uses generic saveContent — admin can see it)
+  const startDate    = todayStr();
+  const registeredAt = new Date().toISOString();
+  // Local-first so the UI reflects the change immediately, even if offline
+  Store.set(_ctPlanKey(u.id), { startDate, startedAt: Date.now() });
+  // Sync to PlanProgress sheet via the proper plan-registration action
   try {
-    Sheets.post('saveContent', {
-      key: 'ct_plan_' + u.id,
-      value: { startDate: todayStr(), startedAt: Date.now() },
+    Sheets.post('savePlanRegistration', {
+      userId:       u.id,
+      email:        u.email,
+      planKey:      'crosstraining',
+      startDate,
+      registeredAt,
     });
   } catch {}
   showToast('🎯 8-Week Plan started! Today: ' + _ctTodayLabel(), 'success');
@@ -42,8 +53,12 @@ function clearCtPlan() {
   const u = APP.currentUser;
   if (!u) return;
   Store.remove(_ctPlanKey(u.id));
+  // Mark the PlanProgress row as UNREGISTERED — only the crosstraining one
   try {
-    Sheets.post('saveContent', { key: 'ct_plan_' + u.id, value: null });
+    Sheets.post('clearActivePlan', {
+      userId:  u.id,
+      planKey: 'crosstraining',
+    });
   } catch {}
   showToast('Plan reset. Pick up again when ready.', 'info');
   renderCrossTrainingPage();
