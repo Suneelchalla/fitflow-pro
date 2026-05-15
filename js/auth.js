@@ -565,6 +565,26 @@ async function _syncPlanProgress(userId) {
       }
     }
 
+    // Sync the Cross Training plan — separate row in PlanProgress (planKey:'crosstraining').
+    // The Apps Script's savePlanRegistration was updated to dedup on userId + planKey,
+    // so running plan and Cross Training plan can coexist as two REGISTERED rows.
+    try {
+      const ctRes = await Sheets.get('getActivePlan', { userId, planKey: 'crosstraining' });
+      if (ctRes?.success && ctRes.plan?.startDate) {
+        const ctKey = 'ff_ct_plan_' + userId;
+        const localCt = Store.get(ctKey);
+        // Only write if local is missing or starts on a different date
+        if (!localCt || localCt.startDate !== ctRes.plan.startDate) {
+          Store.set(ctKey, {
+            startDate: ctRes.plan.startDate,
+            startedAt: ctRes.plan.registeredAt
+              ? new Date(ctRes.plan.registeredAt).getTime()
+              : Date.now(),
+          });
+        }
+      }
+    } catch {}
+
     // Sync completed plan days
     const progRes = await Sheets.get('getPlanProgress', { userId });
     if (!progRes?.success || !Array.isArray(progRes.completedDays)) return;
