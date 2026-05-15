@@ -7,7 +7,7 @@
 // Import OneSignal's service worker — handles push notifications
 importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
 
-const CACHE = 'fitflow-v119';
+const CACHE = 'fitflow-v120';
 const ASSETS = [
   './',
   './index.html',
@@ -17,13 +17,16 @@ const ASSETS = [
   './js/app.js?v=79',
   './js/auth.js?v=80',
   './js/dashboard.js?v=86',
-  './js/running.js?v=91',
+  './js/running.js?v=92',
   './js/admin.js?v=80',
   './push.js?v=7',
   './js/custom-workouts.js?v=75',
   './js/weekly-report.js?v=77',
   './manifest.json',
   './privacy.html',
+  // Leaflet JS — critical to pre-cache. Without this, cold start has to fetch
+  // it from CDN before the live map can render. Causes blank map on first run.
+  'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css',
   'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap'
 ];
@@ -88,6 +91,8 @@ self.addEventListener('fetch', e => {
   // Never cache Nominatim reverse-geocoding calls — each URL encodes unique
   // lat/lon coordinates and caching them would grow the cache unboundedly
   if (e.request.url.includes('nominatim.openstreetmap.org')) return;
+  // Same for BigDataCloud reverse-geocode (used as primary geocoder)
+  if (e.request.url.includes('bigdatacloud.net')) return;
 
   e.respondWith(
     caches.match(e.request).then(cached => {
