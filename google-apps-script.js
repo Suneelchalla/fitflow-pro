@@ -401,7 +401,7 @@ function setupSheets() {
       _ymdLocal(),'System','']);
   }
   _ensureSheet(SHEETS.LOGS,            ['LogID','UserID','UserEmail','Module','Day','Date','Timestamp']);
-  _ensureSheet(SHEETS.RUN_LOGS,        ['LogID','UserID','UserEmail','Date','Distance_km','Duration_sec','Pace_min_km','PlanType','Timestamp','ActivityType','CoordsJSON','Title','Description']);
+  _ensureSheet(SHEETS.RUN_LOGS,        ['LogID','UserID','UserEmail','Date','Distance_km','Duration_sec','Pace_min_km','PlanType','Timestamp','ActivityType','CoordsJSON','Title','Description','LocationName']);
   _ensureSheet(SHEETS.HYDRATION_LOGS,  ['LogID','UserID','UserEmail','Date','GlassesTarget','GlassesDone','Timestamp']);
   _ensureSheet(SHEETS.CONTENT,         ['Key','Value','UpdatedAt']);
   _ensureSheet(SHEETS.FEEDBACK,        ['FeedbackID','UserID','Name','Email','Category','Rating','Message','Date','Timestamp','AdminReply','AdminReplyAt','AdminRead']);
@@ -426,6 +426,7 @@ function migrateRunningLog() {
   const hasCoordsJson   = header.includes('coordsjson');
   const hasTitle        = header.includes('title');
   const hasDescription  = header.includes('description');
+  const hasLocationName = header.includes('locationname');
   let colsAdded = 0;
   const addCol = (label, defaultVal) => {
     const nextCol = data[0].length + colsAdded + 1;
@@ -439,6 +440,7 @@ function migrateRunningLog() {
   if (!hasCoordsJson)   addCol('CoordsJSON',   '[]');
   if (!hasTitle)        addCol('Title',         '');
   if (!hasDescription)  addCol('Description',   '');
+  if (!hasLocationName) addCol('LocationName',  '');
   if (colsAdded === 0) Logger.log('RunningLog already up to date.');
   SpreadsheetApp.flush();
   Logger.log('✅ Migration complete!');
@@ -729,6 +731,7 @@ function getAllLogs() {
 function logRun(body) {
   const sh = getSheet(SHEETS.RUN_LOGS);
   ensureHeaders(sh,['LogID','UserID','UserEmail','Date','Distance_km','Duration_sec','Pace_min_km','PlanType','Timestamp','ActivityType','CoordsJSON','Title','Description','LocationName']);
+  _ensureLocationNameCol(sh);   // backfill the header on legacy sheets so reads work
   const data   = sh.getDataRange().getValues();
   const newId  = (body.id || ('run_'+Date.now())).toString();
   const userId = (body.userId||'').toString();
@@ -767,6 +770,7 @@ function logRun(body) {
 
 function getUserRunLogs(userId) {
   const sh   = getSheet(SHEETS.RUN_LOGS);
+  _ensureLocationNameCol(sh);   // ensure header exists so reads return locationName
   const data = sh.getDataRange().getValues();
   if (data.length<2) return [];
   const header    = data[0].map(h => (h||'').toString().trim().toLowerCase());
@@ -801,6 +805,7 @@ function getUserRunLogs(userId) {
 
 function getAllRunLogs() {
   const sh   = getSheet(SHEETS.RUN_LOGS);
+  _ensureLocationNameCol(sh);   // ensure header exists so reads return locationName
   const data = sh.getDataRange().getValues();
   if (data.length<2) return [];
   const header    = data[0].map(h => (h||'').toString().trim().toLowerCase());
@@ -2270,6 +2275,32 @@ function testGoogleLogin() {
 // ════════════════════════════════════════════════════════════════
 function ensureHeaders(sh, headers) {
   if (sh.getLastRow()===0) { sh.appendRow(headers); styleHeader(sh, headers.length); }
+}
+
+// Ensures the RunningLog sheet has a 'LocationName' header column.
+// Required because ensureHeaders() above only writes headers when the sheet is
+// EMPTY — so sheets that existed before the LocationName field was added would
+// keep accepting LocationName WRITES into an unnamed 14th column but reading
+// them back returned '' because header.indexOf('locationname') was -1.
+//
+// This helper is cheap (one read of row 1) and idempotent — call it from every
+// read/write of the RunningLog sheet. The first call after deploy adds the
+// header; every subsequent call is a no-op.
+function _ensureLocationNameCol(sh) {
+  try {
+    if (sh.getLastRow() === 0) return;   // ensureHeaders will create everything
+    const lastCol = sh.getLastColumn();
+    const headers = sh.getRange(1, 1, 1, lastCol).getValues()[0]
+      .map(h => (h||'').toString().trim().toLowerCase());
+    if (headers.includes('locationname')) return;   // already present
+    const nextCol = lastCol + 1;
+    sh.getRange(1, nextCol).setValue('LocationName')
+      .setFontWeight('bold').setBackground('#1B5E20').setFontColor('#FFFFFF');
+    // existing rows get blank — Sheets returns '' which is what we want
+    SpreadsheetApp.flush();
+  } catch (err) {
+    Logger.log('_ensureLocationNameCol failed: ' + err.message);
+  }
 }
 
 function styleHeader(sh, colCount) {
