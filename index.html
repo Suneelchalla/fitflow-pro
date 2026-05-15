@@ -2011,7 +2011,7 @@ window.addEventListener('DOMContentLoaded', function() {
     <div style="flex:1">
 
       <!-- LOG TAB -->
-      <div id="run-tab-log" class="run-tab-content active" style="padding:12px 16px;display:flex;flex-direction:column;gap:10px">
+      <div id="run-tab-log" class="run-tab-content active" style="padding:12px 16px">
 
         <!-- Activity type selector -->
         <div>
@@ -2098,6 +2098,20 @@ window.addEventListener('DOMContentLoaded', function() {
 
     <!-- Live map — fills entire background; pointer-events managed via CSS -->
     <div id="run-live-map" style="position:absolute;inset:0;z-index:0"></div>
+
+    <!-- Acquiring-GPS overlay — covers the map until the first GPS fix arrives,
+         so the user doesn't stare at blank/ocean tiles on cold start. JS hides
+         this in _updateLiveMap() on the first real GPS fix. -->
+    <div id="run-gps-overlay" style="position:absolute;inset:0;z-index:15;
+      display:flex;flex-direction:column;align-items:center;justify-content:center;
+      background:rgba(7,21,16,0.92);pointer-events:none;text-align:center;padding:0 32px">
+      <div style="font-size:42px;animation:_runGpsSpin 1.8s linear infinite">📡</div>
+      <div style="margin-top:14px;font-size:15px;font-weight:600;color:#fff;letter-spacing:.02em">Acquiring GPS…</div>
+      <div style="margin-top:4px;font-size:12px;color:rgba(255,255,255,0.6);line-height:1.5">
+        Hold still for a few seconds<br>so your phone can lock onto satellites
+      </div>
+    </div>
+    <style>@keyframes _runGpsSpin{from{transform:rotate(0)}to{transform:rotate(360deg)}}</style>
 
     <!-- Top overlay: back + activity label + gps badge -->
     <div style="position:absolute;top:0;left:0;right:0;z-index:20;
@@ -3014,23 +3028,16 @@ window.addEventListener('DOMContentLoaded', function() {
 <!-- ═══════════════════════════════════════════════════════════════ -->
 <!-- SCRIPTS                                                          -->
 <!-- ═══════════════════════════════════════════════════════════════ -->
-<!-- Clear OLD service worker caches (keeps current fitflow-v104) -->
-<script>
-  if ('serviceWorker' in navigator && window.caches) {
-    caches.keys().then(function(keys) {
-      keys.forEach(function(k) {
-        // Only delete caches that are NOT the current version
-        if (k !== 'fitflow-v104') caches.delete(k);
-      });
-    });
-  }
-</script>
+<!-- NOTE: Old cache-cleanup script removed — it referenced a stale
+     version string ('fitflow-v104') and was wiping the current cache
+     on every page load, defeating the SW pre-cache. sw.js's activate
+     handler already deletes any cache that isn't the current version. -->
 <script src="js/data.js?v=75"></script>
 <script src="js/data-cali.js?v=75"></script>
 <script src="js/app.js?v=79"></script>
 <script src="js/auth.js?v=80"></script>
 <script src="js/dashboard.js?v=83"></script>
-<script src="js/running.js?v=91"></script>
+<script src="js/running.js?v=92"></script>
 <script src="js/admin.js?v=80"></script>
 <script src="push.js?v=7"></script>
 <script src="js/custom-workouts.js?v=75"></script>
