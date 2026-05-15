@@ -758,13 +758,14 @@ function renderContentHome() {
   const container = document.getElementById('content-links-list');
   const connected = !!Store.getSheetsConfig().webAppUrl;
   const modules   = [
-    { id: 'cardio',       name: 'Home Cardio',    emoji: '🏠',    hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
-    { id: 'gym',          name: 'Gym Workouts',   emoji: '🏋️',   hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
-    { id: 'yoga',         name: 'Yoga',           emoji: '🧘',    hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
-    { id: 'stretching',   name: 'Stretching',     emoji: '🤸',    hasSections: ['exercises','hydration','diet'] },
-    { id: 'running',      name: 'Running',        emoji: '🏃',    hasSections: ['warmup','cooldown','hydration','diet'] },
-    { id: 'calisthenics', name: 'Calisthenics',   emoji: '🤸‍♂️', hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
-    { id: 'core',         name: 'Core & Abs',     emoji: '🔥',    hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
+    { id: 'cardio',        name: 'Home Cardio',     emoji: '🏠',    hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
+    { id: 'gym',           name: 'Gym Workouts',    emoji: '🏋️',    hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
+    { id: 'yoga',          name: 'Yoga',            emoji: '🧘',    hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
+    { id: 'stretching',    name: 'Stretching',      emoji: '🤸',    hasSections: ['exercises','hydration','diet'] },
+    { id: 'running',       name: 'Running',         emoji: '🏃',    hasSections: ['warmup','cooldown','hydration','diet'] },
+    { id: 'calisthenics',  name: 'Calisthenics',    emoji: '🤸‍♂️', hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
+    { id: 'crosstraining', name: 'Cross Training',  emoji: '💪',    hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
+    { id: 'core',          name: 'Core & Abs',      emoji: '🔥',    hasSections: ['exercises','warmup','cooldown','hydration','diet'] },
   ];
 
   container.innerHTML = `
@@ -822,12 +823,13 @@ function openModuleEditor(moduleId) {
 
 function renderModuleEditor() {
   const info = {
-    cardio:       { name: 'Home Cardio',   emoji: '🏠' },
-    gym:          { name: 'Gym Workouts',  emoji: '🏋️' },
-    yoga:         { name: 'Yoga',          emoji: '🧘' },
-    stretching:   { name: 'Stretching',    emoji: '🤸' },
-    running:      { name: 'Running',       emoji: '🏃' },
-    calisthenics: { name: 'Calisthenics',  emoji: '🤸‍♂️' },
+    cardio:        { name: 'Home Cardio',    emoji: '🏠' },
+    gym:           { name: 'Gym Workouts',   emoji: '🏋️' },
+    yoga:          { name: 'Yoga',           emoji: '🧘' },
+    stretching:    { name: 'Stretching',     emoji: '🤸' },
+    running:       { name: 'Running',        emoji: '🏃' },
+    calisthenics:  { name: 'Calisthenics',   emoji: '🤸‍♂️' },
+    crosstraining: { name: 'Cross Training', emoji: '💪' },
   }[AdminEdit.module] || { name: AdminEdit.module, emoji: '💪' };
 
   document.getElementById('editor-module-title').textContent = info.emoji + ' ' + info.name;
@@ -841,12 +843,13 @@ function renderModuleEditor() {
     { id: 'plans',     label: '🗓 Plans' },
   ];
   const excludeMap = {
-    stretching:   ['warmup','cooldown','plans'],
-    running:      ['exercises'],
-    cardio:       ['plans'],
-    gym:          ['plans'],
-    yoga:         ['plans'],
-    calisthenics: ['plans'],
+    stretching:    ['warmup','cooldown','plans'],
+    running:       ['exercises'],
+    cardio:        ['plans'],
+    gym:           ['plans'],
+    yoga:          ['plans'],
+    calisthenics:  ['plans'],
+    crosstraining: ['plans'],
   };
   const excluded = excludeMap[AdminEdit.module] || ['plans'];
   const sections = allSections.filter(s => !excluded.includes(s.id));
@@ -885,6 +888,9 @@ function renderEditorSection() {
   const { section, module: moduleId } = AdminEdit;
   if (moduleId === 'calisthenics' && section === 'exercises') {
     renderCalisthenicsEditor(body); return;
+  }
+  if (moduleId === 'crosstraining' && section === 'exercises') {
+    renderCrossTrainingEditor(body); return;
   }
   if      (section === 'exercises')  renderExerciseEditor(moduleId, body);
   else if (section === 'warmup')     renderWarmCoolEditor(moduleId, 'warmup', body);
@@ -2145,8 +2151,8 @@ async function testSheetsConnection() {
 }
 
 // ── MODULE HELPERS (shared with dashboard) ────────────────────────
-function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🙆', running: '🏃', calisthenics: '🤸‍♂️', core: '🔥' }[mod] || '💪'; }
-function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics', core: 'Core & Abs' }[mod] || mod; }
+function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🙆', running: '🏃', calisthenics: '🤸‍♂️', crosstraining: '💪', core: '🔥' }[mod] || '💪'; }
+function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics', crosstraining: 'Cross Training', core: 'Core & Abs' }[mod] || mod; }
 
 // ── QUOTES TAB (inline in Admin Panel, not editor page) ───────────
 
@@ -2513,6 +2519,245 @@ async function saveCalisthenicsEditorChanges() {
   } catch(e) {
     showToast('Save failed: ' + e.message, 'error');
     if (btn) { btn.disabled = false; btn.textContent = '💾 Save Calisthenics'; }
+  }
+}
+
+
+// ════════════════════════════════════════════════════════════════
+// CROSS TRAINING EDITOR (custom — phase × day-type with upgrade variants)
+//   Storage keys: exercises_crosstraining_<phase> = { days: { lower:[], mobility:[], singleleg:[], posterior:[] } }
+//   Runtime reads via Store.getContent('exercises_crosstraining_' + phase.id)
+// ════════════════════════════════════════════════════════════════
+function renderCrossTrainingEditor(body) {
+  const _D = window.APP_DATA_DEFAULT || window.APP_DATA;
+  const mod = _D.modules?.crosstraining;
+  if (!mod) {
+    body.innerHTML = `
+      <div style="padding:24px;text-align:center;color:var(--text2)">
+        Cross Training data not loaded. Hard-refresh and try again.
+      </div>`;
+    return;
+  }
+  const phases  = mod.phases || [];
+  const labels  = mod.dayTypeLabels || {};
+  const dayTypes = ['lower','mobility','singleleg','posterior'];
+  const activePhase = AdminEdit._ctPhase || 'base';
+
+  body.innerHTML = `
+    <div style="font-size:13px;color:var(--text2);padding:0 16px 12px;line-height:1.5">
+      ✏️ Edit Cross Training exercises per phase. Each main exercise can have an optional upgrade variant (chair/wall/dumbbell version) shown below it for users.
+    </div>
+    <div style="padding:0 16px 12px">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:8px;font-weight:700;text-transform:uppercase;letter-spacing:.06em">Phase</div>
+      <div style="display:flex;gap:8px">
+        ${phases.map(p => `
+          <button onclick="selectAdminCtPhase('${p.id}')"
+            style="flex:1;padding:10px;border-radius:12px;border:2px solid ${activePhase===p.id?'var(--g4)':'var(--border)'};
+              background:${activePhase===p.id?'rgba(46,125,70,0.2)':'var(--surface)'};cursor:pointer;font-size:13px;font-weight:700;
+              color:${activePhase===p.id?'var(--g5)':'var(--text2)'}">
+            ${p.name}
+            <div style="font-size:10px;font-weight:400;color:var(--text3);margin-top:2px">Wk ${p.weeks[0]}–${p.weeks[p.weeks.length-1]}</div>
+          </button>`).join('')}
+      </div>
+    </div>
+    ${dayTypes.map(dt => {
+      const appDefault = mod.days?.[activePhase]?.[dt] || [];
+      const saved = Store.getContent('exercises_crosstraining_' + activePhase);
+      const savedDay = saved?.days?.[dt] || [];
+      const exercises = savedDay.length > 0 ? savedDay : appDefault;
+      const meta = labels[dt] || { emoji:'💪', name:dt };
+      return `
+        <div style="margin-bottom:8px">
+          <div style="padding:10px 16px;background:rgba(46,125,70,0.15);font-weight:700;font-size:14px;
+            display:flex;justify-content:space-between;align-items:center">
+            <span>${meta.emoji} ${meta.name}</span>
+            <span style="font-size:12px;color:var(--text3)">${exercises.length} exercises</span>
+          </div>
+          <div data-ctdaytype="${dt}" data-ctphase="${activePhase}" style="padding:0 16px">
+            ${exercises.map((ex,i) => _ctExCard(ex,i,dt)).join('')}
+            <button class="add-exercise-btn" onclick="addCtExercise('${dt}')">+ Add Exercise</button>
+          </div>
+        </div>`;
+    }).join('')}`;
+
+  activateEditing(body);
+
+  const btn = document.getElementById('editor-save-btn');
+  if (btn) {
+    btn.textContent = '💾 Save Cross Training';
+    btn.onclick = saveCrossTrainingEditorChanges;
+  }
+}
+
+function selectAdminCtPhase(phaseId) {
+  if (AdminEdit.isDirty && !confirm('You have unsaved changes in this phase. Discard them?')) return;
+  AdminEdit._ctPhase = phaseId;
+  AdminEdit.isDirty = false;
+  _resetSaveBtn();
+  renderEditorSection();
+}
+
+function _ctExCard(ex, idx, dayType) {
+  const u = ex.upgrade;
+  const hasUpgrade = !!(u && u.name);
+  return `
+    <div class="exercise-card ex-row" data-idx="${idx}" data-ctday="${dayType}" style="margin:10px 0;position:relative">
+      <button class="delete-ex-btn" onclick="this.closest('.ex-row').remove();markDirty()" title="Delete">✕</button>
+      <div class="exercise-body">
+        <div style="margin-bottom:8px">
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Exercise Name</div>
+          <div class="exercise-name editable" data-field="name" contenteditable="true">${ex.name||''}</div>
+        </div>
+        <div style="display:flex;gap:12px;margin-bottom:10px">
+          <div style="flex:1">
+            <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Sets</div>
+            <div class="editable" data-field="sets" contenteditable="true" style="font-weight:600">${ex.sets||3}</div>
+          </div>
+          <div style="flex:2">
+            <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Reps / Duration</div>
+            <div class="editable" data-field="reps" contenteditable="true" style="font-weight:600">${ex.reps||''}</div>
+          </div>
+        </div>
+        <div style="margin-bottom:8px">
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Description</div>
+          <div class="editable-block editable" data-field="desc" contenteditable="true" style="font-size:13px;color:var(--text2);line-height:1.6">${ex.desc||''}</div>
+        </div>
+        <div style="margin-bottom:10px">
+          <div style="font-size:11px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px">Demo Link</div>
+          <div class="editable" data-field="demo" contenteditable="true" style="font-size:12px;color:var(--g5);word-break:break-all">${ex.demo||''}</div>
+        </div>
+
+        <!-- Optional upgrade variant -->
+        <div class="upgrade-section" data-has-upgrade="${hasUpgrade?'1':'0'}"
+          style="padding:10px;border-radius:10px;background:rgba(67,160,90,0.06);border:1px dashed rgba(67,160,90,0.3)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+            <span style="font-size:11px;font-weight:700;color:var(--g5);text-transform:uppercase;letter-spacing:.05em">⬆ Optional Upgrade Variant</span>
+            <button onclick="_ctToggleUpgrade(this)"
+              style="background:none;border:1px solid var(--border);border-radius:6px;color:var(--text2);font-size:11px;padding:3px 10px;cursor:pointer">
+              ${hasUpgrade?'Remove':'+ Add'}
+            </button>
+          </div>
+          <div class="upgrade-fields" style="display:${hasUpgrade?'block':'none'}">
+            <div style="margin-bottom:8px">
+              <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:2px;text-transform:uppercase;letter-spacing:.04em">Upgrade Name</div>
+              <div class="editable" data-upgrade-field="name" contenteditable="true" style="font-weight:600;font-size:13px;color:var(--text)">${u?.name||''}</div>
+            </div>
+            <div style="display:flex;gap:8px;margin-bottom:8px">
+              <div style="flex:2">
+                <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:2px;text-transform:uppercase;letter-spacing:.04em">Equipment Label</div>
+                <div class="editable" data-upgrade-field="equipment" contenteditable="true" style="font-size:12px;color:var(--text2)">${u?.equipment||''}</div>
+              </div>
+              <div style="flex:2">
+                <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:2px;text-transform:uppercase;letter-spacing:.04em">Reps</div>
+                <div class="editable" data-upgrade-field="reps" contenteditable="true" style="font-size:12px;color:var(--text2)">${u?.reps||''}</div>
+              </div>
+            </div>
+            <div style="margin-bottom:8px">
+              <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:2px;text-transform:uppercase;letter-spacing:.04em">Upgrade Description</div>
+              <div class="editable-block editable" data-upgrade-field="desc" contenteditable="true" style="font-size:12px;color:var(--text2);line-height:1.5">${u?.desc||''}</div>
+            </div>
+            <div>
+              <div style="font-size:10px;color:var(--text3);font-weight:600;margin-bottom:2px;text-transform:uppercase;letter-spacing:.04em">Upgrade Demo Link</div>
+              <div class="editable" data-upgrade-field="demo" contenteditable="true" style="font-size:11px;color:var(--g5);word-break:break-all">${u?.demo||''}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+}
+
+// Toggle the upgrade variant's fields on/off and flip the button label
+function _ctToggleUpgrade(btn) {
+  const sec     = btn.closest('.upgrade-section');
+  const fields  = sec.querySelector('.upgrade-fields');
+  const has     = sec.dataset.hasUpgrade === '1';
+  if (has) {
+    fields.style.display = 'none';
+    sec.dataset.hasUpgrade = '0';
+    btn.textContent = '+ Add';
+  } else {
+    fields.style.display = 'block';
+    sec.dataset.hasUpgrade = '1';
+    btn.textContent = 'Remove';
+    activateEditing(sec);
+  }
+  markDirty();
+}
+
+function addCtExercise(dayType) {
+  const container = document.querySelector(`[data-ctdaytype="${dayType}"]`);
+  if (!container) return;
+  const addBtn = container.querySelector('.add-exercise-btn');
+  const div    = document.createElement('div');
+  div.innerHTML = _ctExCard({ name:'New Exercise', sets:3, reps:'10 reps', desc:'Enter description.', demo:'', upgrade:null }, 999, dayType);
+  const card = div.firstElementChild;
+  activateEditing(card);
+  container.insertBefore(card, addBtn);
+  markDirty();
+  card.querySelector('[data-field="name"]')?.focus();
+}
+
+// Read text from an upgrade-field within a row
+function _textUpg(row, field) {
+  const el = row.querySelector(`[data-upgrade-field="${field}"]`);
+  return el ? el.textContent.trim() : '';
+}
+
+async function saveCrossTrainingEditorChanges() {
+  const btn = document.getElementById('editor-save-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  try {
+    const phase    = AdminEdit._ctPhase || 'base';
+    const dayTypes = ['lower','mobility','singleleg','posterior'];
+    const result   = { days: {} };
+
+    dayTypes.forEach(dt => {
+      const dayEl = document.querySelector(`[data-ctdaytype="${dt}"]`);
+      if (!dayEl) {
+        // Fallback to built-in if section didn't render (shouldn't happen)
+        result.days[dt] = (window.APP_DATA_DEFAULT || window.APP_DATA)
+          .modules?.crosstraining?.days?.[phase]?.[dt] || [];
+        return;
+      }
+      result.days[dt] = Array.from(dayEl.querySelectorAll('.ex-row')).map(row => {
+        const exercise = {
+          name:  _text(row, 'name'),
+          sets:  parseInt(_text(row, 'sets')) || 3,
+          reps:  _text(row, 'reps'),
+          desc:  _text(row, 'desc'),
+          demo:  _text(row, 'demo'),
+        };
+        // Include upgrade only if the section is marked active (Remove button visible)
+        const upgSec = row.querySelector('.upgrade-section');
+        if (upgSec?.dataset?.hasUpgrade === '1') {
+          const u = {
+            name:      _textUpg(row, 'name'),
+            equipment: _textUpg(row, 'equipment'),
+            reps:      _textUpg(row, 'reps'),
+            desc:      _textUpg(row, 'desc'),
+            demo:      _textUpg(row, 'demo'),
+          };
+          if (u.name) exercise.upgrade = u;
+        }
+        return exercise;
+      });
+    });
+
+    const key = 'exercises_crosstraining_' + phase;
+    Store.setContent(key, result);
+    // Persist to Google Sheets so all users + devices pick this up
+    await Sheets.post('saveContent', { key, value: result });
+    AdminEdit.isDirty = false;
+    const phaseName = (window.APP_DATA?.modules?.crosstraining?.phases?.find(p=>p.id===phase)?.name) || phase;
+    showToast('Cross Training · ' + phaseName + ' saved! ✅', 'success');
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = '✅ Saved!';
+      setTimeout(() => { if (btn) btn.textContent = '💾 Save Cross Training'; }, 3000);
+    }
+  } catch (e) {
+    showToast('Save failed: ' + e.message, 'error');
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Save Cross Training'; }
   }
 }
 
