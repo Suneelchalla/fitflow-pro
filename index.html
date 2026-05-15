@@ -2464,25 +2464,46 @@ window.addEventListener('DOMContentLoaded', function() {
         </div>
       </div>
 
-      <!-- Stats row — single horizontal line on desktop -->
+      <!-- Stats row — single horizontal line on desktop. Each card is clickable
+           and opens a drill-down modal listing the underlying records. -->
       <div class="admin-stats-row">
-        <div class="admin-stat">
+        <div class="admin-stat" role="button" tabindex="0"
+          onclick="_drillTopStat('users')"
+          style="cursor:pointer;transition:transform .1s,background .15s"
+          onmouseover="this.style.background='rgba(67,160,90,0.06)'"
+          onmouseout="this.style.background=''">
           <div class="admin-stat-val" id="admin-stat-users">—</div>
           <div class="admin-stat-lbl">Users</div>
         </div>
-        <div class="admin-stat">
+        <div class="admin-stat" role="button" tabindex="0"
+          onclick="_drillTopStat('today')"
+          style="cursor:pointer;transition:transform .1s,background .15s"
+          onmouseover="this.style.background='rgba(67,160,90,0.06)'"
+          onmouseout="this.style.background=''">
           <div class="admin-stat-val" id="admin-stat-today">0</div>
           <div class="admin-stat-lbl">Today Active</div>
         </div>
-        <div class="admin-stat">
+        <div class="admin-stat" role="button" tabindex="0"
+          onclick="_drillTopStat('workouts')"
+          style="cursor:pointer;transition:transform .1s,background .15s"
+          onmouseover="this.style.background='rgba(67,160,90,0.06)'"
+          onmouseout="this.style.background=''">
           <div class="admin-stat-val" id="admin-stat-workouts">0</div>
           <div class="admin-stat-lbl">Workouts</div>
         </div>
-        <div class="admin-stat">
+        <div class="admin-stat" role="button" tabindex="0"
+          onclick="_drillTopStat('runs')"
+          style="cursor:pointer;transition:transform .1s,background .15s"
+          onmouseover="this.style.background='rgba(67,160,90,0.06)'"
+          onmouseout="this.style.background=''">
           <div class="admin-stat-val" id="admin-stat-runs">0</div>
           <div class="admin-stat-lbl">Runs</div>
         </div>
-        <div class="admin-stat">
+        <div class="admin-stat" role="button" tabindex="0"
+          onclick="_drillTopStat('custom')"
+          style="cursor:pointer;transition:transform .1s,background .15s"
+          onmouseover="this.style.background='rgba(67,160,90,0.06)'"
+          onmouseout="this.style.background=''">
           <div class="admin-stat-val" id="admin-stat-custom">0</div>
           <div class="admin-stat-lbl">Custom WOs</div>
         </div>
@@ -2712,6 +2733,27 @@ window.addEventListener('DOMContentLoaded', function() {
     <div class="modal-handle"></div>
     <div id="user-progress-content"></div>
     <button class="btn btn-outline btn-full" style="margin-top:12px" onclick="closeModal('modal-user-progress')">Close</button>
+  </div>
+</div>
+
+<!-- Generic Admin Insight (drill-down) Modal — used by every clickable admin stat/card/bar -->
+<div id="modal-admin-insight" class="modal-overlay">
+  <div class="modal-sheet" style="max-height:88vh;overflow:hidden;display:flex;flex-direction:column;padding:0">
+    <div style="padding:18px 20px 12px;border-bottom:1px solid var(--border);flex-shrink:0;display:flex;align-items:flex-start;justify-content:space-between;gap:12px">
+      <div style="min-width:0;flex:1">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+          <span id="admin-insight-emoji" style="font-size:20px"></span>
+          <div id="admin-insight-title" style="font-size:17px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Insight</div>
+        </div>
+        <div id="admin-insight-subtitle" style="font-size:12.5px;color:var(--text3);line-height:1.45"></div>
+      </div>
+      <button onclick="closeModal('modal-admin-insight')"
+        aria-label="Close"
+        style="width:34px;height:34px;border-radius:50%;padding:0;font-size:20px;
+        background:rgba(255,255,255,0.06);border:1px solid var(--border);color:var(--text2);
+        cursor:pointer;flex-shrink:0;line-height:1">×</button>
+    </div>
+    <div id="admin-insight-body" style="flex:1;overflow-y:auto;padding:14px 16px 20px"></div>
   </div>
 </div>
 
@@ -2989,7 +3031,7 @@ window.addEventListener('DOMContentLoaded', function() {
 <script src="js/auth.js?v=80"></script>
 <script src="js/dashboard.js?v=83"></script>
 <script src="js/running.js?v=89"></script>
-<script src="js/admin.js?v=78"></script>
+<script src="js/admin.js?v=80"></script>
 <script src="push.js?v=7"></script>
 <script src="js/custom-workouts.js?v=75"></script>
 <script src="js/weekly-report.js?v=76"></script>
