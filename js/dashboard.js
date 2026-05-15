@@ -247,60 +247,131 @@ function _persistOrder() {
 }
 
 // ── MOBILE TOUCH DRAG & DROP ──────────────────────────────────────
-let _touch = { active: false, card: null, clone: null, startX: 0, startY: 0, lastOver: null };
+// Hardware-accelerated implementation:
+//   • Clone moves via transform: translate3d() — GPU-composited, no layout
+//   • Card-under-finger detection uses pre-computed rects (no elementFromPoint
+//     which forces a reflow each call)
+//   • Pointer position is read every touchmove but DOM updates are throttled
+//     to one per animation frame (60 Hz max) — matches the screen refresh rate
+//     so we never waste paint cycles
+//   • touch-action:none on body during drag stops the browser's native scroll
+//     handler from fighting the JS handler
+
+let _touch = {
+  active:    false,
+  card:      null,
+  clone:     null,
+  startX:    0,
+  startY:    0,
+  curX:      0,
+  curY:      0,
+  rafId:     null,
+  cardRects: null,   // pre-computed bounding rects of all cards
+  lastOver:  null,
+};
 
 function tileTouchStart(e, card) {
-  // Only activate on long press (300ms) to not conflict with tap-to-open
+  // Long press 280ms to enter drag mode (otherwise the tap opens the module)
   _touch.timer = setTimeout(() => {
     _touch.active = true;
     _touch.card   = card;
-    _touch.startX = e.touches[0].clientX;
-    _touch.startY = e.touches[0].clientY;
 
-    // Create floating clone
-    const rect  = card.getBoundingClientRect();
+    const t = e.touches[0];
+    _touch.startX = t.clientX;
+    _touch.startY = t.clientY;
+    _touch.curX   = t.clientX;
+    _touch.curY   = t.clientY;
+
+    const rect = card.getBoundingClientRect();
+
+    // Cache every card's bounding rect ONCE so the move handler doesn't have
+    // to call elementFromPoint or query the DOM. With 8 cards this is ~0.1 ms;
+    // doing it per-move would be ~5 ms × 120 events/sec = a constant 60 % CPU.
+    const grid = document.getElementById('module-grid');
+    _touch.cardRects = [...grid.querySelectorAll('.module-card')].map(c => ({
+      el:   c,
+      rect: c.getBoundingClientRect(),
+    }));
+
+    // Floating clone — positioned once, then moved via transform every frame
     const clone = card.cloneNode(true);
     clone.style.cssText = `
-      position:fixed; z-index:9999; pointer-events:none; opacity:0.85;
-      width:${rect.width}px; height:${rect.height}px;
-      left:${rect.left}px; top:${rect.top}px;
-      transform:scale(1.05); transition:none;
-      border:2px solid var(--accent); border-radius:var(--radius-lg);
-      box-shadow:0 16px 48px rgba(0,0,0,0.6);
+      position: fixed;
+      left: ${rect.left}px;
+      top:  ${rect.top}px;
+      width:  ${rect.width}px;
+      height: ${rect.height}px;
+      z-index: 9999;
+      pointer-events: none;
+      opacity: 0.92;
+      transform: translate3d(0, 0, 0) scale(1.05);
+      transition: none;
+      will-change: transform;
+      border: 2px solid var(--accent);
+      border-radius: var(--radius-lg);
+      box-shadow: 0 16px 48px rgba(0,0,0,0.6);
     `;
     document.body.appendChild(clone);
-    _touch.clone   = clone;
-    card.style.opacity = '0.3';
-    navigator.vibrate && navigator.vibrate(50); // haptic feedback
-  }, 300);
+    _touch.clone = clone;
+
+    // Suppress the source card's transitions so opacity dim is instant
+    card.style.transition = 'none';
+    card.style.opacity    = '0.3';
+
+    // Block native scroll + text selection while a drag is in progress
+    document.body.style.touchAction = 'none';
+    document.body.style.userSelect  = 'none';
+
+    navigator.vibrate && navigator.vibrate(50);
+  }, 280);
 }
 
 function tileTouchMove(e, card) {
-  clearTimeout(_touch.timer);
-  if (!_touch.active || !_touch.clone) return;
+  // If the long press hasn't fired yet, any movement cancels the timer so
+  // a fast vertical drag still scrolls the page normally.
+  if (!_touch.active) { clearTimeout(_touch.timer); return; }
+
+  // Drag is live — keep the page from scrolling underneath
   e.preventDefault();
 
-  const touch = e.touches[0];
-  const dx    = touch.clientX - _touch.startX;
-  const dy    = touch.clientY - _touch.startY;
-  const rect  = _touch.card.getBoundingClientRect();
+  const t = e.touches[0];
+  _touch.curX = t.clientX;
+  _touch.curY = t.clientY;
 
-  // Move clone with finger
-  _touch.clone.style.left = (rect.left + dx) + 'px';
-  _touch.clone.style.top  = (rect.top  + dy) + 'px';
+  // Throttle DOM writes to one per animation frame. touchmove fires 100–120 Hz
+  // on modern phones; the screen paints at 60 Hz. Without rAF, ~half the
+  // updates are paint-discarded and just waste CPU.
+  if (_touch.rafId) return;
+  _touch.rafId = requestAnimationFrame(_updateDragPosition);
+}
 
-  // Find card under finger
-  _touch.clone.style.display = 'none';
-  const el = document.elementFromPoint(touch.clientX, touch.clientY);
-  _touch.clone.style.display = '';
+function _updateDragPosition() {
+  _touch.rafId = null;
+  if (!_touch.active || !_touch.clone) return;
 
-  const over = el?.closest('.module-card');
-  if (over && over !== _touch.card) {
-    if (over !== _touch.lastOver) {
-      document.querySelectorAll('.module-card').forEach(c => c.classList.remove('drag-over'));
-      over.classList.add('drag-over');
-      _touch.lastOver = over;
+  const dx = _touch.curX - _touch.startX;
+  const dy = _touch.curY - _touch.startY;
+
+  // GPU-composited move — no layout, no paint, just a transform matrix update
+  _touch.clone.style.transform = `translate3d(${dx}px, ${dy}px, 0) scale(1.05)`;
+
+  // Hit-test against pre-computed rects (no elementFromPoint, no reflow)
+  const x = _touch.curX, y = _touch.curY;
+  let over = null;
+  for (const entry of _touch.cardRects) {
+    if (entry.el === _touch.card) continue;
+    const r = entry.rect;
+    if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) {
+      over = entry.el;
+      break;
     }
+  }
+
+  // Only touch the DOM when the target actually changed
+  if (over !== _touch.lastOver) {
+    if (_touch.lastOver) _touch.lastOver.classList.remove('drag-over');
+    if (over)            over.classList.add('drag-over');
+    _touch.lastOver = over;
   }
 }
 
@@ -308,17 +379,34 @@ function tileTouchEnd(e, card) {
   clearTimeout(_touch.timer);
   if (!_touch.active) return;
 
-  // Clean up clone
-  if (_touch.clone) { _touch.clone.remove(); _touch.clone = null; }
-  card.style.opacity = '';
-  document.querySelectorAll('.module-card').forEach(c => c.classList.remove('drag-over'));
+  if (_touch.rafId) { cancelAnimationFrame(_touch.rafId); _touch.rafId = null; }
 
-  // Drop on target
+  // Tear down clone + restore source card
+  if (_touch.clone) { _touch.clone.remove(); _touch.clone = null; }
+  card.style.opacity    = '';
+  card.style.transition = '';
+
+  // Restore native scroll + selection
+  document.body.style.touchAction = '';
+  document.body.style.userSelect  = '';
+
+  if (_touch.lastOver) _touch.lastOver.classList.remove('drag-over');
+
+  // Commit the swap
   if (_touch.lastOver && _touch.lastOver !== card) {
     _swapTiles(card, _touch.lastOver);
   }
 
-  _touch = { active: false, card: null, clone: null, startX: 0, startY: 0, lastOver: null };
+  _touch = {
+    active:    false,
+    card:      null,
+    clone:     null,
+    startX:    0, startY: 0,
+    curX:      0, curY:   0,
+    rafId:     null,
+    cardRects: null,
+    lastOver:  null,
+  };
 }
 
 function refreshDashboard() {
