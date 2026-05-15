@@ -584,6 +584,23 @@ document.addEventListener('DOMContentLoaded', () => {
     // The SW is registered once by OneSignal when the user first visits the page.
   }
 
+  // ── BOOT-TIME ORPHAN NOTIFICATION CLEANUP ─────────────────────────
+  // Fix for "two activity notifications stuck in the shade" — when there is
+  // NO active run in storage (i.e. user is not mid-run), forcibly close every
+  // FitFlow activity notification across every service worker registration.
+  // This handles the case where an old SW version is still alive showing its
+  // own notification that the current SW cannot reach via postMessage.
+  // Runs once on every page load, ~2s after init so the SW has time to settle.
+  setTimeout(() => {
+    try {
+      const hasActiveRun = !!Store.get('ff_active_run');
+      if (hasActiveRun) return;  // don't kill notifications during an in-progress run
+      if (typeof _killAllActivityNotifications === 'function') {
+        _killAllActivityNotifications();
+      }
+    } catch (e) {}
+  }, 2000);
+
   const session = Store.getSession();
   if (session) {
     APP.currentUser = session;
