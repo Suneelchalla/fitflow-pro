@@ -244,7 +244,10 @@ function _initCardSwipe() {
   });
 }
 let _liveMap      = null;
-let _livePolyline = null;
+let _livePolyline = null;        // back-compat alias → points at _livePolylineMain
+let _livePolylineShadow = null;  // outer dark shadow (3D pipe — bottom layer)
+let _livePolylineMain   = null;  // main green stroke   (3D pipe — middle layer)
+let _livePolylineHilite = null;  // top highlight       (3D pipe — top layer)
 let _liveMarker   = null;
 let _sumMap       = null;
 let _userPanned   = false;   // true when user has manually panned — stops auto-recentering
@@ -252,6 +255,7 @@ let _lastMapPanTs = 0;       // timestamp of last animated setView — throttles
 let _mapBearing   = 0;       // current map rotation angle in degrees (0 = north up)
 let _bearingHistory = [];    // rolling window of recent bearings for smoothing
 let _rotationEnabled = true; // false when user has manually panned (disables auto-rotate)
+let _lastBearingFix = null;  // last coord used for bearing computation (anchor for next bearing)
 
 // ── BEARING HELPERS ───────────────────────────────────────────────
 // Calculate bearing in degrees (0=N, 90=E, 180=S, 270=W) between two coords
@@ -276,6 +280,68 @@ function _smoothBearing(newBearing) {
     cosSum += Math.cos(b * Math.PI / 180);
   });
   return ((Math.atan2(sinSum, cosSum) * 180 / Math.PI) + 360) % 360;
+}
+
+// ── CHAIKIN CORNER-CUTTING SMOOTHING ──────────────────────────────
+// Operates on Leaflet-style [[lat,lon], ...] arrays.
+// Each iteration cuts every corner into two new points (Q at 1/4, R at 3/4),
+// producing visually smooth curves WITHOUT overshoot (unlike bezier).
+// 2 iterations on ~500 points ≈ 2000 points — fine for Leaflet SVG at 60 fps.
+function _chaikinSmooth(latlngs, iterations) {
+  if (!latlngs || latlngs.length < 3) return latlngs ? latlngs.slice() : [];
+  let pts = latlngs;
+  const N = (iterations != null) ? iterations : 2;
+  for (let it = 0; it < N; it++) {
+    const out = [pts[0]];
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i], p1 = pts[i + 1];
+      out.push([ 0.75 * p0[0] + 0.25 * p1[0], 0.75 * p0[1] + 0.25 * p1[1] ]);
+      out.push([ 0.25 * p0[0] + 0.75 * p1[0], 0.25 * p0[1] + 0.75 * p1[1] ]);
+    }
+    out.push(pts[pts.length - 1]);
+    pts = out;
+  }
+  return pts;
+}
+
+// ── KILL ALL ACTIVITY NOTIFICATIONS (across ALL service worker registrations) ──
+// Critical fix for "stuck notifications from previous app version" — _swPost only
+// reaches the active controller, leaving orphan notifications owned by older SW
+// registrations alive forever (because they use requireInteraction:true).
+// This iterates every registration the browser has for this origin and forcibly
+// closes any notification that looks like a FitFlow activity notification.
+async function _killAllActivityNotifications() {
+  try {
+    if (!('serviceWorker' in navigator)) return;
+    const regs = await navigator.serviceWorker.getRegistrations();
+    for (const reg of regs) {
+      // 1. Politely ask the SW to stop (works if it's a current FitFlow SW)
+      const target = reg.active || reg.waiting || reg.installing;
+      if (target) {
+        try { target.postMessage({ type: 'ACTIVITY_STOP' }); } catch {}
+      }
+      // 2. Directly close notifications it owns (works regardless of SW responsiveness)
+      try {
+        const tagged = await reg.getNotifications({ tag: 'fitflow-activity' });
+        tagged.forEach(n => { try { n.close(); } catch {} });
+        // Belt-and-suspenders: also close untagged notifications from older SW
+        // versions whose body/title looks like a run tracker.
+        const all = await reg.getNotifications();
+        all.forEach(n => {
+          const blob = ((n.title || '') + ' ' + (n.body || '')).toLowerCase();
+          // Heuristic: matches old activity-notif formats from prior sw.js versions
+          if (
+            /\bkm\b|\bpace\b|\bkcal\b|tap to open fitflow|km\/h/.test(blob) &&
+            !/reminder|streak|push.notification/i.test(blob)
+          ) {
+            try { n.close(); } catch {}
+          }
+        });
+      } catch {}
+    }
+  } catch (e) {
+    console.warn('killAllActivityNotifications failed:', e?.message);
+  }
 }
 
 // Apply bearing rotation to live map — rotates tiles+polyline, counter-rotates marker
@@ -476,7 +542,12 @@ function stopActivityNotification() {
     clearInterval(_activityNotifInterval);
     _activityNotifInterval = null;
   }
+  // Send to controller (fast path)
   _swPost({ type: 'ACTIVITY_STOP' });
+  // ALSO sweep every registration — closes orphan notifications owned by old SW
+  // versions that _swPost can't reach. This is the fix for "two notifications
+  // stuck in shade" — the stale one is owned by a previous SW registration.
+  _killAllActivityNotifications();
 }
 
 function refreshActivityNotification() {
@@ -675,9 +746,13 @@ function initRunningPage() {
 
   if (!APP.runSession) {
     // Clear any stale activity notification left from a previous session that ended
-    // without sending ACTIVITY_STOP (e.g. app was killed, page was refreshed).
-    // requireInteraction:true keeps the notification alive indefinitely — this clears it.
+    // without sending ACTIVITY_STOP (e.g. app was killed, page was refreshed, OR
+    // previous SW version is still alive showing its own notification — common
+    // after Play Store updates). _swPost alone is not enough because it only
+    // reaches the active controller; orphan notifications owned by older SW
+    // registrations need _killAllActivityNotifications to sweep every reg.
     _swPost({ type: 'ACTIVITY_STOP' });
+    _killAllActivityNotifications();
     if (_activityNotifInterval) { clearInterval(_activityNotifInterval); _activityNotifInterval = null; }
   }
 
@@ -776,8 +851,9 @@ function _initLiveMap() {
     const container = document.getElementById('run-live-map');
     if (!container) return;
 
-    if (_liveMap) { _liveMap.remove(); _liveMap = null; _livePolyline = null; _liveMarker = null; }
+    if (_liveMap) { _liveMap.remove(); _liveMap = null; _livePolyline = null; _livePolylineShadow = null; _livePolylineMain = null; _livePolylineHilite = null; _liveMarker = null; }
     _userPanned = false;  // always reset pan lock so auto-center works from first fix
+    _lastBearingFix = null; // reset bearing anchor so course-up starts fresh
 
     // Use last known GPS coord if available, otherwise placeholder until real fix arrives
     const lastCoord = APP.gpsCoords.length > 0
@@ -842,6 +918,7 @@ function _initLiveMap() {
         _userPanned      = false;
         _rotationEnabled = true;
         _bearingHistory  = [];  // reset smoothing so rotation snaps back cleanly
+        _lastBearingFix  = null; // reset bearing anchor so next fix becomes the new anchor
         if (_gpsLastGoodFix) {
           _liveMap.setView([_gpsLastGoodFix.lat, _gpsLastGoodFix.lon], _liveMap.getZoom(), { animate: true });
         }
@@ -893,24 +970,72 @@ function _initLiveMap() {
     });
     _liveMapTileLayer.addTo(_liveMap);
 
-    _livePolyline = L.polyline([], {
-      color:        '#2d9e5a',
-      weight:       5,      // was 4 — thicker line is more visible and looks cleaner
-      opacity:      1.0,
+    // ── "3D PIPE" POLYLINE — 3 stacked layers for depth & smoothness ──
+    // Bottom layer: dark shadow (gives the pipe its "raised off the map" feel)
+    // Middle layer: main FitFlow green stroke
+    // Top layer:    subtle white highlight (the "shine" on the pipe top)
+    // All use lineCap/lineJoin:round so corners look like a continuous tube,
+    // and we apply Chaikin smoothing to the coords before setting them, so
+    // even noisy GPS data renders as a smooth curve.
+    _livePolylineShadow = L.polyline([], {
+      color:        'rgba(0,0,0,0.45)',
+      weight:       11,
+      opacity:      1,
       lineCap:      'round',
       lineJoin:     'round',
-      smoothFactor: 1.0,    // Leaflet display simplification — removes visual pixel jitter
+      smoothFactor: 1.0,
+      interactive:  false,
     }).addTo(_liveMap);
+    _livePolylineMain = L.polyline([], {
+      color:        '#2d9e5a',
+      weight:       7,
+      opacity:      1,
+      lineCap:      'round',
+      lineJoin:     'round',
+      smoothFactor: 1.0,
+      interactive:  false,
+    }).addTo(_liveMap);
+    _livePolylineHilite = L.polyline([], {
+      color:        'rgba(255,255,255,0.55)',
+      weight:       2.2,
+      opacity:      1,
+      lineCap:      'round',
+      lineJoin:     'round',
+      smoothFactor: 1.0,
+      interactive:  false,
+    }).addTo(_liveMap);
+    // Back-compat: a few old call sites reference _livePolyline.addLatLng(...)
+    _livePolyline = _livePolylineMain;
 
+    // ── DIRECTIONAL MARKER — arrow always points "up" on screen ──
+    // In course-up mode the screen's up direction IS the direction of travel,
+    // so an upward arrow inside the marker is always meaningful. The marker
+    // icon is counter-rotated by _applyMapRotation so the arrow stays upright
+    // regardless of map rotation.
+    if (!document.getElementById('ff-marker-keyframes')) {
+      const kf = document.createElement('style');
+      kf.id   = 'ff-marker-keyframes';
+      kf.textContent =
+        '@keyframes _ffMarkerPulse{0%,100%{transform:scale(1);opacity:.6}50%{transform:scale(1.35);opacity:.15}}';
+      document.head.appendChild(kf);
+    }
     const icon = L.divIcon({
       className: '',
-      html: `<div style="
-        width:14px;height:14px;border-radius:50%;
-        background:#2d9e5a;border:3px solid #fff;
-        box-shadow:0 0 0 3px rgba(45,158,90,0.35);
-      "></div>`,
-      iconSize:   [14, 14],
-      iconAnchor: [7, 7],
+      html: `<div style="position:relative;width:36px;height:36px;pointer-events:none">
+        <div style="position:absolute;top:50%;left:50%;width:30px;height:30px;
+          margin:-15px 0 0 -15px;border-radius:50%;background:#2d9e5a;
+          animation:_ffMarkerPulse 2s ease-in-out infinite"></div>
+        <div style="position:absolute;top:50%;left:50%;width:14px;height:14px;
+          margin:-7px 0 0 -7px;border-radius:50%;background:#2d9e5a;
+          border:3px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.45)"></div>
+        <div style="position:absolute;top:-3px;left:50%;width:0;height:0;
+          margin-left:-7px;
+          border-left:7px solid transparent;border-right:7px solid transparent;
+          border-bottom:11px solid #2d9e5a;
+          filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))"></div>
+      </div>`,
+      iconSize:   [36, 36],
+      iconAnchor: [18, 18],
     });
     _liveMarker = L.marker(startCoord[0] !== 0 ? startCoord : [0,0], { icon, zIndexOffset: 1000, interactive: false }).addTo(_liveMap);
 
@@ -950,19 +1075,44 @@ function _initLiveMap() {
 }
 
 function _redrawLivePolyline() {
-  if (!_liveMap || !_livePolyline) return;
-  const latlngs = APP.gpsCoords.map(c => [c.lat, c.lon]);
-  _livePolyline.setLatLngs(latlngs);
+  if (!_liveMap || !_livePolylineMain) return;
+  const raw = APP.gpsCoords.map(c => [c.lat, c.lon]);
+  // For very long runs (>1500 raw points), 2 Chaikin iterations = 6000+ points
+  // which starts to lag on lower-end Android. Drop to 1 iteration past that.
+  const iters = raw.length > 1500 ? 1 : 2;
+  const smoothed = _chaikinSmooth(raw, iters);
+  _livePolylineShadow?.setLatLngs(smoothed);
+  _livePolylineMain.setLatLngs(smoothed);
+  _livePolylineHilite?.setLatLngs(smoothed);
 }
 
 function _updateLiveMap(lat, lon) {
   if (!_liveMap) return;
   const pos = [lat, lon];
 
+  // ── COURSE-UP ROTATION ─────────────────────────────────────────
+  // Compute bearing from the last anchor → current position. Bearing at low
+  // speed is noisy (GPS jitter ≫ actual displacement), so we only update when
+  // the user has actually moved at least ~6m. The smoothed bearing prevents
+  // jumpy rotations from per-fix noise.
+  if (_rotationEnabled && !_userPanned) {
+    if (_lastBearingFix) {
+      const dKm = haversine(_lastBearingFix.lat, _lastBearingFix.lon, lat, lon);
+      if (dKm > 0.006) {  // ≥6m of actual movement
+        const raw = _calcBearing(_lastBearingFix.lat, _lastBearingFix.lon, lat, lon);
+        const smoothed = _smoothBearing(raw);
+        _applyMapRotation(smoothed);
+        _lastBearingFix = { lat, lon };
+      }
+    } else {
+      _lastBearingFix = { lat, lon };
+    }
+  }
+
   // Update marker position
   if (_liveMarker) _liveMarker.setLatLng(pos);
 
-  // Auto-center: keep user dot in view (north-up, no rotation).
+  // Auto-center: keep user dot in view.
   // Throttle to once per second — GPS can fire several times/sec and queued
   // animate:true calls backlog Leaflet's animation pipeline causing visible lag.
   if (!_userPanned) {
@@ -973,14 +1123,21 @@ function _updateLiveMap(lat, lon) {
     }
   }
 
-  if (_livePolyline) _livePolyline.addLatLng(pos);
+  // Redraw the full smoothed 3D-pipe polyline. addLatLng() on a single line
+  // would skip the new Chaikin smoothing — rebuilding is cheap (<2ms for typical
+  // 500-point runs) and keeps shadow/main/hilite layers in sync.
+  _redrawLivePolyline();
 }
 
 function _destroyLiveMap() {
   if (_liveMap) { _liveMap.remove(); _liveMap = null; }
-  _livePolyline    = null;
-  _liveMarker      = null;
-  _lastMapPanTs    = 0;
+  _livePolyline       = null;
+  _livePolylineShadow = null;
+  _livePolylineMain   = null;
+  _livePolylineHilite = null;
+  _liveMarker         = null;
+  _lastMapPanTs       = 0;
+  _lastBearingFix     = null;
 }
 
 // ── GPS BADGE UPDATE ──────────────────────────────────────────────
@@ -1232,6 +1389,7 @@ function _doStartRun() {
   _rotationEnabled = true;   // re-enable rotation for new activity
   _mapBearing      = 0;
   _bearingHistory  = [];     // clear bearing history so rotation starts fresh
+  _lastBearingFix  = null;   // clear bearing anchor so course-up starts at the first fix
   _kalman.reset();   // fresh Kalman state for new run
   _saveRunSession();
 
@@ -3005,8 +3163,28 @@ function _showRunDetail(idx) {
   const el = document.getElementById('run-detail-content');
   el.innerHTML = `
 
+    <!-- Captureable area: map → stats → splits → branding (download button hidden during capture) -->
+    <div id="run-detail-card-area">
+
     <!-- Map section -->
-    <div id="run-detail-map" style="height:${hasMap ? '240px' : '0'};background:var(--bg3);position:relative;overflow:hidden"></div>
+    <div id="run-detail-map" style="height:${hasMap ? '240px' : '0'};background:var(--bg3);position:relative;overflow:hidden">
+      ${hasMap ? `
+        <!-- Download button — top-right overlay on the map. Hidden during PNG capture. -->
+        <button id="run-detail-download-btn"
+          onclick="event.stopPropagation();_downloadRunDetailCard()"
+          aria-label="Download activity card"
+          data-capture-hide="1"
+          style="position:absolute;top:12px;right:12px;z-index:1000;
+            width:42px;height:42px;border-radius:50%;
+            background:rgba(7,21,16,0.88);border:1px solid rgba(255,255,255,0.18);
+            color:#fff;font-size:20px;cursor:pointer;display:flex;
+            align-items:center;justify-content:center;backdrop-filter:blur(8px);
+            box-shadow:0 4px 14px rgba(0,0,0,0.35);touch-action:manipulation">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 4v12"/><path d="M6 12l6 6 6-6"/><path d="M4 20h16"/>
+          </svg>
+        </button>` : ''}
+    </div>
 
     <!-- Content body -->
     <div style="padding:20px 16px 8px">
@@ -3051,10 +3229,30 @@ function _showRunDetail(idx) {
       <!-- Km splits -->
       ${r.coords && r.coords.length >= 2 ? _renderKmSplits(r.coords, r.distance, meta.color, r.duration) : ''}
 
-      <!-- PB & motivation for this run -->
-      <div id="run-detail-pb-badges" style="margin-top:8px"></div>
+      <!-- FitFlow Pro branding — subtle, sits in the natural gap between splits
+           and the PB badges section. Captured in the downloaded card. -->
+      <div style="display:flex;align-items:center;justify-content:center;gap:8px;
+        padding:14px 0 6px;border-top:1px solid var(--border);margin-top:14px">
+        <div style="width:18px;height:18px;border-radius:5px;
+          background:linear-gradient(135deg,#2e7d46,#43a05a);
+          display:flex;align-items:center;justify-content:center;
+          box-shadow:0 1px 4px rgba(67,160,90,0.35)">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="#fff">
+            <path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/>
+          </svg>
+        </div>
+        <div style="font-family:var(--font-display);font-size:13px;
+          letter-spacing:.16em;color:var(--g5);font-weight:400">
+          FITFLOW&nbsp;PRO
+        </div>
+      </div>
 
-    </div>`;
+    </div>
+
+    </div><!-- /run-detail-card-area -->
+
+    <!-- PB & motivation for this run — kept OUTSIDE captureable area as requested -->
+    <div id="run-detail-pb-badges" style="padding:0 16px;margin-top:8px"></div>`;
 
   openModal('modal-run-detail');
   // Show PB info for this historical run
@@ -3088,11 +3286,21 @@ function _showRunDetail(idx) {
 
         L.tileLayer(_getTileLayer(_mapStyle), { maxZoom: 19 }).addTo(_detailMapInst);
 
-        L.polyline(latlngs, {
-          color:   '#2d9e5a',
-          weight:  4,
-          opacity: 1.0,
-          lineCap: 'round',
+        // Chaikin-smooth the route for a flowing curve, then render as a "3D pipe"
+        // (3 stacked polylines — shadow, main, highlight) so the line looks like
+        // a raised tube instead of a flat pixel-jagged stroke.
+        const chaikinPath = _chaikinSmooth(latlngs, 2);
+        L.polyline(chaikinPath, {
+          color: 'rgba(0,0,0,0.45)', weight: 10, opacity: 1,
+          lineCap: 'round', lineJoin: 'round', interactive: false,
+        }).addTo(_detailMapInst);
+        L.polyline(chaikinPath, {
+          color: '#2d9e5a',          weight: 6,  opacity: 1,
+          lineCap: 'round', lineJoin: 'round', interactive: false,
+        }).addTo(_detailMapInst);
+        L.polyline(chaikinPath, {
+          color: 'rgba(255,255,255,0.55)', weight: 2, opacity: 1,
+          lineCap: 'round', lineJoin: 'round', interactive: false,
         }).addTo(_detailMapInst);
 
         // Start marker — green
@@ -3109,6 +3317,231 @@ function _showRunDetail(idx) {
       });
     }, 250); // wait for modal animation to complete before sizing map
   }
+}
+
+// ── DOWNLOAD RUN DETAIL AS PNG CARD ──────────────────────────────
+// Renders the run detail (map → stats → splits → branding) into a portrait
+// PNG suitable for sharing. Uses the same canvas-based approach as the existing
+// activity card generator (no html2canvas dependency — keeps PWA bundle lean).
+//
+// Captures: map, activity title, date/location, 6 stat cells, all km splits,
+//           FitFlow Pro watermark.
+// Skips:    PB badges section (per user request).
+function _downloadRunDetailCard() {
+  const r = window._currentRunDetailLog;
+  if (!r) { showToast('Could not capture — re-open this activity', 'error'); return; }
+
+  const type     = r.activityType || 'run';
+  const meta     = ACTIVITY_META[type] || ACTIVITY_META.run;
+  const elapsed  = r.duration || 0;
+  const speedKph = elapsed > 0 ? (r.distance / elapsed * 3600) : 0;
+  const kcal     = Math.round((r.distance || 0) * meta.kcalPerKm);
+  const dateObj  = r.timestamp ? new Date(r.timestamp) : new Date(r.date);
+  const dateStr  = dateObj.toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
+  const timeStr  = r.timestamp ? dateObj.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true }) : '';
+  const splits   = (r.coords && r.coords.length >= 2)
+                   ? _calcKmSplits(r.coords, r.distance, elapsed)
+                   : [];
+
+  // Portrait canvas — 1080×1920 is standard share aspect (Instagram Story / Reel).
+  const W = 1080, H = 1920;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+
+  // Background — solid app dark green
+  ctx.fillStyle = '#071510';
+  ctx.fillRect(0, 0, W, H);
+
+  // ── MAP REGION (top 38%) ────────────────────────────────────────
+  const mapY = 0, mapH = Math.round(H * 0.38);  // 0 → 730
+  // Map backing (subtle gradient effect with flat shades — no canvas gradient
+  // to keep render quick).
+  ctx.fillStyle = '#0a1f15';
+  ctx.fillRect(0, mapY, W, mapH);
+  // Subtle grid for "map" feel
+  ctx.strokeStyle = 'rgba(255,255,255,0.04)';
+  ctx.lineWidth   = 1;
+  for (let x = 0; x < W; x += 80) {
+    ctx.beginPath(); ctx.moveTo(x, mapY); ctx.lineTo(x, mapY + mapH); ctx.stroke();
+  }
+  for (let y = mapY; y < mapY + mapH; y += 80) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+  }
+
+  // Route — reuse the existing canvas route drawer (Catmull-Rom smoothed bezier)
+  if (r.coords && r.coords.length >= 2) {
+    _drawRouteOnCanvas(ctx, r.coords, 40, mapY + 40, W - 80, mapH - 80, '#2d9e5a');
+  } else {
+    ctx.fillStyle = 'rgba(255,255,255,0.4)';
+    ctx.font      = '600 32px DM Sans, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('No GPS route recorded', W / 2, mapY + mapH / 2);
+  }
+
+  // ── CONTENT REGION ──────────────────────────────────────────────
+  let cy = mapH + 50;   // running cursor y for content
+
+  // Activity icon + title
+  const iconSize = 78;
+  const iconX = 64, iconY = cy;
+  // Rounded square background
+  _cardRoundRect(ctx, iconX, iconY, iconSize, iconSize, 18);
+  ctx.fillStyle = meta.color + '22';
+  ctx.fill();
+  ctx.strokeStyle = meta.color + '88';
+  ctx.lineWidth   = 2;
+  ctx.stroke();
+  // Emoji
+  ctx.font      = '46px serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#fff';
+  ctx.fillText(meta.emoji, iconX + iconSize / 2, iconY + iconSize / 2 + 4);
+  ctx.textBaseline = 'alphabetic';
+
+  // Title + subtitle
+  ctx.textAlign  = 'left';
+  ctx.fillStyle  = '#e8f5e9';
+  ctx.font       = '700 42px DM Sans, sans-serif';
+  ctx.fillText(meta.label, iconX + iconSize + 22, cy + 38);
+  ctx.fillStyle  = '#5a8a65';
+  ctx.font       = '500 22px DM Sans, sans-serif';
+  ctx.fillText(r.planType || 'Free Activity', iconX + iconSize + 22, cy + 68);
+  cy += iconSize + 24;
+
+  // Date + location
+  ctx.fillStyle  = '#5a8a65';
+  ctx.font       = '500 22px DM Sans, sans-serif';
+  ctx.fillText(dateStr + (timeStr ? '  at  ' + timeStr : ''), 64, cy);
+  cy += 30;
+  if (r.locationName) {
+    ctx.fillStyle = '#a5c8ac';
+    ctx.font      = '600 22px DM Sans, sans-serif';
+    ctx.fillText('📍 ' + r.locationName, 64, cy + 20);
+    cy += 36;
+  }
+  cy += 26;
+
+  // ── STAT GRID (2 cols × 3 rows) ─────────────────────────────────
+  const stats = [
+    { label: 'DISTANCE',  val: (r.distance || 0).toFixed(2) + ' km',   color: meta.color },
+    { label: 'TIME',      val: fmtTime(elapsed),                       color: '#6abf7b'  },
+    { label: 'AVG PACE',  val: fmtPace(r.distance, elapsed) + '/km',   color: '#6abf7b'  },
+    { label: 'AVG SPEED', val: speedKph.toFixed(1) + ' km/h',          color: '#6abf7b'  },
+    { label: 'CALORIES',  val: kcal + ' kcal',                         color: '#6abf7b'  },
+    { label: 'ACTIVITY',  val: meta.label,                             color: meta.color },
+  ];
+  const gridX = 64, gridW = W - 128;
+  const cellW = (gridW - 16) / 2;
+  const cellH = 110;
+  stats.forEach((s, i) => {
+    const col = i % 2, row = Math.floor(i / 2);
+    const x = gridX + col * (cellW + 16);
+    const y = cy + row * (cellH + 14);
+    _cardRoundRect(ctx, x, y, cellW, cellH, 18);
+    ctx.fillStyle = '#1a3328';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth   = 1;
+    ctx.stroke();
+    ctx.fillStyle = '#5a8a65';
+    ctx.font      = '700 18px DM Sans, sans-serif';
+    ctx.fillText(s.label, x + 20, y + 32);
+    ctx.fillStyle = s.color;
+    ctx.font      = '700 36px DM Sans, sans-serif';
+    ctx.fillText(s.val, x + 20, y + 78);
+  });
+  cy += 3 * (cellH + 14);
+
+  // ── KM SPLITS ───────────────────────────────────────────────────
+  if (splits.length >= 2) {
+    cy += 24;
+    ctx.fillStyle  = '#e8f5e9';
+    ctx.font       = '700 28px DM Sans, sans-serif';
+    ctx.textAlign  = 'left';
+    ctx.fillText('📏  Km Splits', 64, cy);
+    ctx.fillStyle  = '#5a8a65';
+    ctx.font       = '500 18px DM Sans, sans-serif';
+    ctx.textAlign  = 'right';
+    ctx.fillText('* partial km', W - 64, cy);
+    cy += 22;
+
+    // Header row
+    ctx.fillStyle = '#5a8a65';
+    ctx.font      = '700 18px DM Sans, sans-serif';
+    ctx.textAlign = 'left';
+    ctx.fillText('KM   PACE', 64, cy + 22);
+    ctx.textAlign = 'right';
+    ctx.fillText('TIME', W - 64, cy + 22);
+    cy += 38;
+
+    // Find fastest / slowest for bar widths
+    const paceSecs = splits.map(s => s.timeSec);
+    const minPace  = Math.min(...paceSecs);
+    const maxPace  = Math.max(...paceSecs);
+    const range    = Math.max(maxPace - minPace, 1);
+
+    const visible  = splits.slice(0, Math.min(splits.length, 7));  // cap to 7 to fit
+    const barAreaX = 200, barAreaW = W - 64 - 200 - 130;
+    visible.forEach((s, i) => {
+      const y       = cy + i * 60;
+      const isFast  = s.timeSec === minPace;
+      const barLen  = ((maxPace - s.timeSec) / range);
+      const w       = Math.max(40, barAreaW * (0.25 + 0.75 * barLen));
+      // KM #
+      ctx.fillStyle = isFast ? '#43a05a' : '#a5c8ac';
+      ctx.font      = '700 26px DM Sans, sans-serif';
+      ctx.textAlign = 'left';
+      ctx.fillText(s.km + (s.partial ? '*' : ''), 64, y + 36);
+      // Pace
+      ctx.fillStyle = '#e8f5e9';
+      ctx.font      = '700 26px DM Sans, sans-serif';
+      ctx.fillText(s.pace, 110, y + 36);
+      // Bar
+      _cardRoundRect(ctx, barAreaX, y + 18, w, 24, 12);
+      ctx.fillStyle = isFast ? '#43a05a' : 'rgba(67,160,90,0.30)';
+      ctx.fill();
+      // Time
+      ctx.fillStyle = '#a5c8ac';
+      ctx.font      = '700 26px DM Sans, sans-serif';
+      ctx.textAlign = 'right';
+      ctx.fillText(fmtTime(s.timeSec), W - 64, y + 36);
+    });
+    cy += visible.length * 60;
+  }
+
+  // ── BRANDING FOOTER ─────────────────────────────────────────────
+  cy = Math.min(cy + 50, H - 90);
+  // Bolt icon
+  ctx.fillStyle = '#43a05a';
+  _cardRoundRect(ctx, W / 2 - 100, cy, 32, 32, 8);
+  ctx.fill();
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.moveTo(W/2 - 88, cy + 6);
+  ctx.lineTo(W/2 - 94, cy + 18);
+  ctx.lineTo(W/2 - 86, cy + 18);
+  ctx.lineTo(W/2 - 90, cy + 28);
+  ctx.lineTo(W/2 - 80, cy + 14);
+  ctx.lineTo(W/2 - 86, cy + 14);
+  ctx.lineTo(W/2 - 84, cy + 6);
+  ctx.closePath();
+  ctx.fill();
+  // Wordmark
+  ctx.fillStyle  = '#6abf7b';
+  ctx.font       = '500 26px "Bebas Neue", DM Sans, sans-serif';
+  ctx.textAlign  = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText('FITFLOW  PRO', W / 2 - 60, cy + 4);
+  ctx.textBaseline = 'alphabetic';
+
+  // Save / share
+  const name = 'fitflow-' + (meta.label || 'activity').toLowerCase().replace(/\s+/g,'-') + '-' + (r.id || Date.now()) + '.png';
+  cv.toBlob(blob => {
+    if (!blob) { showToast('Could not generate image', 'error'); return; }
+    _saveOrShareBlob(blob, name);
+  }, 'image/png', 0.95);
 }
 
 // ── DELETE RUN ACTIVITY ──────────────────────────────────────────
@@ -3615,12 +4048,20 @@ function _renderRunRouteMap(coords) {
 
     L.tileLayer(_getTileLayer(_mapStyle), { maxZoom: 19 }).addTo(_sumMap);
 
-    // Route line — always FitFlow green to match activity card
-    L.polyline(latlngs, {
-      color:   '#2d9e5a',
-      weight:  4,
-      opacity: 1.0,
-      lineCap: 'round',
+    // Chaikin-smooth + 3D-pipe (shadow / main / highlight) — consistent visual
+    // language with the live map and history detail.
+    const sumPath = _chaikinSmooth(latlngs, 2);
+    L.polyline(sumPath, {
+      color: 'rgba(0,0,0,0.45)', weight: 10, opacity: 1,
+      lineCap: 'round', lineJoin: 'round', interactive: false,
+    }).addTo(_sumMap);
+    L.polyline(sumPath, {
+      color: '#2d9e5a',          weight: 6,  opacity: 1,
+      lineCap: 'round', lineJoin: 'round', interactive: false,
+    }).addTo(_sumMap);
+    L.polyline(sumPath, {
+      color: 'rgba(255,255,255,0.55)', weight: 2, opacity: 1,
+      lineCap: 'round', lineJoin: 'round', interactive: false,
     }).addTo(_sumMap);
 
     // Start marker — green
