@@ -6,17 +6,17 @@
 // Import OneSignal's service worker — handles push notifications
 importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
 
-const CACHE = 'fitflow-v109';
+const CACHE = 'fitflow-v110';
 const ASSETS = [
   './',
   './index.html',
   './css/style.css?v=75',
   './js/data.js?v=78',
   './js/data-cali.js?v=75',
-  './js/app.js?v=78',
+  './js/app.js?v=79',
   './js/auth.js?v=78',
   './js/dashboard.js?v=86',
-  './js/running.js?v=84',
+  './js/running.js?v=85',
   './js/admin.js?v=79',
   './push.js?v=7',
   './js/custom-workouts.js?v=75',
@@ -44,7 +44,29 @@ self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
       Promise.all(keys.filter(k => k !== CACHE).map(k => caches.delete(k)))
-    ).then(() => self.clients.claim())  // take control of all open tabs immediately
+    )
+    // ── KILL ORPHAN ACTIVITY NOTIFICATIONS on every SW activation ─────
+    // When a fresh SW takes over (e.g. app update), any "live activity"
+    // notification from the previous SW is by definition stale — the old
+    // run's JS heap is gone, the timer is dead, no one is going to send
+    // another ACTIVITY_UPDATE. Without this sweep the notification stays
+    // pinned in the shade indefinitely (requireInteraction:true).
+    .then(() => self.registration.getNotifications({ tag: ACTIVITY_NOTIF_TAG }))
+    .then(notifs => notifs && notifs.forEach(n => { try { n.close(); } catch {} }))
+    // Also sweep untagged "live" notifications from older SW versions whose
+    // bodies look like activity stats (heuristic — older versions used
+    // different tags or different titles).
+    .then(() => self.registration.getNotifications())
+    .then(notifs => notifs && notifs.forEach(n => {
+      const blob = ((n.title || '') + ' ' + (n.body || '')).toLowerCase();
+      if (
+        /\bkm\b|\bpace\b|\bkcal\b|tap to open fitflow|km\/h/.test(blob) &&
+        !/reminder|streak/i.test(blob)
+      ) {
+        try { n.close(); } catch {}
+      }
+    }))
+    .then(() => self.clients.claim())  // take control of all open tabs immediately
   );
 });
 
