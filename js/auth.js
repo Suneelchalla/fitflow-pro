@@ -412,7 +412,17 @@ async function _syncUserLogs(userId) {
 }
 
 async function _syncUserRunLogs(userId) {
-  // REPLACE strategy: Sheet is source of truth.
+  // MERGE strategy: Sheet is source of truth for everything EXCEPT a small set
+  // of "soft" fields (locationName, title, description). For those, if the local
+  // copy has a non-empty value and the Sheet copy is empty, we keep the local
+  // value. This protects against:
+  //   (a) Outdated Apps Script deployments that don't yet store these columns
+  //       — the deployed Web App keeps returning '' for them, which would
+  //       otherwise wipe values the client computed locally (e.g. via
+  //       BigDataCloud reverse-geocoding right after a run).
+  //   (b) Race conditions where the user closed the app a beat before the
+  //       fire-and-forget sheetsPost('logRun', ...) request completed —
+  //       the Sheet has the run but with empty soft fields.
   try {
     const res = await Sheets.get('getUserRunLogs', { userId });
     if (!res?.success || !Array.isArray(res.logs)) return;
@@ -435,6 +445,13 @@ async function _syncUserRunLogs(userId) {
     const allLocal = Store.get('ff_runlogs', []) || [];
     const otherUsers = allLocal.filter(l => l.userId !== userId);
 
+    // Build a lookup of local logs by id so we can preserve soft fields
+    // when the Sheet's copy of the same log has them empty.
+    const localById = new Map();
+    allLocal
+      .filter(l => l.userId === userId && l.id)
+      .forEach(l => localById.set(l.id, l));
+
     // Dedup by id, then by (userId|date|distance)
     const seenIds = new Set();
     const seenKeys = new Set();
@@ -445,6 +462,15 @@ async function _syncUserRunLogs(userId) {
       if (seenKeys.has(key)) return;
       if (r.id) seenIds.add(r.id);
       seenKeys.add(key);
+
+      // Preserve local soft fields if Sheet's copy lost them
+      const localMatch = r.id ? localById.get(r.id) : null;
+      if (localMatch) {
+        if (!r.locationName && localMatch.locationName) r.locationName = localMatch.locationName;
+        if (!r.title        && localMatch.title)        r.title        = localMatch.title;
+        if (!r.description  && localMatch.description)  r.description  = localMatch.description;
+      }
+
       myRuns.push(r);
     });
 
