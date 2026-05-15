@@ -300,7 +300,44 @@ function _syncNav(pageId) {
   else if (pageId === 'page-running')        setActiveNav('running');
   else if (pageId === 'page-admin')          setActiveNav('admin');
   else if (pageId === 'page-my-plan')        setActiveNav('myplan');
+
+  // Toggle the global bottom-nav. Visible on top-level pages, hidden on
+  // auth/onboarding/splash and during full-screen states like active-run.
+  const nav = document.getElementById('global-bottom-nav');
+  if (nav) {
+    const showOn = new Set([
+      'page-dashboard',
+      'page-running',
+      'page-history-global',
+      'page-my-plan',
+      'page-admin',
+      'page-module',
+      'page-calisthenics',
+      'page-custom-workouts',
+      'page-weekly-report',
+    ]);
+    let visible = showOn.has(pageId);
+    // Inside page-running, hide the nav while a run is active / on summary /
+    // on the save screen — those are full-screen views.
+    if (visible && pageId === 'page-running') {
+      const runActive   = document.getElementById('run-active');
+      const runSummary  = document.getElementById('run-summary');
+      const runSaveSc   = document.getElementById('run-save-screen');
+      const activeVisible  = runActive  && !runActive.classList.contains('hidden');
+      const summaryVisible = runSummary && !runSummary.classList.contains('hidden');
+      const saveVisible    = runSaveSc  && !runSaveSc.classList.contains('hidden');
+      if (activeVisible || summaryVisible || saveVisible) visible = false;
+    }
+    nav.style.display = visible ? 'flex' : 'none';
+  }
 }
+
+// External hook: call this from running.js after toggling run-idle/run-active
+// /run-summary/run-save-screen so the bottom-nav visibility updates immediately
+// (without waiting for a fresh showPage call).
+window.refreshBottomNav = function () {
+  if (typeof _syncNav === 'function') _syncNav(APP.currentPage);
+};
 
 window.addEventListener('popstate', e => {
   // If a modal is open, close it instead of navigating back
