@@ -1,12 +1,13 @@
 // ════════════════════════════════════════════════════════════════
-// FITFLOW PRO — Service Worker v48 (with OneSignal Push)
+// FITFLOW PRO — Service Worker (with OneSignal Push)
 // Combines: PWA offline cache + OneSignal push notifications
+// Cache version is the source of truth — see CACHE constant below.
 // ════════════════════════════════════════════════════════════════
 
 // Import OneSignal's service worker — handles push notifications
 importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
 
-const CACHE = 'fitflow-v114';
+const CACHE = 'fitflow-v116';
 const ASSETS = [
   './',
   './index.html',
@@ -14,7 +15,7 @@ const ASSETS = [
   './js/data.js?v=78',
   './js/data-cali.js?v=75',
   './js/app.js?v=79',
-  './js/auth.js?v=78',
+  './js/auth.js?v=80',
   './js/dashboard.js?v=86',
   './js/running.js?v=89',
   './js/admin.js?v=79',
@@ -28,8 +29,8 @@ const ASSETS = [
 ];
 
 // ── INSTALL ───────────────────────────────────────────────────────
-// NOTE: No skipWaiting() — combined with clients.claim() it was causing forced
-// reloads on every page load. SW now waits until all tabs are closed before taking over.
+// skipWaiting() takes over immediately on update so users get the new code
+// on next launch without needing to fully close every tab.
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE).then(c => c.addAll(ASSETS).catch(() => {}))
@@ -38,8 +39,8 @@ self.addEventListener('install', e => {
 });
 
 // ── ACTIVATE ──────────────────────────────────────────────────────
-// NOTE: No clients.claim() — claiming immediately after SW update caused all
-// open tabs to reload, which is the unwanted refresh users were experiencing.
+// clients.claim() lets the fresh SW take control of all open tabs at activate
+// time, so version bumps don't require a manual page reload to apply.
 self.addEventListener('activate', e => {
   e.waitUntil(
     caches.keys().then(keys =>
