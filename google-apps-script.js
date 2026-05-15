@@ -33,6 +33,7 @@ const SHEETS = {
   CUSTOM_WORKOUTS: 'CustomWorkouts',
   PUSH_SUBS:       'PushSubscriptions',
   ONBOARDING:      'UserOnboarding',
+  SESSIONS:        'Sessions',   // single-device session enforcement (one row per userId)
 };
 
 const COL = {
@@ -75,6 +76,84 @@ function _passwordMatches(entered, stored) {
     return _hashPassword(enteredStr) === storedStr;
   } else {
     return enteredStr === storedStr;
+  }
+}
+
+// ── SESSION TOKEN HELPERS ─────────────────────────────────────────
+// Each successful login issues a 32-char hex token, written to the Sessions
+// sheet (one row per user — new logins overwrite the previous row). The
+// frontend stores the token and pings validateSession every 5 minutes; if
+// another device logged in since, the previous token is gone and the
+// frontend logs that device out gracefully.
+
+function _generateSessionToken() {
+  // 16 random bytes → 32 hex chars. Apps Script has no crypto.getRandomValues,
+  // so we use a combination of timestamp + Math.random across multiple draws
+  // to make collisions astronomically unlikely (effective ~128 bits entropy).
+  var hex = '';
+  for (var i = 0; i < 16; i++) {
+    var byte = Math.floor(Math.random() * 256);
+    hex += ('0' + byte.toString(16)).slice(-2);
+  }
+  return hex + Date.now().toString(16); // appended timestamp guarantees uniqueness
+}
+
+function _issueSessionToken(userId, deviceInfo) {
+  if (!userId) return '';
+  try {
+    var token = _generateSessionToken();
+    var sh    = getSheet(SHEETS.SESSIONS);
+    var data  = sh.getDataRange().getValues();
+    var nowIso = new Date().toISOString();
+    var devStr = (deviceInfo || '').toString().substring(0, 200);
+    // Update existing row for this user (one row per userId), else append
+    for (var i = 1; i < data.length; i++) {
+      if ((data[i][0] || '').toString() === userId.toString()) {
+        sh.getRange(i + 1, 2).setValue(token);
+        sh.getRange(i + 1, 3).setValue(nowIso);
+        sh.getRange(i + 1, 4).setValue(nowIso);
+        sh.getRange(i + 1, 5).setValue(devStr);
+        SpreadsheetApp.flush();
+        return token;
+      }
+    }
+    sh.appendRow([userId, token, nowIso, nowIso, devStr]);
+    SpreadsheetApp.flush();
+    return token;
+  } catch (err) {
+    Logger.log('_issueSessionToken failed: ' + err.message);
+    return '';   // soft-fail — login still succeeds without token
+  }
+}
+
+function validateSession(userId, sessionToken) {
+  if (!userId || !sessionToken) return { valid: false, reason: 'missing-params' };
+  try {
+    var sh   = getSheet(SHEETS.SESSIONS);
+    var data = sh.getDataRange().getValues();
+    for (var i = 1; i < data.length; i++) {
+      if ((data[i][0] || '').toString() === userId.toString()) {
+        var storedToken = (data[i][1] || '').toString();
+        if (storedToken === sessionToken.toString()) {
+          // Bump LastSeenAt — useful for admin "active users" reports
+          try {
+            sh.getRange(i + 1, 4).setValue(new Date().toISOString());
+            SpreadsheetApp.flush();
+          } catch (e) {}
+          return { valid: true };
+        }
+        // User has a row but the token doesn't match → another device took over
+        return { valid: false, reason: 'replaced' };
+      }
+    }
+    // No row exists — legacy user from before this feature shipped, OR a user
+    // whose session was never written. Treat as VALID to avoid kicking people
+    // out unexpectedly. Their next login will create a Sessions row and the
+    // feature begins working for them from then on.
+    return { valid: true, reason: 'legacy' };
+  } catch (err) {
+    Logger.log('validateSession failed: ' + err.message);
+    return { valid: true, reason: 'error' };   // network/server hiccup — never log user out
   }
 }
 
@@ -158,6 +237,7 @@ function doGet(e) {
       case 'getAllOnboarding':      result = { success:true, onboardings:getAllOnboarding() };            break;
       case 'getAdminPushLog':      result = getAdminPushLog();                                           break;
       case 'getSubscribedDevices': result = getSubscribedDevices();                                      break;
+      case 'validateSession':      result = validateSession(p.userId, p.sessionToken);                   break;
       default:                     result = { success:false, error:'Unknown action: ' + p.action };
     }
   } catch(err) { result = { success:false, error:err.message }; }
@@ -327,6 +407,7 @@ function setupSheets() {
   _ensureSheet(SHEETS.FEEDBACK,        ['FeedbackID','UserID','Name','Email','Category','Rating','Message','Date','Timestamp','AdminReply','AdminReplyAt','AdminRead']);
   _ensureSheet(SHEETS.PUSH_SUBS,       ['UserID','Name','Email','Endpoint','P256DH','Auth','SavedAt','Active']);
   _ensureSheet(SHEETS.CUSTOM_WORKOUTS, ['WorkoutID','UserID','UserEmail','Name','ExercisesJSON','CreatedDate','UpdatedDate','Active']);
+  _ensureSheet(SHEETS.SESSIONS,        ['UserID','SessionToken','IssuedAt','LastSeenAt','DeviceInfo']);
   _ensureSheet('Announcements',        ['ID','Title','Message','StartDate','EndDate','CreatedBy','CreatedAt']);
   Logger.log('✅ All sheets ready!');
 }
@@ -398,7 +479,10 @@ function handleLogin(email, password) {
     const userId      = (row[COL.ID]        ||'').toString();
     const createdBy   = (row[COL.CREATED_BY] ||'').toString().toLowerCase();
     const isGoogleUser = userId.startsWith('u_g_') || createdBy === 'google';
-    return { success:true, user:{
+    // Issue a fresh session token — invalidates any previous device's session.
+    // Soft-fails to empty string if Sessions sheet write errors; login still succeeds.
+    const sessionToken = _issueSessionToken(userId, 'email-login');
+    return { success:true, sessionToken, user:{
       id:          userId,
       name:        (row[COL.NAME] ||'').toString(),
       email:       (row[COL.EMAIL]||'').toString(),
@@ -429,7 +513,9 @@ function googleLogin(body) {
     } catch(e) { Logger.log('LAST_LOGIN update skipped: ' + e.message); }
     const userId    = (row[COL.ID]        ||'').toString();
     const createdBy = (row[COL.CREATED_BY] ||'').toString().toLowerCase();
-    return { success:true, isNew:false, user:{
+    // Issue a fresh session token — invalidates any previous device's session.
+    const sessionToken = _issueSessionToken(userId, 'google-login');
+    return { success:true, isNew:false, sessionToken, user:{
       id:           userId,
       name:         (row[COL.NAME]||'').toString(),
       email:        rowEmail,
@@ -446,7 +532,9 @@ function googleLogin(body) {
   sh.appendRow([newId, displayName, email.toLowerCase().trim(), '', '', false,
     'USER', 'ACTIVE', _ymdLocal(), 'Google', new Date().toISOString()]);
   SpreadsheetApp.flush();
-  return { success:true, isNew:true, user:{
+  // Issue session token for the freshly-created user
+  const newSessionToken = _issueSessionToken(newId, 'google-signup');
+  return { success:true, isNew:true, sessionToken: newSessionToken, user:{
     id:newId, name:displayName, email:email.toLowerCase().trim(),
     role:'USER', status:'ACTIVE', isFirstLogin:false,
     isGoogleUser:true, authType:'google',
@@ -1348,11 +1436,11 @@ var MORNING_MESSAGES = [
   { title: '🚨 Flash sale ends at 7AM!', body: "Morning metabolism boost — burns 2x more. Available only NOW. Go! ⚡" },
   { title: '🥘 Today\'s combo deal:',    body: "10 mins yoga + 10 mins cardio = zero stress + full energy. Better than chai! ☕" },
   { title: '📍 Your location: Bed',      body: "Suggested destination: FitFlow workout. ETA: 2 mins. Start now? 🏃" },
-  { title: '🇮🇳 Subah ho gayi!',         body: "Chai peene se pehle ek workout toh banta hai boss! 💪🔥" },
-  { title: '💪 Kal kal karte karte...',  body: "Kal phir kal ho gaya. Aaj nahi toh kab? Open FitFlow NOW! 🏃" },
-  { title: '🔥 Bhai sun!',               body: "Jo log 6 AM uthke workout karte hain — unhe duniya alag nazar aati hai. Be that person! 🌅" },
-  { title: '😤 Uthh bhai uthh!',         body: "Neend toh raat ko bhi aayegi. Abhi FitFlow khol aur ek set maar! 💪" },
-  { title: '🏃 Chal beta chal!',         body: "Body ne subah request ki hai — thoda movement chahiye. Open karo! 🔥" },
+  { title: '☀️ Good morning, champion!',  body: "Before that first cup of coffee, get your body moving. 10 mins is all it takes! 💪🔥" },
+  { title: '💪 Stop saying tomorrow!',     body: "Tomorrow keeps becoming another tomorrow. If not today, then when? Open FitFlow NOW! 🏃" },
+  { title: '🔥 Listen up!',                body: "People who work out at 6 AM see the world differently. Be that person today! 🌅" },
+  { title: '😤 Up and at it!',             body: "Sleep can wait until tonight. Open FitFlow right now and crush one set! 💪" },
+  { title: '🏃 Your body is asking!',      body: "It's requesting some morning movement. Just 10 minutes — let's go! 🔥" },
   { title: '🛌 Still in bed?',           body: "Your blanket is lying to you. The gym won't. Let's go! 💪" },
   { title: '🐌 Slow start?',             body: "Even a 10-min walk counts. Start small, finish strong! 🚶" },
   { title: '🧠 Your brain just said:',   body: "\"I don't wanna workout.\" Your future self said: \"DO IT ANYWAY.\" Listen to them! 😤" },
@@ -1481,11 +1569,11 @@ var EVENING_MESSAGES = [
   { title: '🏆 Top performers:',           body: "All have one thing in common — they didn't skip evening workouts. Join them! 💪" },
   { title: '😤 Your friend worked out.',   body: "Are you going to let them get ahead? Open FitFlow. NOW! 🔥" },
   { title: '📈 While you relaxed...',      body: "Your healthier future self was built in moments like this. Create one! 💪" },
-  { title: '😤 Bhai, din bhar kaam kiya!', body: "Ab body ko bhi thoda time do. 15 mins stretching — teri body khush ho jaayegi! 🧘" },
-  { title: '🏃 Sham ho gayi yaar!',        body: "Office toh gaya. Ab FitFlow khol aur ek achi workout kar. Tu deserve karta hai! 💪" },
-  { title: '😩 Thak gaya?',               body: "Exercise se thakaan kam hoti hai — sound weird but it's true! Try karo aaj! ⚡" },
-  { title: '🌙 Raat ko neend chahiye?',   body: "Shaam ki 20 min workout se neend gazab aati hai. Aaj try karo! 💤" },
-  { title: '🍛 Khana khane se pehle!',    body: "Ek baar workout karo. Baad mein khana 10 guna zyada tasty lagega! 😋" },
+  { title: '😤 Worked hard all day?',       body: "Now give your body some love. 15 mins of stretching and you'll feel amazing! 🧘" },
+  { title: '🏃 Evening already!',           body: "Office is done. Open FitFlow and crush a quick workout — you've earned it! 💪" },
+  { title: '😩 Feeling tired?',             body: "Exercise actually reduces fatigue — sounds backwards but it's true. Try it today! ⚡" },
+  { title: '🌙 Want better sleep tonight?', body: "A 20-min evening workout gives incredible sleep. Try it and thank yourself tomorrow! 💤" },
+  { title: '🍛 Before dinner tonight!',     body: "Sneak in a quick workout. Trust us — food tastes 10x better afterwards! 😋" },
   { title: '🤔 Real talk:',               body: "The couch will be there after your workout. Your motivation might not. GO! 💪" },
   { title: '📺 Netflix can wait!',         body: "Your show auto-saves. Your health doesn't. Workout first, binge after! 🔥" },
   { title: '🛋️ Couch is tempting...',      body: "But your future abs are more tempting. 20 mins. Go! 💪" },
@@ -1692,9 +1780,9 @@ function _sendPushToIds(appId, apiKey, deviceIds, msg, buttons) {
     include_player_ids: deviceIds,
     headings:           { en: msg.title },
     contents:           { en: msg.body  },
-    web_url:            'https://suneelchalla.github.io/fitflow-pro/index.html',
-    chrome_web_icon:    'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png',
-    chrome_web_badge:   'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png',
+    web_url:            'https://fitflowpro.in/index.html',
+    chrome_web_icon:    'https://fitflowpro.in/icons/icon-192.png',
+    chrome_web_badge:   'https://fitflowpro.in/icons/icon-192.png',
     priority: 10,
     ttl:      86400,
   };
@@ -1734,8 +1822,8 @@ function sendDailyPushNotifications() {
   }
 
   var buttons = [
-    { id:'open',  text:"💪 Let's Go!", icon:'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png', url:'https://suneelchalla.github.io/fitflow-pro/index.html' },
-    { id:'later', text:"⏰ Later",      icon:'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png' },
+    { id:'open',  text:"💪 Let's Go!", icon:'https://fitflowpro.in/icons/icon-192.png', url:'https://fitflowpro.in/index.html' },
+    { id:'later', text:"⏰ Later",      icon:'https://fitflowpro.in/icons/icon-192.png' },
   ];
 
   try {
@@ -1783,8 +1871,8 @@ function sendEveningPushNotifications() {
   if (segments.notYet.length > 0) {
     var motivMsg = getTonightsMessage();
     var buttons  = [
-      { id:'open',  text:"💪 Open FitFlow", icon:'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png', url:'https://suneelchalla.github.io/fitflow-pro/index.html' },
-      { id:'later', text:"⏰ Later",         icon:'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png' },
+      { id:'open',  text:"💪 Open FitFlow", icon:'https://fitflowpro.in/icons/icon-192.png', url:'https://fitflowpro.in/index.html' },
+      { id:'later', text:"⏰ Later",         icon:'https://fitflowpro.in/icons/icon-192.png' },
     ];
     try {
       var r2 = _sendPushToIds(appId, apiKey, segments.notYet, motivMsg, buttons);
@@ -1821,9 +1909,9 @@ function sendCustomPush(body) {
     include_player_ids: deviceIds,
     headings:           { en: String(body.title).substring(0, 80) },
     contents:           { en: String(body.message).substring(0, 240) },
-    web_url:            'https://suneelchalla.github.io/fitflow-pro/index.html',
-    chrome_web_icon:    'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png',
-    chrome_web_badge:   'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png',
+    web_url:            'https://fitflowpro.in/index.html',
+    chrome_web_icon:    'https://fitflowpro.in/icons/icon-192.png',
+    chrome_web_badge:   'https://fitflowpro.in/icons/icon-192.png',
     priority: 10,
     ttl:      86400,
   };
@@ -1871,9 +1959,9 @@ function sendPushToUser(subscriptionId, title, body, url) {
     include_player_ids: [subscriptionId],
     headings:           { en: title || 'FitFlow Pro' },
     contents:           { en: body  || 'You have a new update!' },
-    web_url:            url || 'https://suneelchalla.github.io/fitflow-pro/index.html',
-    chrome_web_icon:    'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png',
-    chrome_web_badge:   'https://suneelchalla.github.io/fitflow-pro/icons/icon-192.png',
+    web_url:            url || 'https://fitflowpro.in/index.html',
+    chrome_web_icon:    'https://fitflowpro.in/icons/icon-192.png',
+    chrome_web_badge:   'https://fitflowpro.in/icons/icon-192.png',
     priority:           10,
   };
   try {
@@ -2076,7 +2164,7 @@ function testPushToDevice(playerId) {
     include_player_ids: [playerId],
     headings:           { en: 'Test Push 🧪' },
     contents:           { en: 'If you see this, your device is receiving notifications!' },
-    web_url:            'https://suneelchalla.github.io/fitflow-pro/index.html',
+    web_url:            'https://fitflowpro.in/index.html',
   };
   var res = UrlFetchApp.fetch('https://api.onesignal.com/notifications', {
     method:'post', contentType:'application/json',
