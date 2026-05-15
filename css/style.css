@@ -258,6 +258,13 @@ textarea.form-input { resize: vertical; min-height: 90px; line-height: 1.5; }
 /* Run tabs */
 .run-tab-content { display: none; }
 .run-tab-content.active { display: block; }
+/* Log tab needs flex layout for its child gap — must come AFTER .run-tab-content.active
+   so its display:flex wins when active, and display:none still wins when inactive */
+#run-tab-log.run-tab-content.active {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 
 /* ── BOTTOM NAV ────────────────────────────────────────────────── */
 .bottom-nav {
