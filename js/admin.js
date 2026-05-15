@@ -26,6 +26,264 @@ function renderAdminPanel() {
   if (dashBtn) switchAdminTab('dashboard', dashBtn);
 }
 
+// ════════════════════════════════════════════════════════════════
+// ADMIN DRILL-DOWN SYSTEM
+// Every stat / KPI / chart bar / module bar is clickable and opens
+// modal-admin-insight with the underlying records. Resolves userIds
+// to names so admin sees WHO did WHAT, not just totals.
+// ════════════════════════════════════════════════════════════════
+
+// Build a fast userId → display name lookup from the latest fetched users.
+// Falls back to the userId itself when no user record exists (e.g. logs from
+// deleted users). Cached on demand — call _rebuildUserMap() after fetching.
+let _adminUserMap = null;
+function _rebuildUserMap() {
+  _adminUserMap = {};
+  const users = _adminDashboardData?.users || [];
+  users.forEach(u => {
+    if (u.id) _adminUserMap[u.id] = u.name || u.email || u.id;
+  });
+}
+function _adminUserName(userId, fallbackName, fallbackEmail) {
+  if (!_adminUserMap) _rebuildUserMap();
+  return _adminUserMap[userId] || fallbackName || fallbackEmail || userId || '—';
+}
+
+// Generic drill-down opener. `bodyHtml` is the full inner HTML; usually a
+// table built by one of the _drill* functions below.
+function _showAdminInsight(emoji, title, subtitle, bodyHtml) {
+  const eEl = document.getElementById('admin-insight-emoji');
+  const tEl = document.getElementById('admin-insight-title');
+  const sEl = document.getElementById('admin-insight-subtitle');
+  const bEl = document.getElementById('admin-insight-body');
+  if (eEl) eEl.textContent = emoji || '📊';
+  if (tEl) tEl.textContent = title || 'Insight';
+  if (sEl) sEl.innerHTML   = subtitle || '';
+  if (bEl) bEl.innerHTML   = bodyHtml || '<div style="text-align:center;color:var(--text3);padding:24px">No data.</div>';
+  openModal('modal-admin-insight');
+}
+
+// Shared row + table styles used by every drill-down. The user-name cell
+// links to the existing openUserProgress() so admin can dive deeper from
+// any row with one tap.
+function _drillRow(cells, opts) {
+  const userId = opts?.userId;
+  const click  = userId ? `onclick="closeModal('modal-admin-insight');openUserProgress('${userId}', ${JSON.stringify(opts.userName||'').replace(/"/g,'&quot;')})"` : '';
+  const cursor = userId ? 'cursor:pointer' : '';
+  return `<div ${click} style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:1px solid var(--border);${cursor};transition:background .12s"
+    ${userId ? `onmouseover="this.style.background='rgba(67,160,90,0.07)'" onmouseout="this.style.background=''"` : ''}>
+    ${cells.map(c => `<div style="${c.style||'flex:1;font-size:13px;color:var(--text2);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'}">${c.html||c}</div>`).join('')}
+  </div>`;
+}
+function _drillEmpty(msg) {
+  return `<div style="text-align:center;color:var(--text3);padding:32px 16px;font-size:13.5px">${msg || 'No records.'}</div>`;
+}
+function _drillHeader(cells) {
+  return `<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;
+    background:rgba(255,255,255,0.03);border-bottom:1px solid var(--border);
+    font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em">
+    ${cells.map(c => `<div style="${c.style||'flex:1'}">${c.label||c}</div>`).join('')}
+  </div>`;
+}
+
+// Build a workout-row list from logs (sorted newest first).
+function _drillWorkoutList(logs) {
+  if (!logs.length) return _drillEmpty('No workout sessions found.');
+  const sorted = [...logs].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const header = _drillHeader([
+    { label: 'Date',   style: 'width:88px;flex:none' },
+    { label: 'User',   style: 'flex:1.4' },
+    { label: 'Module', style: 'flex:1' },
+    { label: 'Day',    style: 'width:50px;flex:none;text-align:right' },
+  ]);
+  const rows = sorted.map(l => {
+    const name   = _adminUserName(l.userId, l.name, l.email);
+    const modKey = l.module?.startsWith('custom_') ? 'custom' : l.module;
+    return _drillRow([
+      { html: l.date || '—',                       style: 'width:88px;flex:none;font-size:12px;color:var(--text3);font-variant-numeric:tabular-nums' },
+      { html: `<strong style="color:var(--text)">${name}</strong>`, style: 'flex:1.4;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' },
+      { html: `${getModuleEmoji(modKey)} ${getModuleName(modKey)}`, style: 'flex:1;font-size:12.5px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap' },
+      { html: l.day || '—',                        style: 'width:50px;flex:none;text-align:right;font-size:12px;color:var(--text3)' },
+    ], { userId: l.userId, userName: name });
+  }).join('');
+  return header + rows;
+}
+
+// Build a run-row list from run logs (sorted newest first).
+function _drillRunList(runs) {
+  if (!runs.length) return _drillEmpty('No runs found.');
+  const sorted = [...runs].sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const header = _drillHeader([
+    { label: 'Date',     style: 'width:88px;flex:none' },
+    { label: 'User',     style: 'flex:1.3' },
+    { label: 'Distance', style: 'width:72px;flex:none;text-align:right' },
+    { label: 'Time',     style: 'width:66px;flex:none;text-align:right' },
+  ]);
+  const rows = sorted.map(r => {
+    const name = _adminUserName(r.userId, r.name, r.email);
+    const km   = (r.distance || 0).toFixed(2);
+    const dur  = r.duration ? fmtTime(r.duration) : '—';
+    return _drillRow([
+      { html: r.date || '—',                                style: 'width:88px;flex:none;font-size:12px;color:var(--text3);font-variant-numeric:tabular-nums' },
+      { html: `<strong style="color:var(--text)">${name}</strong>`, style: 'flex:1.3;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap' },
+      { html: `<span style="color:var(--g5);font-weight:600">${km}</span><span style="color:var(--text3);font-size:11px"> km</span>`, style: 'width:72px;flex:none;text-align:right;font-size:13px;font-variant-numeric:tabular-nums' },
+      { html: dur,                                          style: 'width:66px;flex:none;text-align:right;font-size:12.5px;color:var(--text2);font-variant-numeric:tabular-nums' },
+    ], { userId: r.userId, userName: name });
+  }).join('');
+  return header + rows;
+}
+
+// Build a user-row list (used by Users and Active-7d drills).
+function _drillUserList(users, logs, runs) {
+  if (!users.length) return _drillEmpty('No users found.');
+  // Pre-compute sessions per user from logs + runs
+  const counts = {};
+  const lastDate = {};
+  (logs || []).forEach(l => {
+    counts[l.userId] = (counts[l.userId] || 0) + 1;
+    if (!lastDate[l.userId] || (l.date||'') > lastDate[l.userId]) lastDate[l.userId] = l.date || '';
+  });
+  (runs || []).forEach(r => {
+    counts[r.userId] = (counts[r.userId] || 0) + 1;
+    if (!lastDate[r.userId] || (r.date||'') > lastDate[r.userId]) lastDate[r.userId] = r.date || '';
+  });
+  const sorted = [...users].sort((a,b) => (counts[b.id]||0) - (counts[a.id]||0));
+  const header = _drillHeader([
+    { label: 'User',        style: 'flex:1.4' },
+    { label: 'Last Active', style: 'width:96px;flex:none' },
+    { label: 'Sessions',    style: 'width:70px;flex:none;text-align:right' },
+  ]);
+  const rows = sorted.map(u => {
+    const name = u.name || u.email || u.id;
+    const last = lastDate[u.id] || '—';
+    const cnt  = counts[u.id] || 0;
+    return _drillRow([
+      { html: `<strong style="color:var(--text)">${name}</strong><div style="font-size:11px;color:var(--text3);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${u.email||''}</div>`, style: 'flex:1.4;min-width:0' },
+      { html: last,                                                   style: 'width:96px;flex:none;font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums' },
+      { html: `<span style="color:var(--g5);font-weight:700">${cnt}</span>`, style: 'width:70px;flex:none;text-align:right;font-size:14px' },
+    ], { userId: u.id, userName: name });
+  }).join('');
+  return header + rows;
+}
+
+// ── DRILL: top status bar (5 cards) ──
+function _drillTopStat(key) {
+  const data = _adminDashboardData;
+  if (!data) { showToast('Loading…', 'info'); return; }
+  _rebuildUserMap();
+  const allLogs = data.allLogs || [];
+  const allRuns = data.allRuns || [];
+  const users   = (data.users || []).filter(u => u.role !== 'ADMIN');
+  const today   = todayStr();
+
+  if (key === 'users') {
+    _showAdminInsight('👥', 'All Users', `${users.length} total · click a row to see their progress`,
+      _drillUserList(users, allLogs, allRuns));
+  } else if (key === 'today') {
+    const todayLogs = allLogs.filter(l => l.date === today);
+    const todayRuns = allRuns.filter(r => r.date === today);
+    const activeIds = [...new Set([...todayLogs.map(l=>l.userId), ...todayRuns.map(r=>r.userId)])];
+    const activeUsers = users.filter(u => activeIds.includes(u.id));
+    _showAdminInsight('📍', 'Active Today', `${activeUsers.length} users active · ${todayLogs.length + todayRuns.length} sessions today`,
+      _drillUserList(activeUsers, todayLogs, todayRuns));
+  } else if (key === 'workouts') {
+    const stdLogs = allLogs.filter(l => !l.module?.startsWith('custom_'));
+    _showAdminInsight('💪', 'All Workouts', `${stdLogs.length} sessions logged across all users`,
+      _drillWorkoutList(stdLogs));
+  } else if (key === 'runs') {
+    _showAdminInsight('🏃', 'All Runs', `${allRuns.length} runs · ${allRuns.reduce((a,r)=>a+(r.distance||0),0).toFixed(1)} km total`,
+      _drillRunList(allRuns));
+  } else if (key === 'custom') {
+    const cwLogs = allLogs.filter(l => l.module?.startsWith('custom_'));
+    _showAdminInsight('🎯', 'Custom Workout Sessions', `${cwLogs.length} custom-workout completions`,
+      _drillWorkoutList(cwLogs));
+  }
+}
+
+// ── DRILL: Analytics KPI cards (4) ──
+function _drillAnalyticsKpi(key) {
+  const data = _adminDashboardData;
+  if (!data) { showToast('Loading…', 'info'); return; }
+  _rebuildUserMap();
+  const allLogs = data.allLogs || [];
+  const allRuns = data.allRuns || [];
+  const users   = (data.users || []).filter(u => u.role !== 'ADMIN');
+  const today   = todayStr();
+  const monday  = getMonday();
+
+  if (key === 'thisWeek') {
+    const wkLogs = allLogs.filter(l => l.date >= monday);
+    _showAdminInsight('📅', 'Sessions This Week', `${wkLogs.length} sessions since Monday (${monday})`,
+      _drillWorkoutList(wkLogs));
+  } else if (key === 'runsThisWeek') {
+    const wkRuns = allRuns.filter(r => r.date >= monday);
+    const km = wkRuns.reduce((a,r)=>a+(r.distance||0),0).toFixed(1);
+    _showAdminInsight('🏃', 'Runs This Week', `${wkRuns.length} runs · ${km} km · since Monday (${monday})`,
+      _drillRunList(wkRuns));
+  } else if (key === 'active7') {
+    const last7 = (() => { const d=new Date(); d.setDate(d.getDate()-7); return _ymdLocal(d); })();
+    const activeIds = new Set();
+    allLogs.forEach(l => { if ((l.date||'') >= last7) activeIds.add(l.userId); });
+    allRuns.forEach(r => { if ((r.date||'') >= last7) activeIds.add(r.userId); });
+    const active = users.filter(u => activeIds.has(u.id));
+    _showAdminInsight('👥', 'Active in Last 7 Days', `${active.length} users had at least one activity since ${last7}`,
+      _drillUserList(active, allLogs.filter(l=>l.date>=last7), allRuns.filter(r=>r.date>=last7)));
+  } else if (key === 'today') {
+    const tdLogs = allLogs.filter(l => l.date === today);
+    const tdRuns = allRuns.filter(r => r.date === today);
+    const combined = [..._drillWorkoutList(tdLogs)];
+    let body;
+    if (!tdLogs.length && !tdRuns.length) {
+      body = _drillEmpty('No sessions logged today yet.');
+    } else if (!tdRuns.length) {
+      body = _drillWorkoutList(tdLogs);
+    } else if (!tdLogs.length) {
+      body = _drillRunList(tdRuns);
+    } else {
+      body = `<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;padding:4px 12px 6px">Workouts (${tdLogs.length})</div>${_drillWorkoutList(tdLogs)}
+        <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;padding:14px 12px 6px">Runs (${tdRuns.length})</div>${_drillRunList(tdRuns)}`;
+    }
+    _showAdminInsight('📍', 'Sessions Today', `${tdLogs.length + tdRuns.length} sessions logged today (${today})`, body);
+  }
+}
+
+// ── DRILL: a single day in the 14-day activity chart ──
+function _drillActivityDay(dateStr) {
+  const data = _adminDashboardData;
+  if (!data) { showToast('Loading…', 'info'); return; }
+  _rebuildUserMap();
+  const dayLogs = (data.allLogs || []).filter(l => l.date === dateStr);
+  const dayRuns = (data.allRuns || []).filter(r => r.date === dateStr);
+  const total = dayLogs.length + dayRuns.length;
+  let body;
+  if (!total) {
+    body = _drillEmpty('No sessions on this day.');
+  } else if (!dayRuns.length) {
+    body = _drillWorkoutList(dayLogs);
+  } else if (!dayLogs.length) {
+    body = _drillRunList(dayRuns);
+  } else {
+    body = `<div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;padding:4px 12px 6px">Workouts (${dayLogs.length})</div>${_drillWorkoutList(dayLogs)}
+      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;padding:14px 12px 6px">Runs (${dayRuns.length})</div>${_drillRunList(dayRuns)}`;
+  }
+  _showAdminInsight('📈', dateStr, `${total} session${total===1?'':'s'} logged on ${dateStr}`, body);
+}
+
+// ── DRILL: a single module's full session list ──
+function _drillModulePopularity(modKey) {
+  const data = _adminDashboardData;
+  if (!data) { showToast('Loading…', 'info'); return; }
+  _rebuildUserMap();
+  // 'custom' meta-key matches every log starting with custom_
+  const matches = (data.allLogs || []).filter(l => {
+    if (modKey === 'custom') return l.module?.startsWith('custom_');
+    return l.module === modKey;
+  });
+  _showAdminInsight(getModuleEmoji(modKey), getModuleName(modKey),
+    `${matches.length} session${matches.length===1?'':'s'} logged · click a row to see that user`,
+    _drillWorkoutList(matches));
+}
+
 function renderAdminStats() {
   // Use cached dashboard data (from Sheets) when available — falls back to localStorage
   // This prevents the header always showing 0 for admin who has no personal logs
@@ -107,6 +365,7 @@ async function loadAdminUsers() {
         allRuns:   (runsRes?.success  && runsRes.logs?.length)  ? runsRes.logs  : Store.getRunLogs(),
         fetchedAt: new Date(),
       };
+      _rebuildUserMap();   // ensure drill-downs can resolve userId → name immediately
       // Update header KPI cards with real data now that we have it
       renderAdminStats();
     } catch(e) {
@@ -1945,20 +2204,26 @@ async function renderAdminAnalytics() {
 
   container.innerHTML = `
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
-      ${_aKpi('📅','This Week', thisWeekLogs.length+' sessions', lastWeekLogs.length?(thisWeekLogs.length>=lastWeekLogs.length?'↑':'↓')+' vs last week':'')}
-      ${_aKpi('🏃','Runs This Week', thisWeekRuns.length+' runs', thisWeekRuns.reduce((a,r)=>a+(r.distance||0),0).toFixed(1)+' km total')}
-      ${_aKpi('👥','Active (7 days)', activeUserIds.length+' users', 'across all users')}
-      ${_aKpi('📍','Today Sessions', todayLogs.length+' done', [...new Set(todayLogs.map(l=>l.userId))].length+' users active')}
+      ${_aKpi('📅','This Week', thisWeekLogs.length+' sessions', lastWeekLogs.length?(thisWeekLogs.length>=lastWeekLogs.length?'↑':'↓')+' vs last week':'', "_drillAnalyticsKpi('thisWeek')")}
+      ${_aKpi('🏃','Runs This Week', thisWeekRuns.length+' runs', thisWeekRuns.reduce((a,r)=>a+(r.distance||0),0).toFixed(1)+' km total', "_drillAnalyticsKpi('runsThisWeek')")}
+      ${_aKpi('👥','Active (7 days)', activeUserIds.length+' users', 'across all users', "_drillAnalyticsKpi('active7')")}
+      ${_aKpi('📍','Today Sessions', todayLogs.length+' done', [...new Set(todayLogs.map(l=>l.userId))].length+' users active', "_drillAnalyticsKpi('today')")}
     </div>
 
     <div class="card card-sm" style="margin-bottom:14px">
-      <div class="section-title" style="margin-bottom:12px">📈 Activity — Last 14 Days</div>
+      <div class="section-title" style="margin-bottom:12px">📈 Activity — Last 14 Days <span style="font-size:11px;color:var(--text3);font-weight:500;margin-left:6px">tap a bar for details</span></div>
       <div style="display:flex;align-items:flex-end;gap:3px;height:60px">
         ${dayKeys.map((d,i) => {
           const h = Math.max(4, Math.round(dayVals[i]/maxDay*56));
           const isToday = d===today;
-          return `<div style="flex:1;display:flex;flex-direction:column;align-items:center" title="${d}: ${dayVals[i]} sessions">
-            <div style="width:100%;background:${isToday?'var(--accent)':'var(--g3)'};height:${h}px;border-radius:3px 3px 0 0;opacity:${isToday?1:0.75}"></div>
+          const cnt = dayVals[i];
+          return `<div onclick="_drillActivityDay('${d}')" role="button" tabindex="0"
+            style="flex:1;display:flex;flex-direction:column;align-items:center;cursor:pointer;
+              padding:2px 0;border-radius:3px;transition:background .12s"
+            onmouseover="this.style.background='rgba(67,160,90,0.10)'"
+            onmouseout="this.style.background=''"
+            title="${d}: ${cnt} session${cnt===1?'':'s'} — tap for details">
+            <div style="width:100%;background:${isToday?'var(--accent)':'var(--g3)'};height:${h}px;border-radius:3px 3px 0 0;opacity:${isToday?1:0.75};pointer-events:none"></div>
           </div>`;
         }).join('')}
       </div>
@@ -1968,11 +2233,16 @@ async function renderAdminAnalytics() {
     </div>
 
     <div class="card card-sm" style="margin-bottom:14px">
-      <div class="section-title" style="margin-bottom:12px">🏆 Module Popularity</div>
+      <div class="section-title" style="margin-bottom:12px">🏆 Module Popularity <span style="font-size:11px;color:var(--text3);font-weight:500;margin-left:6px">tap a row for details</span></div>
       ${topMods.slice(0,6).map(([mod,cnt]) => `
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <div onclick="_drillModulePopularity('${mod}')" role="button" tabindex="0"
+          style="display:flex;align-items:center;gap:10px;margin-bottom:8px;
+            padding:6px 8px;margin-left:-8px;margin-right:-8px;border-radius:8px;
+            cursor:pointer;transition:background .12s"
+          onmouseover="this.style.background='rgba(67,160,90,0.06)'"
+          onmouseout="this.style.background=''">
           <span style="font-size:18px;width:24px">${getModuleEmoji(mod)}</span>
-          <div style="flex:1">
+          <div style="flex:1;pointer-events:none">
             <div style="display:flex;justify-content:space-between;margin-bottom:3px">
               <span style="font-size:13px;font-weight:600">${getModuleName(mod)}</span>
               <span style="font-size:12px;color:var(--text3)">${cnt}</span>
@@ -1985,12 +2255,18 @@ async function renderAdminAnalytics() {
     ${dropout.length ? `
     <div class="card card-sm" style="margin-bottom:14px;border-color:rgba(239,154,154,0.3);background:rgba(229,57,53,0.05)">
       <div class="section-title" style="margin-bottom:8px;color:#ef9a9a">⚠️ Inactive 7+ Days (${dropout.length})</div>
-      <div style="font-size:13px;color:var(--text2);margin-bottom:10px">Consider sending a motivation push.</div>
-      ${dropout.slice(0,5).map(uid=>`
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
-          <span style="font-size:13px">${uid}</span>
+      <div style="font-size:13px;color:var(--text2);margin-bottom:10px">Consider sending a motivation push. Tap a user to see their full progress.</div>
+      ${dropout.slice(0,5).map(uid => {
+        const name = _adminUserName(uid);
+        return `<div onclick="openUserProgress('${uid}', ${JSON.stringify(name).replace(/"/g,'&quot;')})" role="button" tabindex="0"
+          style="display:flex;justify-content:space-between;align-items:center;padding:8px 8px;margin:0 -8px;
+            border-bottom:1px solid var(--border);cursor:pointer;border-radius:6px;transition:background .12s"
+          onmouseover="this.style.background='rgba(229,57,53,0.08)'"
+          onmouseout="this.style.background=''">
+          <span style="font-size:13px;color:var(--text);font-weight:600">${name}</span>
           <span style="font-size:12px;color:#ef9a9a">Last: ${userLastActivity[uid]}</span>
-        </div>`).join('')}
+        </div>`;
+      }).join('')}
       ${dropout.length>5?`<div style="font-size:12px;color:var(--text3);margin-top:6px">+${dropout.length-5} more</div>`:''}
     </div>` : `
     <div class="card card-sm" style="border-color:rgba(67,160,90,0.3);background:rgba(67,160,90,0.05)">
@@ -1999,8 +2275,12 @@ async function renderAdminAnalytics() {
   `;
 }
 
-function _aKpi(emoji, label, val, sub) {
-  return `<div class="card card-sm" style="text-align:center">
+function _aKpi(emoji, label, val, sub, onclick) {
+  const clickable = !!onclick;
+  return `<div class="card card-sm"
+    ${clickable ? `onclick="${onclick}" role="button" tabindex="0"` : ''}
+    style="text-align:center${clickable ? ';cursor:pointer;transition:background .12s,transform .1s,border-color .15s' : ''}"
+    ${clickable ? `onmouseover="this.style.background='rgba(67,160,90,0.06)';this.style.borderColor='rgba(67,160,90,0.35)'" onmouseout="this.style.background='';this.style.borderColor=''"` : ''}>
     <div style="font-size:24px">${emoji}</div>
     <div style="font-family:var(--font-display);font-size:26px;color:var(--g5);line-height:1.1;margin:4px 0">${val}</div>
     <div style="font-size:12px;font-weight:700;color:var(--text2)">${label}</div>
@@ -2308,6 +2588,7 @@ async function renderAdminDashboard() {
   } catch(e) { console.warn('Dashboard fetch:', e.message); }
 
   _adminDashboardData = { users, allLogs, allRuns, fetchedAt: new Date() };
+  _rebuildUserMap();   // ensure drill-downs can resolve userId → name immediately
   renderAdminStats(); // Update header KPI cards now that we have real cross-user data
   _renderDashboardContent();
 
