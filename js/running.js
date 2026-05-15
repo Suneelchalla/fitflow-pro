@@ -110,27 +110,28 @@ function _renderActivityWarmupCooldown(activityType) {
   // (or the YouTube app if installed) — keeps FitFlow itself in the back stack.
   const cardHtml = (item, isWarmup) => `
     <div style="background:var(--surface);border:1px solid var(--border);
-      border-radius:14px;padding:14px 16px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
-        <div style="display:flex;align-items:center;gap:8px;min-width:0">
-          <span style="font-size:18px;flex-shrink:0">${item.emoji}</span>
-          <div style="font-size:15px;font-weight:700;color:var(--text);
+      border-radius:13px;padding:10px 13px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <div style="display:flex;align-items:center;gap:7px;min-width:0">
+          <span style="font-size:16px;flex-shrink:0">${item.emoji}</span>
+          <div style="font-size:14px;font-weight:700;color:var(--text);
             overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${item.title}</div>
         </div>
-        <div style="font-size:11px;font-weight:700;color:${meta.color};
-          background:${meta.color}1a;padding:3px 9px;border-radius:20px;
+        <div style="font-size:10.5px;font-weight:700;color:${meta.color};
+          background:${meta.color}1a;padding:2px 8px;border-radius:20px;
           letter-spacing:.04em;flex-shrink:0;margin-left:8px">${item.duration}</div>
       </div>
-      <div style="font-size:12.5px;color:var(--text2);line-height:1.55;margin-bottom:11px">${item.brief}</div>
-      <div style="display:flex;gap:8px;align-items:center">
+      <div style="font-size:11.5px;color:var(--text2);line-height:1.4;margin-bottom:8px;
+        overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${item.brief}</div>
+      <div style="display:flex;gap:7px;align-items:center">
         <button onclick="event.stopPropagation();window.open('${item.video}','_blank','noopener,noreferrer')"
-          style="flex:1;display:flex;align-items:center;justify-content:center;gap:8px;
-            padding:11px 14px;border:none;border-radius:12px;
+          style="flex:1;display:flex;align-items:center;justify-content:center;gap:7px;
+            padding:9px 12px;border:none;border-radius:11px;
             background:linear-gradient(135deg,#2e7d46,#43a05a);
-            color:#ffffff;font-size:13.5px;font-weight:700;
+            color:#ffffff;font-size:12.5px;font-weight:700;
             cursor:pointer;touch-action:manipulation;-webkit-tap-highlight-color:transparent;
             box-shadow:0 2px 8px rgba(67,160,90,0.30)">
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="#ffffff" aria-hidden="true" style="flex-shrink:0">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="#ffffff" aria-hidden="true" style="flex-shrink:0">
             <path d="M8 5v14l11-7z"/>
           </svg>
           <span style="color:#ffffff">Click Here to Watch Demo</span>
@@ -138,11 +139,11 @@ function _renderActivityWarmupCooldown(activityType) {
         <button onclick="event.stopPropagation();window.open('${item.search}','_blank','noopener,noreferrer')"
           aria-label="Browse more ${isWarmup ? 'warm-up' : 'cool-down'} videos on YouTube"
           title="Browse more videos on YouTube"
-          style="padding:0;width:46px;height:42px;border:1px solid rgba(67,160,90,0.35);border-radius:12px;
+          style="padding:0;width:40px;height:36px;border:1px solid rgba(67,160,90,0.35);border-radius:11px;
             background:rgba(67,160,90,0.08);cursor:pointer;flex-shrink:0;
             display:flex;align-items:center;justify-content:center;
             touch-action:manipulation;-webkit-tap-highlight-color:transparent">
-          <svg width="24" height="17" viewBox="0 0 24 17" aria-hidden="true">
+          <svg width="21" height="15" viewBox="0 0 24 17" aria-hidden="true">
             <path fill="#ff0000" d="M23.5 2.65a3 3 0 0 0-2.12-2.12C19.5 0 12 0 12 0S4.5 0 2.62.53A3 3 0 0 0 .5 2.65 31.4 31.4 0 0 0 0 8.5a31.4 31.4 0 0 0 .5 5.85 3 3 0 0 0 2.12 2.12C4.5 17 12 17 12 17s7.5 0 9.38-.53a3 3 0 0 0 2.12-2.12A31.4 31.4 0 0 0 24 8.5a31.4 31.4 0 0 0-.5-5.85Z"/>
             <path fill="#ffffff" d="M9.6 12.14V4.86l6.3 3.64-6.3 3.64Z"/>
           </svg>
@@ -151,7 +152,7 @@ function _renderActivityWarmupCooldown(activityType) {
     </div>`;
 
   container.innerHTML = `
-    <div style="display:flex;flex-direction:column;gap:12px">
+    <div style="display:flex;flex-direction:column;gap:9px">
       ${cardHtml(data.warmup,   true)}
       ${cardHtml(data.cooldown, false)}
     </div>`;
