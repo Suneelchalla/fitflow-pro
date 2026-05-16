@@ -626,16 +626,26 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // ── BOOT-TIME ORPHAN NOTIFICATION CLEANUP ─────────────────────────
-  // Fix for "two activity notifications stuck in the shade" — when there is
-  // NO active run in storage (i.e. user is not mid-run), forcibly close every
-  // FitFlow activity notification across every service worker registration.
-  // This handles the case where an old SW version is still alive showing its
-  // own notification that the current SW cannot reach via postMessage.
+  // Fix for "activity notification stuck on dashboard forever" — the previous
+  // guard skipped cleanup whenever ff_active_run existed, but ff_active_run
+  // is only ever cleared by _tryRecoverRunSession (running page entry). If
+  // the user closes the app mid-run and never opens the running page again,
+  // both the stale session AND the orphan notification persist indefinitely.
+  //
+  // New behaviour:
+  //   1. Stale session (>45 min old) → wipe ff_active_run.
+  //   2. Always run _killAllActivityNotifications. If there's a real fresh
+  //      session, _tryRecoverRunSession restores it as paused (no GPS, no
+  //      notification) and the user must tap Resume to re-create it.
   // Runs once on every page load, ~2s after init so the SW has time to settle.
   setTimeout(() => {
     try {
-      const hasActiveRun = !!Store.get('ff_active_run');
-      if (hasActiveRun) return;  // don't kill notifications during an in-progress run
+      const saved = Store.get('ff_active_run');
+      const isStale = saved && saved.startTime &&
+        (Date.now() - saved.startTime > 45 * 60 * 1000);
+      if (isStale) {
+        Store.remove('ff_active_run');
+      }
       if (typeof _killAllActivityNotifications === 'function') {
         _killAllActivityNotifications();
       }
