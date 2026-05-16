@@ -333,7 +333,6 @@ function renderCtPlanOverview() {
     phaseDef.weeks.forEach(week => {
       const isCurrent  = week === currentWeek;
       const isPast     = week < currentWeek;
-      const isFuture   = week > currentWeek;
       const stateLbl   = isPast ? 'past' : isCurrent ? 'now' : 'upcoming';
       const stateCol   = isPast ? 'var(--text3)' : isCurrent ? 'var(--g5)' : 'var(--text3)';
 
@@ -353,27 +352,27 @@ function renderCtPlanOverview() {
               const meta      = dayType ? mod.dayTypeLabels[dayType] : null;
               const isToday   = isCurrent && d === currentDay;
               const done      = dayType ? isCtDayDone(week, d) : false;
-              const locked    = isFuture;   // future weeks not yet unlocked
               const isWorkout = !!dayType;
 
-              // Background + border based on state
-              let bg, border, color, opacity;
+              // Background + border based on state. Locks intentionally removed —
+              // users can complete any workout day they want, in any order.
+              // Past/current/future weeks all look the same except for the
+              // "TODAY" pill and the green "done" highlight.
+              let bg, border, color;
               if (!isWorkout) {
-                bg = 'var(--bg3)'; border = 'none'; color = 'var(--text3)'; opacity = '1';
+                bg = 'var(--bg3)'; border = 'none'; color = 'var(--text3)';
               } else if (done) {
-                bg = 'rgba(67,160,90,0.28)'; border = '1px solid rgba(67,160,90,0.45)'; color = 'var(--text)'; opacity = '1';
+                bg = 'rgba(67,160,90,0.28)'; border = '1px solid rgba(67,160,90,0.45)'; color = 'var(--text)';
               } else if (isToday) {
-                bg = 'rgba(240,192,64,0.18)'; border = '2px solid var(--accent)'; color = 'var(--text)'; opacity = '1';
-              } else if (locked) {
-                bg = 'var(--surface2)'; border = '1px solid var(--border)'; color = 'var(--text2)'; opacity = '0.55';
+                bg = 'rgba(240,192,64,0.18)'; border = '2px solid var(--accent)'; color = 'var(--text)';
               } else {
-                bg = 'var(--surface2)'; border = '1px solid var(--border)'; color = 'var(--text)'; opacity = '1';
+                bg = 'var(--surface2)'; border = '1px solid var(--border)'; color = 'var(--text)';
               }
 
               const handler = isWorkout ? `openCtDayDetail(${week},'${d}')` : '';
               return `
                 <div onclick="${handler}"
-                  style="aspect-ratio:1;border-radius:10px;background:${bg};border:${border};opacity:${opacity};
+                  style="aspect-ratio:1;border-radius:10px;background:${bg};border:${border};
                     display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;
                     cursor:${isWorkout?'pointer':'default'};color:${color};position:relative;
                     transition:transform .15s ease, background .15s ease">
@@ -381,7 +380,6 @@ function renderCtPlanOverview() {
                   <div style="font-size:18px;line-height:1">${meta?meta.emoji:'·'}</div>
                   ${done ? '<div style="font-size:9px;color:var(--g5);font-weight:700;line-height:1">✓</div>' : ''}
                   ${isToday && !done ? `<div style="position:absolute;top:-6px;right:-4px;background:var(--accent);color:#000;font-size:8px;font-weight:800;padding:1px 5px;border-radius:8px;letter-spacing:.04em">TODAY</div>` : ''}
-                  ${locked ? '<div style="position:absolute;top:3px;right:4px;font-size:9px;opacity:0.7">🔒</div>' : ''}
                 </div>`;
             }).join('')}
           </div>
@@ -431,9 +429,7 @@ function _renderCtDayPage() {
     return;
   }
 
-  const currentWeek = getCtCurrentWeek();
-  const locked      = week > currentWeek;
-  const done        = isCtDayDone(week, day);
+  const done = isCtDayDone(week, day);
 
   // Header — phase, week, day-type
   let html = `
@@ -467,16 +463,10 @@ function _renderCtDayPage() {
 
       <div id="ct-day-exercises" style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px"></div>
 
-      ${locked
-        ? `<button class="btn btn-outline btn-full" disabled
-            style="margin-bottom:14px;opacity:0.6;cursor:not-allowed">
-            🔒 Unlocks in Week ${week} (you're in Week ${currentWeek})
-          </button>`
-        : `<button id="ct-day-complete-btn" class="btn btn-primary btn-full"
-            onclick="completeCtDay(${week},'${day}')" style="margin-bottom:14px">
-            🎉 Complete Session
-          </button>`
-      }
+      <button id="ct-day-complete-btn" class="btn btn-primary btn-full"
+        onclick="completeCtDay(${week},'${day}')" style="margin-bottom:14px">
+        🎉 Complete Session
+      </button>
 
       <div style="text-align:center;margin-top:8px">
         <button onclick="goBack()"
@@ -613,12 +603,6 @@ function completeCtDay(week, day) {
   if (!user) return;
   if (isCtDayDone(week, day)) {
     showToast('Already logged for this session.', 'info');
-    return;
-  }
-
-  const currentWeek = getCtCurrentWeek();
-  if (week > currentWeek) {
-    showToast('That week isn\'t unlocked yet.', 'info');
     return;
   }
 
