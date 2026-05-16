@@ -78,6 +78,236 @@ function renderDashboardStats() {
   if (ringPctEl) ringPctEl.textContent = pct + '%';
 }
 
+// ── STATS-TILE TAP-TO-EXPAND ─────────────────────────────────────
+// The "Total Workouts" and "This Week" tiles on the dashboard are tappable.
+// Tap opens a bottom-sheet modal showing the detailed breakdown — per-module
+// counts for the all-time view, per-day breakdown for the weekly view — plus
+// a shortcut to the full History page.
+function showStatsBreakdown(type) {
+  const user = APP.currentUser;
+  if (!user) return;
+  const logs = Store.getUserLogs(user.id);
+  const runs = Store.getUserRunLogs(user.id);
+
+  let title, subtitle, body;
+  if (type === 'week') {
+    title    = 'This Week';
+    subtitle = 'What you logged this calendar week';
+    body     = _buildWeekBreakdownHtml(user, logs, runs);
+  } else {
+    title    = 'Total Workouts';
+    subtitle = "Everything you've logged since starting";
+    body     = _buildTotalBreakdownHtml(user, logs, runs);
+  }
+
+  // Reuse a single modal id so re-tapping a tile replaces rather than stacks.
+  document.getElementById('stats-breakdown-modal')?.remove();
+
+  const overlay = document.createElement('div');
+  overlay.id = 'stats-breakdown-modal';
+  overlay.style.cssText =
+    'position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:9999;' +
+    'display:flex;align-items:flex-end;justify-content:center';
+  overlay.innerHTML = `
+    <div style="background:var(--bg);border-radius:20px 20px 0 0;
+      padding:22px 20px 28px;width:100%;max-width:480px;max-height:85vh;
+      overflow-y:auto;box-shadow:0 -12px 40px rgba(0,0,0,0.4)">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px">
+        <div>
+          <div style="font-weight:700;font-size:20px;color:var(--text)">${title}</div>
+          <div style="font-size:12px;color:var(--text3);margin-top:2px">${subtitle}</div>
+        </div>
+        <button onclick="document.getElementById('stats-breakdown-modal')?.remove()"
+          aria-label="Close"
+          style="background:rgba(255,255,255,0.08);border:none;color:var(--text);
+            font-size:18px;cursor:pointer;width:32px;height:32px;border-radius:50%;
+            display:flex;align-items:center;justify-content:center;
+            user-select:none;-webkit-user-select:none;touch-action:manipulation">×</button>
+      </div>
+      ${body}
+      <div style="margin-top:18px">
+        <button class="btn btn-primary btn-full"
+          onclick="document.getElementById('stats-breakdown-modal')?.remove();showPage('page-history-global');if(typeof renderGlobalHistory==='function')renderGlobalHistory()">
+          📅 View Full History
+        </button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  // Tap on the dim backdrop closes
+  overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+}
+
+// Resolve a friendly emoji + name for any log/run module id, including
+// custom-workout ids (custom_<id>) which the generic helpers don't handle.
+function _statsModuleLabel(modId) {
+  if (typeof modId !== 'string') return { emoji: '💪', name: 'Workout' };
+  if (modId.startsWith('custom_')) {
+    // Try the user's custom-workout list for a real name
+    try {
+      const u = APP.currentUser;
+      const list = u ? Store.get('ff_custom_workouts_' + u.id, []) : [];
+      const wid = modId.replace('custom_', '');
+      const cw  = Array.isArray(list) ? list.find(w => w.id === wid) : null;
+      if (cw?.name) return { emoji: cw.emoji || '🔧', name: cw.name };
+    } catch {}
+    return { emoji: '🔧', name: 'Custom Workout' };
+  }
+  return {
+    emoji: typeof getModuleEmoji === 'function' ? getModuleEmoji(modId) : '💪',
+    name:  typeof getModuleName  === 'function' ? getModuleName(modId)  : modId,
+  };
+}
+
+function _buildTotalBreakdownHtml(user, logs, runs) {
+  // Per-module log counts
+  const byModule = {};
+  logs.forEach(l => {
+    if (!l.module) return;
+    byModule[l.module] = (byModule[l.module] || 0) + 1;
+  });
+
+  // Total run metrics
+  const totalKm     = runs.reduce((s, r) => s + (r.distance || 0), 0);
+  const totalRunMin = Math.round(runs.reduce((s, r) => s + (r.duration || 0), 0) / 60);
+
+  // First-ever activity date — show "Since X days ago"
+  const allDates = [...logs, ...runs]
+    .map(x => x.date)
+    .filter(d => typeof d === 'string' && /^\d{4}-\d{2}-\d{2}/.test(d))
+    .sort();
+  const firstDate = allDates[0];
+  const daysSince = firstDate
+    ? Math.max(0, Math.floor((Date.now() - new Date(firstDate + 'T00:00:00').getTime()) / 86400000))
+    : 0;
+
+  const streak = (typeof calcStreak === 'function') ? calcStreak(user.id) : 0;
+  const headline = logs.length;   // matches what the tile shows
+  const sortedModules = Object.entries(byModule).sort((a, b) => b[1] - a[1]);
+
+  return `
+    <!-- Headline -->
+    <div style="text-align:center;margin-bottom:18px">
+      <div style="font-family:var(--font-display);font-size:54px;color:var(--g5);line-height:1">${headline}</div>
+      <div style="font-size:13px;color:var(--text2);margin-top:4px">module workouts logged</div>
+      ${firstDate ? `<div style="font-size:11px;color:var(--text3);margin-top:6px">
+        Since ${new Date(firstDate + 'T00:00:00').toLocaleDateString(undefined, { day:'numeric', month:'short', year:'numeric' })} · ${daysSince} ${daysSince === 1 ? 'day' : 'days'}
+      </div>` : ''}
+    </div>
+
+    <!-- Quick stats row -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:18px">
+      <div class="stat-card"><div class="stat-val" style="font-size:22px">${streak}🔥</div><div class="stat-label">Day streak</div></div>
+      <div class="stat-card"><div class="stat-val" style="font-size:22px">${runs.length}</div><div class="stat-label">GPS activities</div></div>
+      <div class="stat-card"><div class="stat-val" style="font-size:22px">${totalKm.toFixed(1)}</div><div class="stat-label">Total km</div></div>
+    </div>
+
+    ${runs.length > 0 ? `
+      <div style="font-size:12px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Running & Walking</div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:10px 14px;margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;font-size:13px;color:var(--text2)">
+          <span>${runs.length} activities · ${totalKm.toFixed(1)} km</span>
+          <span>${totalRunMin > 60 ? Math.floor(totalRunMin / 60) + 'h ' + (totalRunMin % 60) + 'm' : totalRunMin + ' min'}</span>
+        </div>
+      </div>` : ''}
+
+    ${sortedModules.length > 0 ? `
+      <div style="font-size:12px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">By Module</div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
+        ${sortedModules.map(([modId, count], i) => {
+          const meta = _statsModuleLabel(modId);
+          const isLast = i === sortedModules.length - 1;
+          return `
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 14px;${isLast ? '' : 'border-bottom:1px solid var(--border)'}">
+              <span style="display:flex;align-items:center;gap:10px;font-size:14px;color:var(--text)">
+                <span style="font-size:18px;line-height:1">${meta.emoji}</span>${meta.name}
+              </span>
+              <span style="font-size:14px;font-weight:700;color:var(--g5);font-family:var(--font-display)">${count}</span>
+            </div>`;
+        }).join('')}
+      </div>` : (runs.length === 0 ? `
+      <div style="text-align:center;color:var(--text3);font-size:13px;padding:24px 0">
+        No activities logged yet.<br>Tap any module below to get started! 💪
+      </div>` : '')}
+  `;
+}
+
+function _buildWeekBreakdownHtml(user, logs, runs) {
+  const mondayStr = (typeof getMonday === 'function') ? getMonday() : '';
+  const todayYmd  = (typeof todayStr  === 'function') ? todayStr()  : '';
+  if (!mondayStr) return '<div style="text-align:center;color:var(--text3);padding:24px">Unable to compute week range.</div>';
+
+  // Build 7-day slots Mon..Sun
+  const startMs = new Date(mondayStr + 'T00:00:00').getTime();
+  const week = [];
+  for (let i = 0; i < 7; i++) {
+    const d   = new Date(startMs + i * 86400000);
+    const ymd = d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+    week.push({
+      d, ymd,
+      isToday: ymd === todayYmd,
+      isPast:  ymd <  todayYmd,
+      isFuture: ymd > todayYmd,
+      logs: logs.filter(l => l.date === ymd),
+      runs: runs.filter(r => r.date === ymd),
+    });
+  }
+
+  const totalThisWeek = week.reduce((s, day) => s + day.logs.length + day.runs.length, 0);
+  const activeDays    = week.filter(day => day.logs.length + day.runs.length > 0).length;
+  const weekKm        = week.reduce((s, day) => s + day.runs.reduce((a, r) => a + (r.distance || 0), 0), 0);
+  const pct           = Math.min(100, Math.round(activeDays / 7 * 100));
+
+  return `
+    <!-- Headline -->
+    <div style="text-align:center;margin-bottom:18px">
+      <div style="font-family:var(--font-display);font-size:54px;color:var(--g5);line-height:1">${totalThisWeek}</div>
+      <div style="font-size:13px;color:var(--text2);margin-top:4px">activities this week</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:6px">${activeDays} of 7 days active · ${pct}% of weekly goal</div>
+    </div>
+
+    <!-- Quick stats row -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:18px">
+      <div class="stat-card"><div class="stat-val" style="font-size:22px">${activeDays}<span style="font-size:14px;color:var(--text3)">/7</span></div><div class="stat-label">Active Days</div></div>
+      <div class="stat-card"><div class="stat-val" style="font-size:22px">${weekKm.toFixed(1)}</div><div class="stat-label">km Run</div></div>
+    </div>
+
+    <!-- Per-day breakdown -->
+    <div style="font-size:12px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px">Day-by-Day</div>
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden">
+      ${week.map((day, i) => {
+        const dayNm  = day.d.toLocaleDateString(undefined, { weekday: 'short' });
+        const dateNm = day.d.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+        const items  = [
+          ...day.logs.map(l => {
+            const meta = _statsModuleLabel(l.module);
+            return { emoji: meta.emoji, name: meta.name };
+          }),
+          ...day.runs.map(r => ({
+            emoji: r.activityType === 'cycle' ? '🚴' : r.activityType === 'walk' ? '🚶' : '🏃',
+            name:  r.activityType === 'cycle' ? 'Cycle'   : r.activityType === 'walk' ? 'Walk'   : 'Run',
+            extra: (r.distance ? r.distance.toFixed(1) + ' km' : ''),
+          })),
+        ];
+        const done   = items.length > 0;
+        const bg     = day.isToday ? 'rgba(240,192,64,0.10)' : 'transparent';
+        const isLast = i === 6;
+        const status = done
+          ? items.map(it => `<span style="display:inline-block;margin-right:10px;white-space:nowrap"><span style="font-size:14px">${it.emoji}</span> ${it.name}${it.extra ? ' <span style="color:var(--text3)">· ' + it.extra + '</span>' : ''}</span>`).join('')
+          : `<span style="color:var(--text3);font-style:italic">${day.isFuture ? 'upcoming' : day.isToday ? 'no activity yet today' : 'rest day'}</span>`;
+        return `
+          <div style="display:flex;align-items:flex-start;gap:12px;padding:10px 14px;background:${bg};${isLast ? '' : 'border-bottom:1px solid var(--border)'}">
+            <div style="min-width:44px;flex-shrink:0">
+              <div style="font-size:11px;font-weight:700;color:${day.isToday ? 'var(--accent)' : 'var(--text2)'};text-transform:uppercase;letter-spacing:.04em">${dayNm}</div>
+              <div style="font-size:10px;color:var(--text3);margin-top:1px">${dateNm}</div>
+            </div>
+            <div style="flex:1;font-size:13px;color:var(--text);line-height:1.5">${status}</div>
+            ${done ? '<span style="font-size:14px;color:var(--g5);font-weight:700;flex-shrink:0">✓</span>' : ''}
+          </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+
 // ── MODULE ORDER STORAGE ─────────────────────────────────────────
 const ALL_MODULES = [
   { id: 'cardio',        name: 'Home Cardio',       emoji: '🏠',    color: 'grad-cardio',     sub: '8-9 exercises · 6 days' },
