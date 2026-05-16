@@ -1538,8 +1538,8 @@ var MORNING_MESSAGES = [
   { title: '😤 Prove them wrong!',       body: "Everyone who said you can't — imagine their face when you do. Let's GO! 🏆" },
   { title: '🌦️ Rainy morning?',          body: "Perfect excuse to do home cardio. FitFlow's indoor workouts are right here! 🏠💪" },
   { title: '🌞 Sunny morning!',          body: "Nature's pre-workout is free today. Go for a run before it gets hot! 🏃" },
-  { title: '📅 Monday morning!',         body: "Set the tone for the whole week. One workout now = winning mindset all week! 💪" },
-  { title: '🎉 It\'s Friday!',           body: "End the week strong. One last workout before the weekend. You deserve it! 🔥" },
+  { day: 1, title: '📅 Monday morning!',         body: "Set the tone for the whole week. One workout now = winning mindset all week! 💪" },
+  { day: 5, title: '🎉 It\'s Friday!',           body: "End the week strong. One last workout before the weekend. You deserve it! 🔥" },
   { title: '🌙 Slept well?',             body: "Your body is fully recharged. Your muscles are recovered. PERFECT timing. GO! ⚡" },
   { title: '🍚 Had idli for breakfast?', body: "That carb energy needs somewhere to go! FitFlow workout — perfect match! 💪" },
   { title: '☕ Chai is brewing...',       body: "While it cools, squeeze in 10 mins of stretching. Productive AND healthy! 🧘" },
@@ -1560,14 +1560,14 @@ var MORNING_MESSAGES = [
   { title: '🧘 Mental health tip:',      body: "Exercise is the most underused antidepressant. Dose: 20 mins daily. Take it! 🌿" },
   { title: '✨ Glow up season:',         body: "It starts with one workout. Open FitFlow and begin yours today! 💪" },
   { title: '🌸 You deserve to feel good',body: "And 20 mins of movement will do exactly that. FitFlow has your back! 🌟" },
-  { title: '🧡 Self care Sunday!',       body: "Rest is great. But an active rest = stretching + yoga. FitFlow has both! 🧘" },
-  { title: '💥 Monday Momentum!',        body: "Win Monday and the whole week follows. Workout first, everything else after! 🔥" },
-  { title: '🔥 Tuesday Power!',          body: "Tuesday is the most underrated day to have the best workout. Prove it! 💪" },
-  { title: '⚡ Wednesday Warrior!',      body: "Hump day? More like PUMP day. Let's go! 🏋️" },
-  { title: '🎯 Thursday Grind!',         body: "One more push before the weekend. Don't lose momentum now! 💪" },
-  { title: '🙌 Friday Finisher!',        body: "End the week like a champion. One last workout. Let's close it out! 🏆" },
-  { title: '🌟 Saturday Hustle!',        body: "Most people sleep in. You? You're building something. Keep going! 💪" },
-  { title: '🌅 Sunday Reset!',           body: "Stretch, breathe, move. Set the tone for an incredible week ahead! 🧘" },
+  { day: 0, title: '🧡 Self care Sunday!',       body: "Rest is great. But an active rest = stretching + yoga. FitFlow has both! 🧘" },
+  { day: 1, title: '💥 Monday Momentum!',        body: "Win Monday and the whole week follows. Workout first, everything else after! 🔥" },
+  { day: 2, title: '🔥 Tuesday Power!',          body: "Tuesday is the most underrated day to have the best workout. Prove it! 💪" },
+  { day: 3, title: '⚡ Wednesday Warrior!',      body: "Hump day? More like PUMP day. Let's go! 🏋️" },
+  { day: 4, title: '🎯 Thursday Grind!',         body: "One more push before the weekend. Don't lose momentum now! 💪" },
+  { day: 5, title: '🙌 Friday Finisher!',        body: "End the week like a champion. One last workout. Let's close it out! 🏆" },
+  { day: 6, title: '🌟 Saturday Hustle!',        body: "Most people sleep in. You? You're building something. Keep going! 💪" },
+  { day: 0, title: '🌅 Sunday Reset!',           body: "Stretch, breathe, move. Set the tone for an incredible week ahead! 🧘" },
 ];
 
 var EVENING_MESSAGES = [
@@ -1610,7 +1610,7 @@ var EVENING_MESSAGES = [
   { title: '🍦 Craving something sweet?',  body: "Your body wants endorphins more. A workout gives them FREE. Open FitFlow! 💪" },
   { title: '🥗 Eating healthy tonight?',   body: "Pair it with a workout and you're basically a superhero. GO! ⚡" },
   { title: '☕ Evening chai time?',         body: "Great! Have it after a 15-min yoga session. 10x more relaxing, trust us! 🧘" },
-  { title: '🍕 Friday night treat?',       body: "Earn it! A quick 20-min workout first makes the food taste better. Real! 😋" },
+  { day: 5, title: '🍕 Friday night treat?',       body: "Earn it! A quick 20-min workout first makes the food taste better. Real! 😋" },
   { title: '🧠 Anxiety check:',            body: "Feeling anxious about tomorrow? A workout will delete 80% of that. Go! 🌿" },
   { title: '😔 Low mood?',                 body: "Your body has a built-in antidepressant. It's called exercise. Activate it! 💪" },
   { title: '🌊 Overwhelmed?',              body: "20 mins of movement resets your nervous system. It's science. Try it! 🧘" },
@@ -1655,13 +1655,13 @@ var EVENING_MESSAGES = [
   { title: '⚡ MOVE.',                   body: "You've been sitting too long. FitFlow. Now. Go! 🏃" },
   { title: '🎯 FINISH IT.',             body: "The day isn't complete without moving your body. 15 mins. GO! 💪" },
   { title: '🌙 TONIGHT.',               body: "The version of you that works out tonight wins tomorrow. Choose them! 🏆" },
-  { title: '💥 Monday done!',            body: "Celebrate by crushing an evening workout. Set the tone for the week! 🔥" },
-  { title: '🔥 Tuesday evening grind!',  body: "Two-a-day? No. Just finishing what morning couldn't. Let's go! 💪" },
-  { title: '⚡ Wednesday check-in!',     body: "Midweek body check: did you move enough today? If not — now's the time! 🏃" },
-  { title: '🎯 Thursday push!',          body: "One more evening grind before the weekend. Make it count! 💪" },
-  { title: '🎉 TGIF workout!',           body: "Because the best way to start the weekend is sweaty and proud! 🔥" },
-  { title: '🌟 Saturday evening!',       body: "Family? Friends? Check. But did you move YOUR body today? FitFlow! 💪" },
-  { title: '🧘 Sunday evening ritual!',  body: "Tomorrow is Monday. Prepare your body AND mind with evening yoga. 🌿" },
+  { day: 1, title: '💥 Monday done!',            body: "Celebrate by crushing an evening workout. Set the tone for the week! 🔥" },
+  { day: 2, title: '🔥 Tuesday evening grind!',  body: "Two-a-day? No. Just finishing what morning couldn't. Let's go! 💪" },
+  { day: 3, title: '⚡ Wednesday check-in!',     body: "Midweek body check: did you move enough today? If not — now's the time! 🏃" },
+  { day: 4, title: '🎯 Thursday push!',          body: "One more evening grind before the weekend. Make it count! 💪" },
+  { day: 5, title: '🎉 TGIF workout!',           body: "Because the best way to start the weekend is sweaty and proud! 🔥" },
+  { day: 6, title: '🌟 Saturday evening!',       body: "Family? Friends? Check. But did you move YOUR body today? FitFlow! 💪" },
+  { day: 0, title: '🧘 Sunday evening ritual!',  body: "Tomorrow is Monday. Prepare your body AND mind with evening yoga. 🌿" },
   { title: '🦵 Leg day recovery?',       body: "10 mins of light stretching now = no soreness tomorrow. Smart move! 🧘" },
   { title: '💪 Arms tired?',             body: "That's the gains being made! Stretch them out and let them grow! 🏋️" },
   { title: '🔥 Core strength:',          body: "10 mins of ab work before bed is the most efficient workout. DO IT! 💪" },
@@ -1670,13 +1670,26 @@ var EVENING_MESSAGES = [
 ];
 
 function getTodaysMessage() {
-  var day = Math.floor((new Date() - new Date(new Date().getFullYear(),0,0)) / 86400000);
-  return MORNING_MESSAGES[day % MORNING_MESSAGES.length];
+  var now = new Date();
+  var dow = now.getDay();   // 0=Sun..6=Sat — matches the `day` field above
+  // Day-of-year seeds a deterministic rotation so the same date gives the
+  // same message across multiple runs (instead of random).
+  var yearDay = Math.floor((now - new Date(now.getFullYear(),0,0)) / 86400000);
+  // Filter: an entry without `day` is generic (any weekday); one with `day`
+  // only fires on that weekday. Fixes the "Sunday evening ritual!" message
+  // landing on a Saturday (or any other weekday/title-day mismatch).
+  var pool = MORNING_MESSAGES.filter(function(m) { return m.day === undefined || m.day === dow; });
+  if (pool.length === 0) pool = MORNING_MESSAGES;   // last-resort safety
+  return pool[yearDay % pool.length];
 }
 
 function getTonightsMessage() {
-  var day = Math.floor((new Date() - new Date(new Date().getFullYear(),0,0)) / 86400000);
-  return EVENING_MESSAGES[(day + 50) % EVENING_MESSAGES.length];
+  var now = new Date();
+  var dow = now.getDay();
+  var yearDay = Math.floor((now - new Date(now.getFullYear(),0,0)) / 86400000);
+  var pool = EVENING_MESSAGES.filter(function(m) { return m.day === undefined || m.day === dow; });
+  if (pool.length === 0) pool = EVENING_MESSAGES;
+  return pool[(yearDay + 50) % pool.length];
 }
 
 // ════════════════════════════════════════════════════════════════
