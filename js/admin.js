@@ -2530,20 +2530,48 @@ async function saveCalisthenicsEditorChanges() {
 // ════════════════════════════════════════════════════════════════
 function renderCrossTrainingEditor(body) {
   const _D = window.APP_DATA_DEFAULT || window.APP_DATA;
-  const mod = _D.modules?.crosstraining;
-  if (!mod) {
-    body.innerHTML = `
-      <div style="padding:24px;text-align:center;color:var(--text2)">
-        Cross Training data not loaded. Hard-refresh and try again.
-      </div>`;
-    return;
-  }
-  const phases  = mod.phases || [];
-  const labels  = mod.dayTypeLabels || {};
+  const mod = _D?.modules?.crosstraining;
+
+  // Phase + day-type metadata is FIXED for this 8-week plan and never
+  // changes — base/build/peak × lower/mobility/singleleg/posterior. We
+  // hardcode it as a fallback so the editor still renders even if the
+  // runtime data tree from data-crosstraining.js failed to populate
+  // (e.g. stale cache, file 404). The admin can still add/edit content
+  // because exercises are stored under Store.getContent('exercises_
+  // crosstraining_<phase>') independently of APP_DATA.
+  const FALLBACK_PHASES = [
+    { id:'base',  name:'Base',  label:'Phase 1 · Base',  weeks:[1,2,3] },
+    { id:'build', name:'Build', label:'Phase 2 · Build', weeks:[4,5,6] },
+    { id:'peak',  name:'Peak',  label:'Phase 3 · Peak',  weeks:[7,8]   },
+  ];
+  const FALLBACK_LABELS = {
+    lower:     { emoji:'🦵', name:'Lower Body Strength'        },
+    mobility:  { emoji:'🧘', name:'Mobility & Activation'      },
+    singleleg: { emoji:'⚡', name:'Single-Leg & Plyometrics'    },
+    posterior: { emoji:'🔥', name:'Posterior Chain & Core'     },
+  };
+
+  const phases   = (mod?.phases?.length        ? mod.phases        : FALLBACK_PHASES);
+  const labels   = (mod?.dayTypeLabels         ? mod.dayTypeLabels : FALLBACK_LABELS);
   const dayTypes = ['lower','mobility','singleleg','posterior'];
   const activePhase = AdminEdit._ctPhase || 'base';
 
+  // Soft warning banner if runtime data is missing — useful diagnostic
+  // but does NOT block editing.
+  const missingDataBanner = mod ? '' : `
+    <div style="margin:0 16px 12px;padding:10px 12px;border-radius:10px;
+      background:rgba(240,192,64,0.10);border:1px dashed rgba(240,192,64,0.45);
+      font-size:12px;color:var(--accent);line-height:1.5">
+      ⚠ Bundled Cross Training defaults didn't load on this device
+      (data-crosstraining.js may be 404 on the server, or out-of-date in the
+      service-worker cache). The editor still works — your saved entries
+      below are read directly from your sheet. To restore the bundled
+      defaults: verify <code>js/data-crosstraining.js</code> exists on the
+      server, then hard-refresh.
+    </div>`;
+
   body.innerHTML = `
+    ${missingDataBanner}
     <div style="font-size:13px;color:var(--text2);padding:0 16px 12px;line-height:1.5">
       ✏️ Edit Cross Training exercises per phase. Each main exercise can have an optional upgrade variant (chair/wall/dumbbell version) shown below it for users.
     </div>
@@ -2561,7 +2589,7 @@ function renderCrossTrainingEditor(body) {
       </div>
     </div>
     ${dayTypes.map(dt => {
-      const appDefault = mod.days?.[activePhase]?.[dt] || [];
+      const appDefault = mod?.days?.[activePhase]?.[dt] || [];
       const saved = Store.getContent('exercises_crosstraining_' + activePhase);
       const savedDay = saved?.days?.[dt] || [];
       const exercises = savedDay.length > 0 ? savedDay : appDefault;
