@@ -391,6 +391,30 @@ async function _syncUserLogs(userId) {
 
     // Get all local logs across all users (we only replace THIS user's logs)
     const allLocal = Store.get('ff_logs', []) || [];
+
+    // ── DEFENSIVE MERGE for cross-training metadata ─────────────────────
+    // Sheet is source of truth in general, but the Apps Script gained
+    // week/phase/dayType columns separately from the frontend. During the
+    // partial-deploy window where the frontend writes these fields but the
+    // Apps Script doesn't yet return them, a sync would wipe them off the
+    // local log → break the global-history detail viewer. So when Sheet
+    // returns a crosstraining log without metadata but the local has it,
+    // preserve the local values.
+    const localByKey = new Map();
+    allLocal.filter(l => l.userId === userId).forEach(l => {
+      const k = (l.module||'') + '|' + (l.day||'') + '|' + (l.date||'');
+      localByKey.set(k, l);
+    });
+    fromSheet.forEach(sl => {
+      if (sl.module !== 'crosstraining') return;
+      const k = (sl.module||'') + '|' + (sl.day||'') + '|' + (sl.date||'');
+      const local = localByKey.get(k);
+      if (!local) return;
+      if (sl.week    == null && local.week    != null) sl.week    = local.week;
+      if (!sl.phase            && local.phase)         sl.phase   = local.phase;
+      if (!sl.dayType          && local.dayType)       sl.dayType = local.dayType;
+    });
+
     const otherUsers = allLocal.filter(l => l.userId !== userId);
 
     // Replace this user's logs with Sheet's copy (deduplicated by userId+module+day+date).
