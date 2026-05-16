@@ -268,6 +268,7 @@ const PAGE_PARENT = {
   'page-cw-editor':       'page-custom-workouts',
   'page-cw-workout':      'page-custom-workouts',
   'page-admin-editor':    'page-admin',
+  'page-ct-day':          'page-cross-training',
 };
 
 function goBack() {
