@@ -247,6 +247,10 @@ function showPage(id, addToHistory = true) {
   if (APP.currentUser && !_skipPersist.includes(id)) {
     Store.set('ff_last_page_' + APP.currentUser.id, id);
   }
+  // Keep the global bottom nav in sync with the new page. The nav element has
+  // inline `display:none` and _syncNav is the only thing that toggles it, so
+  // without this call the nav stays hidden after login / navTo / etc.
+  _syncNav(id);
 }
 
 // Parent page map — defines where each page goes on swipe-back/goBack
@@ -683,6 +687,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
     const targetEl = document.getElementById(targetPage);
     if (targetEl) { targetEl.classList.add('active'); APP.currentPage = targetPage; }
+
+    // Sync the global bottom-nav visibility for the restored page. This path
+    // bypasses showPage() ("no animation, no flash" — intentional), so we have
+    // to call _syncNav manually here or the nav stays display:none.
+    _syncNav(targetPage);
 
     // Render immediately from local data
     initDashboard();
