@@ -110,6 +110,13 @@ h1,h2,h3,h4 { line-height: 1.2; }
   padding: 14px 28px; border-radius: 50px; font-size: 15px; font-weight: 600;
   transition: var(--transition); letter-spacing: 0.02em;
   position: relative; overflow: hidden;
+  /* Prevent the button label from triggering Android's long-press text
+     selection (Copy / Share / Select all menu), which was intercepting taps
+     in the middle of buttons. touch-action:manipulation also kills the
+     legacy 300 ms tap delay so buttons feel snappy. */
+  user-select: none; -webkit-user-select: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 .btn::after {
   content: ''; position: absolute; inset: 0;
