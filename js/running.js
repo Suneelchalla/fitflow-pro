@@ -814,11 +814,12 @@ function _activityNotifPayload(type) {
 
 async function startActivityNotification() {
   try {
-    // Request permission and AWAIT it — fire-and-forget was the bug
-    if (Notification.permission === 'default') {
-      const perm = await Notification.requestPermission().catch(() => 'denied');
-      if (perm !== 'granted') return;
-    }
+    // Permission handling lives entirely in push.js (in-app banner →
+    // explicit user tap → OS dialog). DO NOT prompt for permission here —
+    // doing so creates a second OS dialog mid-run on top of the login-time
+    // banner, which users perceive as "the app keeps asking". If the user
+    // hasn't granted permission, the run still tracks normally — only the
+    // live notification is skipped.
     if (Notification.permission !== 'granted') return;
 
     // In TWA / Android Chrome, the SW controller may be null right after page load.
