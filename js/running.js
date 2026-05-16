@@ -217,10 +217,58 @@ function _renderRecentActivitiesPreviewHTML(type, meta) {
 }
 
 // ── START LOCATION (reverse geocoding) ───────────────────────────
-// Fetched once per run from Nominatim (free, no API key) on the first
-// good GPS fix after warmup. Result stored in APP.runSession.locationName
-// and saved to the run log so it shows on history cards.
-let _locationFetched = false;  // reset to false in _doStartRun each time
+// Fetched once per run on the first good GPS fix after warmup. Result is
+// stored in APP.runSession.locationName and saved to the run log so it
+// shows on history cards.
+//
+// Robustness state (added v100):
+//   _locationFetched         — true ONLY after a successful geocode. A
+//                              naive fire-once boolean used to flip true
+//                              before the async call resolved, which meant
+//                              a single network failure permanently lost
+//                              the location for the activity.
+//   _locationFetchInProgress — prevents concurrent calls when GPS fixes
+//                              come in faster than the network responds.
+//   _locationLastAttemptTs   — throttles retries; ≥15s between attempts.
+//   _locationAttempts        — caps total attempts at LOCATION_MAX_ATTEMPTS
+//                              so we don't keep hammering the geocoder
+//                              for the whole run when the device is offline.
+let _locationFetched         = false;
+let _locationFetchInProgress = false;
+let _locationLastAttemptTs   = 0;
+let _locationAttempts        = 0;
+const LOCATION_RETRY_MS      = 15000;   // 15s between failed attempts
+const LOCATION_MAX_ATTEMPTS  = 5;       // ~75 s total before giving up
+
+// Centralised geocode trigger. Safe to call on every GPS fix — it
+// internally rate-limits and bails out if a call is already in flight,
+// the session was already located, or the retry budget is exhausted.
+function _tryFetchStartLocation(lat, lon) {
+  if (_locationFetched)                                       return;
+  if (_locationFetchInProgress)                               return;
+  if (_locationAttempts >= LOCATION_MAX_ATTEMPTS)             return;
+  if (Date.now() - _locationLastAttemptTs < LOCATION_RETRY_MS && _locationAttempts > 0) return;
+  if (!APP.runSession)                                        return;
+
+  _locationFetchInProgress = true;
+  _locationLastAttemptTs   = Date.now();
+  _locationAttempts++;
+
+  _reverseGeocode(lat, lon).then(name => {
+    _locationFetchInProgress = false;
+    if (name && APP.runSession) {
+      APP.runSession.locationName = name;
+      _locationFetched = true;             // success → stop retrying
+      _saveRunSession();                   // persist so it survives background/kill
+    }
+    // On failure (name is null/empty), leave _locationFetched=false so the
+    // next GPS fix retries after LOCATION_RETRY_MS. _locationAttempts caps
+    // total tries; once exhausted, the run finishes with locationName=''
+    // and the user can use backfillRunLocations() later if desired.
+  }).catch(() => {
+    _locationFetchInProgress = false;
+  });
+}
 
 // Reverse-geocode a lat/lon to a short "Area, City" label.
 //
@@ -1229,8 +1277,21 @@ function _tryRecoverRunSession() {
   };
   APP.gpsCoords  = saved.coords || [];
   _activityType  = APP.runSession.activityType;
-  // Location was already fetched in the previous session — don't refetch
-  _locationFetched = !!(saved.locationName);
+  // Location was already fetched in the previous session — don't refetch.
+  // If it wasn't (app was killed before geocoding completed), kick off a
+  // geocode from the ORIGINAL start coord (coords[0]) rather than waiting
+  // for a fresh fix from wherever the user is now — preserving the true
+  // start-area on the history card.
+  _locationFetched         = !!(saved.locationName);
+  _locationFetchInProgress = false;
+  _locationLastAttemptTs   = 0;
+  _locationAttempts        = 0;
+  if (!_locationFetched && APP.gpsCoords.length > 0) {
+    const c0 = APP.gpsCoords[0];
+    if (typeof c0?.lat === 'number' && typeof c0?.lon === 'number') {
+      _tryFetchStartLocation(c0.lat, c0.lon);
+    }
+  }
 
   _startRunTimerLoop();
   // Do NOT call startGPS() here — user must press Resume explicitly.
@@ -1986,7 +2047,14 @@ function _doStartRun() {
   APP.gpsCoords    = [];
   _gpsWarmupCount  = 0;
   _gpsLastGoodFix  = null;
-  _locationFetched = false;   // allow geocoding for this new run
+  // Reset the full location-fetch state for this new activity. Each new
+  // Start tap is a fresh location capture — clear the retry budget so the
+  // first post-warmup fix kicks off geocoding regardless of what happened
+  // on the previous activity.
+  _locationFetched         = false;
+  _locationFetchInProgress = false;
+  _locationLastAttemptTs   = 0;
+  _locationAttempts        = 0;
   _currentGpsSpeed = null;
   _userPanned      = false;  // reset pan lock so map auto-centers from first GPS fix
   _rotationEnabled = true;   // re-enable rotation for new activity
@@ -2165,16 +2233,8 @@ function startGPS() {
       }
 
       // FIX #2c: Compute distance from last GOOD fix (using smoothed coords)
-      // ── Fetch start location once on the first post-warmup fix ────────────
-      if (!_locationFetched && APP.runSession) {
-        _locationFetched = true;
-        _reverseGeocode(lat, lon).then(name => {
-          if (name && APP.runSession) {
-            APP.runSession.locationName = name;
-            _saveRunSession();  // persist so it survives background/kill
-          }
-        });
-      }
+      // ── Fetch start location (idempotent, retries on failure) ─────────────
+      _tryFetchStartLocation(lat, lon);
       if (_gpsLastGoodFix) {
         const d = haversine(_gpsLastGoodFix.lat, _gpsLastGoodFix.lon, lat, lon);
         if (d >= GPS_MIN_DISTANCE_KM) {
