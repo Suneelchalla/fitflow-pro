@@ -547,6 +547,26 @@ async function _syncUserProfile(userId) {
 
 async function _syncPlanProgress(userId) {
   try {
+    // Sheets returns startDate as the raw cell's .toString(), which for a Date
+    // cell is a full JS Date string like "Fri May 15 2026 00:00:00 GMT+0530
+    // (India Standard Time)". Stuffing that into 'Date(s + "T00:00:00")' parses
+    // as Invalid Date → produces NaN in getCtCurrentWeek and "Week NaN of 8"
+    // in the UI. Coerce to YYYY-MM-DD before storing.
+    const _normalizeStartDate = (v) => {
+      if (!v) return '';
+      if (typeof _normalizeDate === 'function') {
+        const norm = _normalizeDate(v);
+        if (norm) return norm;
+      }
+      // Last-resort manual coerce
+      if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}/.test(v)) return v.substring(0, 10);
+      const d = new Date(v);
+      if (isNaN(d.getTime())) return '';
+      return d.getFullYear() + '-' +
+        String(d.getMonth() + 1).padStart(2, '0') + '-' +
+        String(d.getDate()).padStart(2, '0');
+    };
+
     // Sync active plan registration
     const planRes = await Sheets.get('getActivePlan', { userId });
     if (planRes?.success && planRes.plan) {
@@ -556,7 +576,7 @@ async function _syncPlanProgress(userId) {
       if (!local || local.planKey !== planRes.plan.planKey) {
         Store.set(k, {
           planKey:      planRes.plan.planKey,
-          startDate:    planRes.plan.startDate    || '',
+          startDate:    _normalizeStartDate(planRes.plan.startDate),
           registeredAt: planRes.plan.registeredAt
             ? new Date(planRes.plan.registeredAt).getTime()
             : Date.now(),
@@ -573,10 +593,11 @@ async function _syncPlanProgress(userId) {
       if (ctRes?.success && ctRes.plan?.startDate) {
         const ctKey = 'ff_ct_plan_' + userId;
         const localCt = Store.get(ctKey);
-        // Only write if local is missing or starts on a different date
-        if (!localCt || localCt.startDate !== ctRes.plan.startDate) {
+        const normalizedStart = _normalizeStartDate(ctRes.plan.startDate);
+        // Only write if local is missing or starts on a different (normalized) date
+        if (normalizedStart && (!localCt || localCt.startDate !== normalizedStart)) {
           Store.set(ctKey, {
-            startDate: ctRes.plan.startDate,
+            startDate: normalizedStart,
             startedAt: ctRes.plan.registeredAt
               ? new Date(ctRes.plan.registeredAt).getTime()
               : Date.now(),
