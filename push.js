@@ -411,13 +411,21 @@ async function initPushNotifications() {
     }, 2000);
 
   } else {
-    // Permission not asked yet — show OS dialog after short delay
-    setTimeout(async () => {
+    // Permission not asked yet ('default'). DO NOT auto-fire the OS dialog —
+    // that creates the "app keeps asking for notifications" complaint. On
+    // Android, dismissing the dialog without explicit Allow/Block leaves
+    // permission at 'default', so the same dialog would re-appear on every
+    // reload. Instead, show the in-app banner on the dashboard. The OS
+    // dialog only fires when the user explicitly taps "Enable" in the
+    // banner (→ acceptPushNotifications → PUSH.subscribe).
+    //
+    // Throttle: if the user tapped "Not Now", suppress for 7 days.
+    setTimeout(() => {
       try {
         if (!APP.currentUser || APP.currentUser.role === 'ADMIN') return;
-        await PUSH.subscribe();
+        if (typeof showPushPrompt === 'function') showPushPrompt();
       } catch (e) {
-        console.warn('Auto push subscribe failed:', e?.message);
+        console.warn('Push banner display failed:', e?.message);
       }
     }, 3000);
   }
@@ -427,7 +435,14 @@ function showPushPrompt(force = false) {
   if (!APP.currentUser) return;
   if (APP.currentUser.role === 'ADMIN') return;
   if (!force && APP.currentPage !== 'page-dashboard') return;
-  if (!force && Store.get('ff_push_dismissed_today') === new Date().toDateString()) return;
+  // Don't show if permission is already decided
+  const perm = PUSH.getPermission();
+  if (perm === 'granted' || perm === 'denied') return;
+  // Throttle: respect the "Not Now" timestamp (7-day suppression)
+  if (!force) {
+    const dismissedUntil = Store.get('ff_push_banner_dismissed_until', 0);
+    if (Date.now() < dismissedUntil) return;
+  }
   const banner = document.getElementById('push-banner');
   if (banner) {
     banner.classList.remove('hidden');
@@ -438,7 +453,8 @@ function showPushPrompt(force = false) {
 async function acceptPushNotifications() {
   const b = document.getElementById('push-banner');
   if (b) { b.classList.add('hidden'); b.style.display = 'none'; }
-  const ok = await PUSH.subscribe();
+  const result = await PUSH.subscribe();
+  const ok = !!result?.ok;
   showToast(
     ok ? '🔔 Daily workout reminders enabled!' : 'Could not enable — check browser notification settings.',
     ok ? 'success' : 'error'
@@ -448,5 +464,6 @@ async function acceptPushNotifications() {
 function dismissPushNotifications() {
   const b = document.getElementById('push-banner');
   if (b) { b.classList.add('hidden'); b.style.display = 'none'; }
-  Store.set('ff_push_dismissed_today', new Date().toDateString());
+  // Suppress the banner for 7 days (timestamp-based, immune to month rollover).
+  Store.set('ff_push_banner_dismissed_until', Date.now() + 7 * 24 * 60 * 60 * 1000);
 }
