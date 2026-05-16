@@ -46,13 +46,17 @@ function refreshDashboardBadges() {
 function renderDashboardStats() {
   const user  = APP.currentUser;
   const logs  = Store.getUserLogs(user.id);
+  const runs  = Store.getUserRunLogs(user.id);
   const today = todayStr();
   const monday = getMonday();
 
   const streak        = calcStreak(user.id);
-  // Count both workout completions AND runs toward the weekly ring
-  const _weekRuns     = Store.getUserRunLogs(user.id).filter(r => r.date >= monday);
+  // Count both module workout completions AND GPS runs/walks/cycles toward
+  // every "activity" total on the dashboard. A run IS a workout — so the
+  // Total tile and the This Week tile must agree on that definition.
+  const _weekRuns     = runs.filter(r => r.date >= monday);
   const thisWeekLogs  = [...logs.filter(l => l.date >= monday), ..._weekRuns];
+  const totalActivities = logs.length + runs.length;
 
   const streakEl  = document.getElementById('dash-streak');
   const totalEl   = document.getElementById('dash-total');
@@ -61,7 +65,7 @@ function renderDashboardStats() {
   const greetEl   = document.getElementById('dash-greeting');
 
   if (streakEl) streakEl.textContent = streak;
-  if (totalEl)  totalEl.textContent  = logs.length;
+  if (totalEl)  totalEl.textContent  = totalActivities;
   if (weekEl)   weekEl.textContent   = thisWeekLogs.length;
   if (dayEl)    dayEl.textContent    = dayName() + ', ' + new Date().toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
   if (greetEl)  greetEl.textContent  = getGreeting() + ', ' + user.name.split(' ')[0] + '!';
@@ -181,14 +185,15 @@ function _buildTotalBreakdownHtml(user, logs, runs) {
     : 0;
 
   const streak = (typeof calcStreak === 'function') ? calcStreak(user.id) : 0;
-  const headline = logs.length;   // matches what the tile shows
+  // Headline matches the tile: all activities (module logs + GPS activities)
+  const headline = logs.length + runs.length;
   const sortedModules = Object.entries(byModule).sort((a, b) => b[1] - a[1]);
 
   return `
     <!-- Headline -->
     <div style="text-align:center;margin-bottom:18px">
       <div style="font-family:var(--font-display);font-size:54px;color:var(--g5);line-height:1">${headline}</div>
-      <div style="font-size:13px;color:var(--text2);margin-top:4px">module workouts logged</div>
+      <div style="font-size:13px;color:var(--text2);margin-top:4px">${headline === 1 ? 'activity' : 'activities'} logged</div>
       ${firstDate ? `<div style="font-size:11px;color:var(--text3);margin-top:6px">
         Since ${new Date(firstDate + 'T00:00:00').toLocaleDateString(undefined, { day:'numeric', month:'short', year:'numeric' })} · ${daysSince} ${daysSince === 1 ? 'day' : 'days'}
       </div>` : ''}
