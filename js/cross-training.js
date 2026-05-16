@@ -632,14 +632,21 @@ function completeCtDay(week, day) {
     phase:     phase?.id  || '',
   });
 
-  // 3. Sheet sync (fire & forget — local writes already succeeded)
+  // 3. Sheet sync (fire & forget — local writes already succeeded).
+  // Pass week/phase/dayType so the dashboard global-history detail viewer
+  // can reconstruct the exercise list cross-device. Apps Script v136+
+  // stores them in dedicated columns; older Apps Script silently ignores
+  // them, which is fine — the local log keeps them.
   try {
     sheetsPost('logCompletion', {
-      userId: user.id,
-      email:  user.email,
-      module: 'crosstraining',
+      userId:  user.id,
+      email:   user.email,
+      module:  'crosstraining',
       day,
-      date:   today,
+      date:    today,
+      week,
+      phase:   phase?.id  || '',
+      dayType: dayType    || '',
     });
   } catch {}
   try {
