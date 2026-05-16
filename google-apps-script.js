@@ -677,7 +677,12 @@ function deleteUser(body) {
 // ════════════════════════════════════════════════════════════════
 function logCompletion(body) {
   const sh = getSheet(SHEETS.LOGS);
-  ensureHeaders(sh,['LogID','UserID','UserEmail','Module','Day','Date','Timestamp']);
+  // Header schema extended (v136+) — Week/Phase/DayType columns carry the
+  // cross-training plan metadata so the global-history detail viewer can
+  // look up the right exercise list cross-device. _ensureLogCtCols backfills
+  // headers on legacy sheets that pre-date this change.
+  ensureHeaders(sh,['LogID','UserID','UserEmail','Module','Day','Date','Timestamp','Week','Phase','DayType']);
+  _ensureLogCtCols(sh);
   const data   = sh.getDataRange().getValues();
   const userId = (body.userId||'').toString();
   const module = (body.module||'').toString();
@@ -696,33 +701,61 @@ function logCompletion(body) {
       return { success:true, duplicate:true };
     }
   }
-  sh.appendRow(['log_'+Date.now(), userId, body.email||'', module, day, date, new Date().toISOString()]);
+  sh.appendRow([
+    'log_'+Date.now(),
+    userId,
+    body.email||'',
+    module,
+    day,
+    date,
+    new Date().toISOString(),
+    body.week    || '',   // crosstraining only; other modules pass empty
+    body.phase   || '',
+    body.dayType || '',
+  ]);
   SpreadsheetApp.flush();
   return { success:true };
 }
 
 function getUserLogs(userId) {
   const sh   = getSheet(SHEETS.LOGS);
+  _ensureLogCtCols(sh);   // backfill so r[7..9] exist on legacy sheets
   const data = sh.getDataRange().getValues();
   if (data.length<2) return [];
   return data.slice(1)
     .filter(r => (r[1]||'').toString()===userId.toString())
-    .map(r => ({ id:r[0], userId:r[1], email:r[2], module:r[3], day:r[4], date:r[5], timestamp:r[6] }));
+    .map(r => {
+      const log = { id:r[0], userId:r[1], email:r[2], module:r[3], day:r[4], date:r[5], timestamp:r[6] };
+      // Only attach cross-training fields when actually present, so other
+      // modules' logs stay clean (and so optional-chaining checks downstream
+      // remain `if (log.phase)` rather than `if (log.phase !== '')`).
+      if (r[7] !== '' && r[7] != null) log.week    = parseInt(r[7]) || r[7];
+      if (r[8])                        log.phase   = (r[8]||'').toString();
+      if (r[9])                        log.dayType = (r[9]||'').toString();
+      return log;
+    });
 }
 
 function getAllLogs() {
   const sh   = getSheet(SHEETS.LOGS);
+  _ensureLogCtCols(sh);
   const data = sh.getDataRange().getValues();
   if (data.length<2) return [];
-  return data.slice(1).map(r => ({
-    id:        (r[0]||'').toString(),
-    userId:    (r[1]||'').toString(),
-    email:     (r[2]||'').toString(),
-    module:    (r[3]||'').toString(),
-    day:       (r[4]||'').toString(),
-    date:      toYMD(r[5]),
-    timestamp: toISOStr(r[6]),
-  }));
+  return data.slice(1).map(r => {
+    const log = {
+      id:        (r[0]||'').toString(),
+      userId:    (r[1]||'').toString(),
+      email:     (r[2]||'').toString(),
+      module:    (r[3]||'').toString(),
+      day:       (r[4]||'').toString(),
+      date:      toYMD(r[5]),
+      timestamp: toISOStr(r[6]),
+    };
+    if (r[7] !== '' && r[7] != null) log.week    = parseInt(r[7]) || r[7];
+    if (r[8])                        log.phase   = (r[8]||'').toString();
+    if (r[9])                        log.dayType = (r[9]||'').toString();
+    return log;
+  });
 }
 
 // ════════════════════════════════════════════════════════════════
@@ -1246,7 +1279,12 @@ function getActivePlan(userId, planKey) {
     if (filterKey && (row[3]||'').toString() !== filterKey) continue;
     return { success:true, plan:{
       planKey:      (row[3]||'').toString(),
-      startDate:    (row[4]||'').toString(),
+      // Normalize via toYMD so a Date cell returns YYYY-MM-DD instead of the
+      // full JS Date string ("Fri May 15 2026 00:00:00 GMT+0530 (India Standard
+      // Time)") — which client code parsed as Invalid Date and surfaced as
+      // "Week NaN of 8" on the Cross Training Plan tab. Falls back to the
+      // raw cell value when toYMD can't recognise it (already-stringy data).
+      startDate:    toYMD(row[4]) || (row[4]||'').toString(),
       registeredAt: (row[5]||'').toString(),
     }};
   }
@@ -2316,6 +2354,35 @@ function _ensureLocationNameCol(sh) {
     SpreadsheetApp.flush();
   } catch (err) {
     Logger.log('_ensureLocationNameCol failed: ' + err.message);
+  }
+}
+
+// Ensures the WorkoutLogs sheet has Week / Phase / DayType columns.
+// Same pattern as _ensureLocationNameCol — ensureHeaders only runs on empty
+// sheets, so legacy deployments need a one-shot header backfill so reads
+// can locate these new cross-training metadata fields. Idempotent; safe to
+// call from every read/write touch-point on the WorkoutLogs sheet.
+function _ensureLogCtCols(sh) {
+  try {
+    if (sh.getLastRow() === 0) return;   // ensureHeaders will create everything
+    const lastCol = sh.getLastColumn();
+    const headers = sh.getRange(1, 1, 1, lastCol).getValues()[0]
+      .map(h => (h||'').toString().trim().toLowerCase());
+    const wanted = [
+      { key: 'week',    label: 'Week'    },
+      { key: 'phase',   label: 'Phase'   },
+      { key: 'daytype', label: 'DayType' },
+    ];
+    let nextCol = lastCol + 1;
+    wanted.forEach(w => {
+      if (headers.includes(w.key)) return;
+      sh.getRange(1, nextCol).setValue(w.label)
+        .setFontWeight('bold').setBackground('#1B5E20').setFontColor('#FFFFFF');
+      nextCol++;
+    });
+    SpreadsheetApp.flush();
+  } catch (err) {
+    Logger.log('_ensureLogCtCols failed: ' + err.message);
   }
 }
 
