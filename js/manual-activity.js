@@ -50,8 +50,31 @@ function _defaultEndTime() {
 function _getUserWeight() {
   var u = APP.currentUser;
   if (!u) return null;
+  // PRIMARY: ff_body_profile_<uid> — set by the Body Stats modal and synced
+  // to Sheets via saveContent. This is where existing users' weight lives.
+  try {
+    var bp = Store.get('ff_body_profile_' + u.id);
+    if (bp && bp.weight && +bp.weight > 0) return +bp.weight;
+  } catch (e) {}
+  // FALLBACK: legacy paths from older onboarding versions
   var w = (u.profile && u.profile.weight) || u.weight || null;
   return w && +w > 0 ? +w : null;
+}
+
+// Persist weight to the body_profile store (same place Body Stats writes)
+// and sync to Sheets so it survives reinstall / appears on other devices.
+function _persistUserWeight(kg) {
+  var u = APP.currentUser;
+  if (!u || !(+kg > 0)) return;
+  try {
+    var bp = Store.get('ff_body_profile_' + u.id, {}) || {};
+    bp.weight    = +kg;
+    bp.updatedAt = new Date().toISOString();
+    Store.set('ff_body_profile_' + u.id, bp);
+    if (typeof sheetsPost === 'function') {
+      try { sheetsPost('saveContent', { key: 'body_profile_' + u.id, value: bp }); } catch (e) {}
+    }
+  } catch (e) {}
 }
 
 function _renderManualPicker() {
@@ -329,17 +352,9 @@ function logManualActivity() {
     return;
   }
 
-  // Persist weight to profile on first manual log
-  if (user.profile && !user.profile.weight) {
-    user.profile.weight = w;
-    if (typeof saveProfile === 'function') {
-      try { saveProfile(); } catch (e) {}
-    } else {
-      var prof = Store.get('ff_profile_' + user.id, {}) || {};
-      prof.weight = w;
-      Store.set('ff_profile_' + user.id, prof);
-    }
-  }
+  // Persist weight to body_profile + Sheets on first manual log (no-op if
+  // it was already stored there).
+  _persistUserWeight(w);
 
   var kcal = Math.round(act.met * w * (mins / 60));
   var today = _manualForm.date || todayStr();
@@ -494,7 +509,7 @@ function renderActivityCard() {
         '<button class="btn btn-outline btn-full" onclick="downloadActivityCard()">' +
           '⬇ Download' +
         '</button>' +
-        '<button class="btn btn-primary btn-full" onclick="goBack()">' +
+        '<button class="btn btn-primary btn-full" onclick="showPage(\'page-dashboard\');if(typeof refreshDashboard===\'function\')refreshDashboard()">' +
           '✓ Done' +
         '</button>' +
       '</div>' +
