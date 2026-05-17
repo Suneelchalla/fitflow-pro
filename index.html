@@ -15,7 +15,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
     <link rel="apple-touch-icon" sizes="180x180" href="icons/icon-180.png">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<link rel="stylesheet" href="css/style.css?v=78">
+<link rel="stylesheet" href="css/style.css?v=79">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
   <!-- Google Identity Services (One Tap + Sign In With Google) -->
   <script src="https://accounts.google.com/gsi/client" async></script>
@@ -3064,10 +3064,12 @@ window.addEventListener('DOMContentLoaded', function() {
 <script src="js/data.js?v=78"></script>
 <script src="js/data-cali.js?v=75"></script>
 <script src="js/data-crosstraining.js?v=1"></script>
-<script src="js/app.js?v=83"></script>
-<script src="js/auth.js?v=86"></script>
-<script src="js/dashboard.js?v=93"></script>
+<script src="js/data-activities.js?v=3"></script>
+<script src="js/app.js?v=84"></script>
+<script src="js/auth.js?v=87"></script>
+<script src="js/dashboard.js?v=94"></script>
 <script src="js/cross-training.js?v=6"></script>
+<script src="js/manual-activity.js?v=2"></script>
 <script src="js/running.js?v=100"></script>
 <script src="js/admin.js?v=82"></script>
 <script src="push.js?v=8"></script>
@@ -3370,6 +3372,40 @@ document.addEventListener('DOMContentLoaded', () => {
       <div style="width:38px"></div>
     </div>
     <div id="ct-day-content"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PAGE: MANUAL ACTIVITY LOG — picker → form                        -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="page-manual-log" class="page">
+  <div class="scroll-content pb-nav">
+    <div class="top-bar">
+      <button class="back-btn" onclick="goBack()">‹</button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:24px">⚡</span>
+        <span class="top-bar-title">Log Activity</span>
+      </div>
+      <div style="width:38px"></div>
+    </div>
+    <div id="manual-log-content"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PAGE: ACTIVITY CARD — shareable result + history-detail view    -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="page-activity-card" class="page">
+  <div class="scroll-content pb-nav">
+    <div class="top-bar">
+      <button class="back-btn" onclick="goBack()">‹</button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:24px">✓</span>
+        <span class="top-bar-title">Activity</span>
+      </div>
+      <div style="width:38px"></div>
+    </div>
+    <div id="activity-card-content"></div>
   </div>
 </div>
 
