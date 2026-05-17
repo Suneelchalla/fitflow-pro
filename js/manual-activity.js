@@ -461,7 +461,7 @@ function renderActivityCard() {
       '<div id="activity-card-render"' +
         ' style="border-radius:22px;padding:22px 20px 18px;color:#fff;' +
           'background:linear-gradient(135deg,' + act.gradient[0] + ' 0%,' + act.gradient[1] + ' 100%);' +
-          'position:relative;overflow:hidden;aspect-ratio:1 / 1.08;' +
+          'position:relative;overflow:hidden;aspect-ratio:4 / 5;' +
           'display:flex;flex-direction:column;margin-bottom:16px">' +
 
         '<div style="position:absolute;top:-40px;right:-40px;width:160px;height:160px;' +
@@ -479,10 +479,10 @@ function renderActivityCard() {
 
         '<div style="text-align:center;padding:18px 0 14px;position:relative;z-index:2;flex:1;' +
           'display:flex;flex-direction:column;align-items:center;justify-content:center">' +
-          '<div style="font-size:72px;line-height:1">' + act.emoji + '</div>' +
-          '<div style="font-family:var(--font-display,serif);font-size:24px;font-weight:800;' +
-            'margin-top:8px;letter-spacing:0.02em">' + act.name + '</div>' +
-          (placeLabel ? '<div style="font-size:12px;opacity:0.78;margin-top:4px">📍 ' + _escapeHtml(placeLabel) + '</div>' : '') +
+          '<div style="font-size:88px;line-height:1">' + act.emoji + '</div>' +
+          '<div style="font-family:var(--font-display,serif);font-size:26px;font-weight:800;' +
+            'margin-top:10px;letter-spacing:0.02em">' + act.name + '</div>' +
+          (placeLabel ? '<div style="font-size:12px;opacity:0.78;margin-top:6px">📍 ' + _escapeHtml(placeLabel) + '</div>' : '') +
         '</div>' +
 
         '<div style="background:rgba(0,0,0,0.22);border-radius:14px;padding:12px 8px;' +
@@ -533,6 +533,18 @@ function downloadActivityCard() {
   var node = document.getElementById('activity-card-render');
   if (!node) return;
   if (typeof showToast === 'function') showToast('Preparing your card…', 'info');
+
+  // FIX for white-corner slivers: the on-screen card has border-radius:22px,
+  // but PNG export is rectangular. The pixel triangles outside the rounded
+  // corners but inside the bounding box render as white in the saved file.
+  // Temporarily flatten the radius during capture and restore it after, so
+  // the screen preview stays rounded while the downloaded PNG is a clean
+  // edge-to-edge portrait rectangle.
+  var origRadius = node.style.borderRadius;
+  node.style.borderRadius = '0';
+
+  function _restore() { node.style.borderRadius = origRadius; }
+
   _loadHtml2Canvas().then(function (h2c) {
     h2c(node, {
       backgroundColor: null,
@@ -540,6 +552,7 @@ function downloadActivityCard() {
       useCORS: true,
       logging: false,
     }).then(function (canvas) {
+      _restore();
       try {
         var link = document.createElement('a');
         var stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
@@ -554,10 +567,12 @@ function downloadActivityCard() {
         if (typeof showToast === 'function') showToast('Could not save — try a screenshot instead.', 'error');
       }
     }).catch(function (e) {
+      _restore();
       console.error('Render failed:', e);
       if (typeof showToast === 'function') showToast('Could not render — try a screenshot instead.', 'error');
     });
   }).catch(function (e) {
+    _restore();
     console.error('html2canvas failed to load:', e);
     if (typeof showToast === 'function') showToast('Need internet to download — try a screenshot instead.', 'error');
   });
