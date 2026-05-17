@@ -239,7 +239,16 @@ function showPage(id, addToHistory = true) {
 
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const pg = document.getElementById(id);
-  if (pg) { pg.classList.add('active'); APP.currentPage = id; pg.scrollTop = 0; }
+  if (pg) {
+    pg.classList.add('active');
+    APP.currentPage = id;
+    pg.scrollTop = 0;
+    // .scroll-content (the actual overflow-y:auto element) retains its own
+    // scrollTop across page visits — resetting just .page does nothing on
+    // those pages. Scroll every nested scroller back to top so opening a
+    // tab always starts at the top of the content.
+    pg.querySelectorAll('.scroll-content').forEach(s => { s.scrollTop = 0; });
+  }
   window.history.pushState({ page: id }, '', '#' + id);
   // Persist last page so refresh restores user to same page
   // Don't persist transient pages that need fresh context
@@ -279,6 +288,18 @@ function goBack() {
   // Never go back from root pages (login, dashboard, admin)
   if (ROOT_PAGES.includes(APP.currentPage)) return;
 
+  // ── SUB-VIEW BACK ───────────────────────────────────────────────
+  // Pages with in-page state (e.g. manual-log's picker → form swap, or any
+  // future flow that uses content swaps instead of separate pages) register
+  // a handler on APP.subViewBack. If it returns true the back is consumed —
+  // we DON'T navigate to the parent page. The page is responsible for
+  // clearing the hook when it's no longer in the sub-view.
+  if (typeof APP.subViewBack === 'function') {
+    let handled = false;
+    try { handled = !!APP.subViewBack(); } catch (e) { console.warn('subViewBack threw:', e); }
+    if (handled) return;
+  }
+
   let target = null;
 
   // Use page history stack first
@@ -296,7 +317,12 @@ function goBack() {
 
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   const pg = document.getElementById(target);
-  if (pg) { pg.classList.add('active'); APP.currentPage = target; pg.scrollTop = 0; }
+  if (pg) {
+    pg.classList.add('active');
+    APP.currentPage = target;
+    pg.scrollTop = 0;
+    pg.querySelectorAll('.scroll-content').forEach(s => { s.scrollTop = 0; });
+  }
   window.history.pushState({ page: target }, '', '#' + target);
   _syncNav(target);
 }
