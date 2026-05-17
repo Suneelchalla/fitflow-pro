@@ -39,9 +39,9 @@
       gradient:['#0d4a3e','#1a8a6c'], desc:'Ping pong' },
     { id:'tennis',        name:'Tennis',          emoji:'🎾', met:7.0, intensity:'vigorous',
       gradient:['#3a4a14','#7ec428'], desc:'Court tennis' },
-    { id:'pickleball',    name:'Pickleball',      emoji:'🎯', met:4.5, intensity:'moderate',
+    { id:'pickleball',    name:'Pickleball',      emoji:'🏓', met:4.5, intensity:'moderate',
       gradient:['#2a4a14','#5fa728'], desc:'Paddle court' },
-    { id:'squash',        name:'Squash',          emoji:'🟦', met:7.3, intensity:'vigorous',
+    { id:'squash',        name:'Squash',          emoji:'🎾', met:7.3, intensity:'vigorous',
       gradient:['#142a4a','#1a5fc4'], desc:'Wall court' },
 
     // ── Team / field sports ──────────────────────────────────────────
