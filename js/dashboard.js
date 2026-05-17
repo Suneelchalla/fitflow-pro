@@ -145,6 +145,15 @@ function showStatsBreakdown(type) {
 // custom-workout ids (custom_<id>) which the generic helpers don't handle.
 function _statsModuleLabel(modId) {
   if (typeof modId !== 'string') return { emoji: '💪', name: 'Workout' };
+  // Manual activity entries (Badminton, Tennis, etc.) — resolve via the
+  // activity catalogue so the breakdown shows the right sport icon + name.
+  if (modId.startsWith('activity_')) {
+    if (typeof getActivityMeta === 'function') {
+      const meta = getActivityMeta(modId);
+      if (meta) return { emoji: meta.emoji, name: meta.name };
+    }
+    return { emoji: '⚡', name: 'Activity' };
+  }
   if (modId.startsWith('custom_')) {
     // Try the user's custom-workout list for a real name
     try {
@@ -323,6 +332,11 @@ const ALL_MODULES = [
   { id: 'calisthenics',  name: 'Calisthenics',      emoji: '🤸‍♂️', color: 'grad-cali',       sub: '3 levels · skill tree' },
   { id: 'crosstraining', name: 'Cross Training',    emoji: '💪',    color: 'grad-crosstrain', sub: '8-week plan · 4×/wk' },
   { id: 'core',          name: 'Core & Abs',        emoji: '🔥',    color: 'grad-core',       sub: '6 exercises · 6 days' },
+  // ── Manual activity logging — non-GPS sports (Badminton, Tennis, etc.)
+  // Renders as a full-width tile via the special `tile_log_activity`
+  // class so it visually stands apart from per-module tiles. Tap routes
+  // to page-manual-log via the openModule switch below.
+  { id: 'log_activity',  name: 'Log Any Activity',  emoji: '⚡',    color: 'grad-activity tile-full-width', sub: 'Badminton · Tennis · Swim · Yoga · 16 more', isUtility: true },
 ];
 
 function getModuleOrder(userId) {
@@ -380,6 +394,34 @@ function renderDashboardTiles() {
   if (!grid) return;
 
   grid.innerHTML = modules.map(m => {
+    // Utility tiles (e.g. Log Any Activity) aren't per-module logs — they
+    // open a tool rather than tracking completion. Render them with the
+    // same shell but skip the done-ring + weekly badge plumbing.
+    if (m.isUtility) {
+      return `
+        <div class="module-card ${m.color} animate-in"
+          data-module="${m.id}"
+          draggable="true"
+          onclick="openModule('${m.id}')"
+          ontouchstart="tileTouchStart(event,this)"
+          ontouchmove="tileTouchMove(event,this)"
+          ontouchend="tileTouchEnd(event,this)">
+          <div>
+            <div style="display:flex;align-items:center;gap:14px">
+              <div class="module-emoji" style="margin-bottom:0">${m.emoji}</div>
+              <div style="flex:1">
+                <div class="module-name">${m.name}</div>
+                <div class="module-sub">${m.sub}</div>
+              </div>
+              <div style="color:var(--accent);font-size:18px;font-weight:700">›</div>
+            </div>
+          </div>
+          <div style="position:absolute;top:10px;right:12px;background:var(--accent);color:#000;
+            font-size:9px;font-weight:800;padding:2px 8px;border-radius:10px;letter-spacing:.06em">NEW</div>
+          <div class="drag-hint">⠿</div>
+        </div>`;
+    }
+
     const logs    = Store.getModuleDayLogs(user.id, m.id);
     const modData = (window.APP_DATA_DEFAULT||window.APP_DATA).modules?.[m.id];
     // For body-part modules (stretching), logs use body-part ids in `day`,
@@ -684,6 +726,7 @@ function openModule(moduleId) {
   if (moduleId === 'running') { showPage('page-running'); initRunningPage(); return; }
   if (moduleId === 'calisthenics') { showPage('page-calisthenics'); if (typeof initCalisthenicsPage === 'function') initCalisthenicsPage(); return; }
   if (moduleId === 'crosstraining') { showPage('page-cross-training'); if (typeof initCrossTrainingPage === 'function') initCrossTrainingPage(); return; }
+  if (moduleId === 'log_activity') { showPage('page-manual-log'); if (typeof initManualLogPage === 'function') initManualLogPage(); return; }
   if (moduleId === 'yoga') { showPage('page-module'); renderYogaProgressivePage(); return; }
   showPage('page-module');
   renderModulePage(moduleId);
@@ -2029,10 +2072,23 @@ function _showHistoryRunDetail(idx) {
 
 // ── HISTORY: WORKOUT DETAIL CARD ─────────────────────────────────
 function _showHistoryWorkoutDetail(moduleId, date, day) {
+  const user = APP.currentUser;
+
+  // Manual activity log (Badminton/Tennis/etc.) — route straight to the
+  // shareable card page instead of trying to reconstruct an exercise
+  // list (there isn't one). The card view doubles as the history detail.
+  if (typeof moduleId === 'string' && moduleId.startsWith('activity_')) {
+    const log = Store.getUserLogs(user.id).find(l =>
+      l.module === moduleId && l.day === day && l.date === date);
+    if (log && typeof openActivityCardFromHistory === 'function') {
+      openActivityCardFromHistory(log.id);
+      return;
+    }
+  }
+
   const modData  = (window.APP_DATA_DEFAULT||window.APP_DATA).modules[moduleId];
   const modName  = getModuleName(moduleId);
   const modEmoji = getModuleEmoji(moduleId);
-  const user     = APP.currentUser;
 
   const sessionKey  = `sess_${user.id}_${moduleId}_${day}_${date}`;
   const sessionData = Store.get(sessionKey, {});
@@ -2571,8 +2627,20 @@ function _launchConfetti() {
   }
 }
 
-function getModuleEmoji(mod) { return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🙆', running: '🏃', calisthenics: '🤸‍♂️', crosstraining: '💪', core: '🔥' }[mod] || '💪'; }
-function getModuleName(mod)  { return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics', crosstraining: 'Cross Training', core: 'Core & Abs' }[mod] || mod; }
+function getModuleEmoji(mod) {
+  if (typeof mod === 'string' && mod.startsWith('activity_')) {
+    const act = window.APP_DATA?.getActivity?.(mod.replace(/^activity_/, ''));
+    if (act) return act.emoji;
+  }
+  return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🙆', running: '🏃', calisthenics: '🤸‍♂️', crosstraining: '💪', core: '🔥' }[mod] || '💪';
+}
+function getModuleName(mod) {
+  if (typeof mod === 'string' && mod.startsWith('activity_')) {
+    const act = window.APP_DATA?.getActivity?.(mod.replace(/^activity_/, ''));
+    if (act) return act.name;
+  }
+  return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics', crosstraining: 'Cross Training', core: 'Core & Abs' }[mod] || mod;
+}
 // Activity-aware emoji/label for GPS activities (run / walk / cycle)
 function _getActivityEmoji(activityType) {
   return ({ run: '🏃', walk: '🚶', cycle: '🚴' })[activityType] || '🏃';
