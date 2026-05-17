@@ -448,6 +448,76 @@ function _weekdayFromYmd(ymd) {
   return names[d.getDay()] || 'Monday';
 }
 
+// ── WEATHER ─────────────────────────────────────────────────────
+// Open-Meteo (https://open-meteo.com) — free, no API key, CORS-friendly.
+// Cached in localStorage for 15 min so the card renders instantly on
+// repeat opens; first-ever load triggers a background fetch and the
+// pill fades in when it resolves.
+var _WX_KEY = 'ff_wx_cache';
+var _WX_TTL = 15 * 60 * 1000;   // 15 min
+
+function _readCachedWeather() {
+  try {
+    var raw = localStorage.getItem(_WX_KEY);
+    if (!raw) return null;
+    var obj = JSON.parse(raw);
+    if (!obj || !obj.t || Date.now() - obj.t > _WX_TTL) return null;
+    return obj;
+  } catch (e) { return null; }
+}
+
+// WMO weather codes → emoji (https://open-meteo.com/en/docs)
+function _wxEmoji(code) {
+  if (code === 0) return '☀️';
+  if (code >= 1 && code <= 2) return '🌤️';
+  if (code === 3) return '☁️';
+  if (code >= 45 && code <= 48) return '🌫️';
+  if (code >= 51 && code <= 67) return '🌧️';
+  if (code >= 71 && code <= 77) return '❄️';
+  if (code >= 80 && code <= 82) return '🌦️';
+  if (code >= 95 && code <= 99) return '⛈️';
+  return '🌤️';
+}
+
+function _fetchAndUpdateWeather() {
+  var pill = document.getElementById('ff-card-wx');
+  if (!pill) return;
+
+  // Cache hit fresh — already rendered, nothing to do
+  if (_readCachedWeather()) return;
+
+  // Geolocate then fetch. Both are best-effort — if either fails the pill
+  // just stays hidden (opacity:0) and the card looks fine without it.
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(function (pos) {
+    var lat = pos.coords.latitude.toFixed(3);
+    var lon = pos.coords.longitude.toFixed(3);
+    var url = 'https://api.open-meteo.com/v1/forecast?latitude=' + lat +
+      '&longitude=' + lon + '&current=temperature_2m,weather_code';
+    fetch(url).then(function (r) { return r.json(); }).then(function (data) {
+      var cur = data && data.current;
+      if (!cur || cur.temperature_2m == null) return;
+      var wx = {
+        tempC: Math.round(cur.temperature_2m),
+        code:  cur.weather_code,
+        emoji: _wxEmoji(cur.weather_code),
+        t:     Date.now(),
+      };
+      try { localStorage.setItem(_WX_KEY, JSON.stringify(wx)); } catch (e) {}
+      // Update the pill in place — also live-update if the card is still
+      // mounted when the response lands
+      var p = document.getElementById('ff-card-wx');
+      if (p) {
+        p.innerHTML = '<span style="font-size:14px;line-height:1">' + wx.emoji + '</span>' +
+                      '<span style="font-variant-numeric:lining-nums tabular-nums">' + wx.tempC + '°C</span>';
+        p.style.opacity = '0.95';
+      }
+    }).catch(function () { /* silent — pill stays hidden */ });
+  }, function () { /* permission denied — pill stays hidden */ }, {
+    timeout: 5000, maximumAge: 5 * 60 * 1000, enableHighAccuracy: false,
+  });
+}
+
 // ── RESULT CARD ─────────────────────────────────────────────────
 // Two entry paths:
 //   1. Immediately after logging (APP._activityCardLogId set above).
@@ -472,64 +542,161 @@ function renderActivityCard() {
 
   var actId = log.activityType || (log.module || '').replace(/^activity_/, '');
   var act = window.APP_DATA && window.APP_DATA.getActivity && window.APP_DATA.getActivity(actId);
-  var dateLabel = new Date((log.date || todayStr()) + 'T00:00:00').toLocaleDateString(undefined, { weekday:'short', day:'numeric', month:'short' });
-  var timeRange = (log.startTime && log.endTime)
-    ? _fmt12h(log.startTime) + ' → ' + _fmt12h(log.endTime)
+  var dateLabel     = new Date((log.date || todayStr()) + 'T00:00:00')
+                       .toLocaleDateString(undefined, { weekday:'short', day:'numeric', month:'short' });
+  var startTimeLabel = log.startTime ? _fmt12h(log.startTime) : '';
+  var durationLabel  = log.durationMin ? _formatMin(log.durationMin) : '—';
+  var kcalLabel      = log.kcal != null ? log.kcal : '—';
+  var placeLabel     = (log.place || '').trim();
+  var displayName    = user.name || (user.email || '').split('@')[0] || 'You';
+
+  // Per-sport SVG scene (table tennis: table+net+balls, badminton: court+
+  // shuttlecocks, yoga: mandala+petals, hiking: mountains+trail, etc.)
+  // Built in activity-cards.js. Used as fallback under the user-provided
+  // PNG below — if the PNG is missing/404, this scene shows through.
+  var sceneBg = (window.FF && window.FF.getActivityBackground)
+    ? window.FF.getActivityBackground(actId)
     : '';
-  var durationLabel = log.durationMin ? _formatMin(log.durationMin) : '—';
-  var kcalLabel     = log.kcal != null ? log.kcal : '—';
-  var placeLabel    = (log.place || '').trim();
+
+  // User-provided full-bleed background image (optional). Convention:
+  //   icons/bg/<activityId>.png   — e.g. icons/bg/table_tennis.png
+  // When present, this covers the SVG scene; when missing, onerror hides
+  // the <img> and the SVG scene below shows. No data-file changes needed
+  // — drop the PNG into the folder and refresh. Sized 1080×1920 ideal,
+  // any 9:16 image works (object-fit:cover handles other ratios).
+  var bgImageLayer =
+    '<img src="icons/bg/' + actId + '.png" alt="" ' +
+      'onerror="this.style.display=\'none\'" ' +
+      'style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;' +
+        'z-index:2;pointer-events:none">';
+
+  // Cached temperature for the weather pill — Open-Meteo (no API key, CORS-
+  // friendly). 15-min localStorage TTL. If we have a cached value, render
+  // immediately; otherwise the pill stays hidden and fills in async.
+  var cachedWx = _readCachedWeather();
+  var wxInline = cachedWx
+    ? '<span style="font-size:14px;line-height:1">' + cachedWx.emoji + '</span>' +
+      '<span style="font-variant-numeric:lining-nums tabular-nums">' + cachedWx.tempC + '°C</span>'
+    : '';
 
   container.innerHTML =
     '<div style="padding:0 16px 24px">' +
 
       '<div id="activity-card-render"' +
-        ' style="border-radius:22px;padding:22px 20px 18px;color:#fff;' +
+        ' style="border-radius:22px;color:#fff;' +
           'background:linear-gradient(135deg,' + act.gradient[0] + ' 0%,' + act.gradient[1] + ' 100%);' +
-          'position:relative;overflow:hidden;aspect-ratio:4 / 5;' +
-          'display:flex;flex-direction:column;margin-bottom:16px">' +
+          'position:relative;overflow:hidden;aspect-ratio:9 / 16;' +
+          'display:flex;flex-direction:column;margin-bottom:16px;' +
+          'font-family:Inter,-apple-system,system-ui,sans-serif">' +
 
-        '<div style="position:absolute;top:-40px;right:-40px;width:160px;height:160px;' +
-          'border-radius:50%;background:rgba(255,255,255,0.06);pointer-events:none"></div>' +
-        '<div style="position:absolute;bottom:-30px;left:-30px;width:120px;height:120px;' +
-          'border-radius:50%;background:rgba(0,0,0,0.10);pointer-events:none"></div>' +
+        // Sport-specific SVG background art (fallback)
+        sceneBg +
 
-        '<div style="display:flex;justify-content:space-between;align-items:center;' +
-          'position:relative;z-index:2">' +
-          '<div style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;letter-spacing:0.05em">' +
-            '⚡ FITFLOW PRO' +
+        // User-provided PNG background (covers SVG when present, hides
+        // itself when 404 so the SVG below shows through)
+        bgImageLayer +
+
+        // Soft vignette for depth
+        '<div style="position:absolute;inset:0;pointer-events:none;z-index:3;' +
+          'background:radial-gradient(ellipse at center,transparent 30%,rgba(0,0,0,0.35) 100%)"></div>' +
+
+        // ─── TOP BAR ─── 3 columns with vertical dividers. align-items:start
+        // so all three columns anchor to the top — the right column then
+        // extends downward with stacked time + weather under the date.
+        '<div style="position:relative;z-index:5;padding:16px 14px 0;' +
+          'display:grid;grid-template-columns:1fr 1.3fr 1fr;align-items:start;' +
+          'font-size:11px;font-weight:700;letter-spacing:0.04em">' +
+
+          '<div style="display:flex;align-items:center;gap:5px;padding-top:2px;min-width:0">' +
+            '<span style="color:#f5d340;font-size:14px;line-height:1;flex-shrink:0">⚡</span>' +
+            '<span style="white-space:nowrap">FITFLOW PRO</span>' +
           '</div>' +
-          '<div style="font-size:11px;opacity:0.78">' + dateLabel + '</div>' +
+
+          '<div style="text-align:center;padding:4px 6px;min-width:0;' +
+            'border-left:1px solid rgba(255,255,255,0.22);' +
+            'border-right:1px solid rgba(255,255,255,0.22);font-weight:600;font-size:12px;' +
+            'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
+            _escapeHtml(displayName) +
+          '</div>' +
+
+          // Right column: date / time / weather all stacked, right-aligned,
+          // so they read as a vertical column directly under the date.
+          '<div style="text-align:right;line-height:1.35;min-width:0;white-space:nowrap">' +
+            '<div>' + dateLabel + '</div>' +
+            (startTimeLabel
+              ? '<div style="font-size:10.5px;font-weight:500;opacity:0.85;margin-top:4px;' +
+                  'font-variant-numeric:lining-nums tabular-nums">' + startTimeLabel + '</div>'
+              : '') +
+            '<div id="ff-card-wx" style="display:inline-flex;align-items:center;gap:4px;' +
+              'font-size:11.5px;font-weight:600;margin-top:4px;' +
+              'opacity:' + (cachedWx ? '0.95' : '0') + ';transition:opacity .3s">' +
+              wxInline +
+            '</div>' +
+          '</div>' +
+
         '</div>' +
 
-        '<div style="text-align:center;padding:18px 0 14px;position:relative;z-index:2;flex:1;' +
-          'display:flex;flex-direction:column;align-items:center;justify-content:center">' +
-          '<div style="font-size:88px;line-height:1">' + act.emoji + '</div>' +
-          '<div style="font-family:var(--font-display,serif);font-size:26px;font-weight:800;' +
-            'margin-top:10px;letter-spacing:0.02em">' + act.name + '</div>' +
-          (placeLabel ? '<div style="font-size:12px;opacity:0.78;margin-top:6px">📍 ' + _escapeHtml(placeLabel) + '</div>' : '') +
+        // ─── HERO ─── positioned in upper-third, not vertically centered.
+        // 100px emoji + 36px title fit comfortably on one line at typical
+        // phone widths (340–400px); whiteSpace:nowrap is a safety net.
+        '<div style="position:relative;z-index:5;flex:1;display:flex;flex-direction:column;' +
+          'align-items:center;justify-content:flex-start;padding:36px 20px 0;text-align:center">' +
+
+          '<div style="font-size:100px;line-height:1;' +
+            'filter:drop-shadow(0 8px 18px rgba(0,0,0,0.42))">' + act.emoji + '</div>' +
+
+          '<div style="font-family:\'Bebas Neue\',\'Anton\',\'Arial Black\',Impact,sans-serif;' +
+            'font-size:36px;font-weight:400;margin-top:18px;letter-spacing:0.04em;' +
+            'line-height:1;text-transform:uppercase;white-space:nowrap;' +
+            'text-shadow:0 3px 12px rgba(0,0,0,0.45)">' +
+            _escapeHtml(act.name) +
+          '</div>' +
+
+          (placeLabel
+            ? '<div style="font-size:13px;opacity:0.92;margin-top:12px;font-weight:500">' +
+                '📍 ' + _escapeHtml(placeLabel) +
+              '</div>'
+            : '') +
+
         '</div>' +
 
-        '<div style="background:rgba(0,0,0,0.22);border-radius:14px;padding:12px 8px;' +
-          'display:grid;grid-template-columns:1fr 1fr 1fr;position:relative;z-index:2">' +
-          '<div style="text-align:center;border-right:1px solid rgba(255,255,255,0.12)">' +
-            '<div style="font-family:var(--font-display,serif);font-size:18px;font-weight:800;line-height:1">' + durationLabel + '</div>' +
-            '<div style="font-size:9px;opacity:0.7;margin-top:3px;text-transform:uppercase;letter-spacing:0.06em">Duration</div>' +
+        // ─── STATS CARD ─── bottom, comfortable margin, proportionally
+        // smaller values (26px) and tighter padding to match reference.
+        // min-width:0 on each column so neither can overflow and hide the
+        // other on narrow screens (the bug from the badminton screenshot).
+        '<div style="position:relative;z-index:5;margin:0 14px 16px;' +
+          'background:rgba(0,0,0,0.42);border:1px solid rgba(255,255,255,0.14);' +
+          'border-radius:18px;padding:14px 12px;' +
+          'display:grid;grid-template-columns:1fr 1fr">' +
+
+          '<div style="text-align:center;border-right:1px solid rgba(255,255,255,0.16);padding:0 4px;min-width:0">' +
+            '<div style="font-size:18px;color:#7fe28e;margin-bottom:4px;line-height:1">⏱</div>' +
+            '<div style="font-family:\'Bebas Neue\',\'Anton\',\'Arial Black\',Impact,sans-serif;' +
+              'font-size:26px;font-weight:400;line-height:1;letter-spacing:0.02em;' +
+              'font-variant-numeric:lining-nums tabular-nums;text-transform:uppercase">' +
+              durationLabel +
+            '</div>' +
+            '<div style="font-size:9.5px;opacity:0.68;margin-top:5px;' +
+              'text-transform:uppercase;letter-spacing:0.12em;font-weight:600">Duration</div>' +
           '</div>' +
-          '<div style="text-align:center;border-right:1px solid rgba(255,255,255,0.12)">' +
-            '<div style="font-family:var(--font-display,serif);font-size:18px;font-weight:800;line-height:1">' + kcalLabel + '</div>' +
-            '<div style="font-size:9px;opacity:0.7;margin-top:3px;text-transform:uppercase;letter-spacing:0.06em">kcal</div>' +
+
+          '<div style="text-align:center;padding:0 4px;min-width:0">' +
+            '<div style="font-size:18px;color:#ff8c42;margin-bottom:4px;line-height:1">🔥</div>' +
+            '<div style="font-family:\'Bebas Neue\',\'Anton\',\'Arial Black\',Impact,sans-serif;' +
+              'font-size:26px;font-weight:400;line-height:1;letter-spacing:0.02em;' +
+              'font-variant-numeric:lining-nums tabular-nums">' +
+              kcalLabel +
+            '</div>' +
+            '<div style="font-size:9.5px;opacity:0.68;margin-top:5px;' +
+              'text-transform:uppercase;letter-spacing:0.12em;font-weight:600">kcal</div>' +
           '</div>' +
-          '<div style="text-align:center">' +
-            '<div style="font-size:11px;font-weight:700;padding-top:3px;line-height:1.3">' + (timeRange || dateLabel) + '</div>' +
-            '<div style="font-size:9px;opacity:0.7;margin-top:3px;text-transform:uppercase;letter-spacing:0.06em">Time</div>' +
-          '</div>' +
+
         '</div>' +
 
-        '<div style="text-align:center;margin-top:10px;font-size:9px;opacity:0.55;' +
-          'position:relative;z-index:2;letter-spacing:0.04em">fitflowpro.in</div>' +
+      // end activity-card-render
       '</div>' +
 
+      // Action buttons — Download / Done
       '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">' +
         '<button class="btn btn-outline btn-full" onclick="downloadActivityCard()">' +
           '⬇ Download' +
@@ -539,6 +706,7 @@ function renderActivityCard() {
         '</button>' +
       '</div>' +
 
+      // Delete link
       '<div style="text-align:center;margin-top:14px">' +
         '<button onclick="confirmDeleteActivity()"' +
           ' style="background:none;border:none;color:var(--text3);font-size:12px;' +
@@ -548,38 +716,49 @@ function renderActivityCard() {
       '</div>' +
 
     '</div>';
+
+  // Inline <script> tags inside innerHTML never execute (HTML5 spec), so the
+  // weather fetch must be triggered from here, after the DOM is in place.
+  // Deferred to the next tick so #ff-card-wx exists when the response lands.
+  setTimeout(function () {
+    if (typeof _fetchAndUpdateWeather === 'function') _fetchAndUpdateWeather();
+  }, 0);
 }
+
 
 // ── DOWNLOAD CARD AS PNG ────────────────────────────────────────
 // Lazy-loads html2canvas from CDN on first use — no upfront cost for
-// users who never log a manual activity. Renders the same DOM element
-// the user sees onscreen, so what they get matches the preview exactly.
+// users who never log a manual activity. The on-screen card is rendered
+// at the device's pixel width (~330–360 px for most phones); html2canvas's
+// `scale` multiplies that, so to hit a 1080×1920 ultra-HD PNG we compute
+// the scale dynamically from the live card width.
 function downloadActivityCard() {
   var node = document.getElementById('activity-card-render');
   if (!node) return;
   if (typeof showToast === 'function') showToast('Preparing your card…', 'info');
 
-  // FIX for white-corner slivers: the on-screen card has border-radius:22px,
-  // but PNG export is rectangular. The pixel triangles outside the rounded
-  // corners but inside the bounding box render as white in the saved file.
-  // Temporarily flatten the radius during capture and restore it after, so
-  // the screen preview stays rounded while the downloaded PNG is a clean
-  // edge-to-edge portrait rectangle.
+  // Flatten radius so the saved PNG is a clean edge-to-edge rectangle
+  // (no white slivers at the corners). Restored in every code path below.
   var origRadius = node.style.borderRadius;
   node.style.borderRadius = '0';
-
   function _restore() { node.style.borderRadius = origRadius; }
+
+  // Dynamic scale → target 1080 px wide (1920 tall at 9:16 aspect ratio).
+  var rect    = node.getBoundingClientRect();
+  var liveW   = rect.width || 360;
+  var TARGET  = 1080;
+  var scale   = Math.max(2, TARGET / liveW);   // never downscale, min 2 for retina
 
   _loadHtml2Canvas().then(function (h2c) {
     h2c(node, {
       backgroundColor: null,
-      scale: 2,
+      scale: scale,
       useCORS: true,
       logging: false,
     }).then(function (canvas) {
       _restore();
       try {
-        var link = document.createElement('a');
+        var link  = document.createElement('a');
         var stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         link.download = 'fitflow-activity-' + stamp + '.png';
         link.href = canvas.toDataURL('image/png');
