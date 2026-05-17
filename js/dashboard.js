@@ -2548,7 +2548,12 @@ function _buildWorkoutStats(userId) {
   const allDates = [...new Set([...logs.map(l=>l.date), ...runLogs.map(r=>r.date)])].sort().reverse();
 
   const modCounts = {};
-  logs.filter(l=>!l.module?.startsWith('custom_')).forEach(l => {
+  // Exclude custom workouts (user-built routines) AND activity_* manual logs
+  // (Badminton/Tennis/etc.) from the "unique modules" count — those drive the
+  // "All-Rounder" achievement, which is meant to reward training in the seven
+  // core app modules (cardio, gym, yoga, running, stretching, calisthenics,
+  // crosstraining, core), not a streak of diverse manual logs.
+  logs.filter(l => !l.module?.startsWith('custom_') && !l.module?.startsWith('activity_')).forEach(l => {
     modCounts[l.module] = (modCounts[l.module]||0)+1;
   });
 
