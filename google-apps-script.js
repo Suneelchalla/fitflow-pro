@@ -263,6 +263,7 @@ function doPost(e) {
       case 'logCompletion':          result = logCompletion(body);                        break;
       case 'logRun':                 result = logRun(body);                               break;
       case 'deleteRunLog':           result = deleteRunLog(body.logId, body.userId);      break;
+      case 'deleteLog':              result = deleteLog(body);                            break;
       case 'savePlanRegistration':   result = savePlanRegistration(body);                 break;
       case 'savePlanDayCompletion':  result = savePlanDayCompletion(body);                break;
       case 'clearActivePlan':        result = clearActivePlan(body);                      break;
@@ -677,61 +678,116 @@ function deleteUser(body) {
 // ════════════════════════════════════════════════════════════════
 function logCompletion(body) {
   const sh = getSheet(SHEETS.LOGS);
-  // Header schema extended (v136+) — Week/Phase/DayType columns carry the
-  // cross-training plan metadata so the global-history detail viewer can
-  // look up the right exercise list cross-device. _ensureLogCtCols backfills
-  // headers on legacy sheets that pre-date this change.
-  ensureHeaders(sh,['LogID','UserID','UserEmail','Module','Day','Date','Timestamp','Week','Phase','DayType']);
+  // Header schema extended over several releases:
+  //   v136+ added Week/Phase/DayType (cross-training metadata)
+  //   v141+ added ActivityType/DurationMin/Kcal/Place (manual activities)
+  // The backfill helpers below idempotently add any missing columns to
+  // legacy sheets. We then read/write by HEADER NAME (not position) so
+  // ordering quirks across deployments don't break anything.
+  ensureHeaders(sh,['LogID','UserID','UserEmail','Module','Day','Date','Timestamp',
+                    'Week','Phase','DayType',
+                    'ActivityType','DurationMin','Kcal','Place']);
   _ensureLogCtCols(sh);
+  _ensureLogActivityCols(sh);
+
+  const headerRow = sh.getRange(1, 1, 1, sh.getLastColumn()).getValues()[0];
+  const colIdx    = _logColIdx(headerRow);
+
   const data   = sh.getDataRange().getValues();
   const userId = (body.userId||'').toString();
   const module = (body.module||'').toString();
   const day    = (body.day   ||'').toString();
   const date   = toYMD(body.date) || (body.date||'').toString();
+
   // Dedup on userId+module+day+date (matches frontend Store.addLog).
   // Including `day` is required for body-part modules (stretching) where a user
   // can complete multiple body parts on the same date — each is a separate log.
-  // For other modules the day value is a weekday name; users only ever log
-  // today, so this also prevents the same weekday-date pair from duplicating.
   for (let i = 1; i < data.length; i++) {
-    if ((data[i][1]||'').toString() === userId &&
-        (data[i][3]||'').toString() === module &&
-        (data[i][4]||'').toString() === day &&
-        toYMD(data[i][5]) === date) {
+    if ((data[i][colIdx.userId] ||'').toString() === userId &&
+        (data[i][colIdx.module] ||'').toString() === module &&
+        (data[i][colIdx.day]    ||'').toString() === day    &&
+        toYMD(data[i][colIdx.date]) === date) {
       return { success:true, duplicate:true };
     }
   }
-  sh.appendRow([
-    'log_'+Date.now(),
-    userId,
-    body.email||'',
-    module,
-    day,
-    date,
-    new Date().toISOString(),
-    body.week    || '',   // crosstraining only; other modules pass empty
-    body.phase   || '',
-    body.dayType || '',
-  ]);
+
+  // Build the row in header order so extra/reordered columns Just Work.
+  const row = new Array(headerRow.length).fill('');
+  row[colIdx.logId]     = 'log_' + Date.now();
+  row[colIdx.userId]    = userId;
+  row[colIdx.email]     = body.email || '';
+  row[colIdx.module]    = module;
+  row[colIdx.day]       = day;
+  row[colIdx.date]      = date;
+  row[colIdx.timestamp] = new Date().toISOString();
+  if (colIdx.week         >= 0) row[colIdx.week]         = body.week    || '';
+  if (colIdx.phase        >= 0) row[colIdx.phase]        = body.phase   || '';
+  if (colIdx.dayType      >= 0) row[colIdx.dayType]      = body.dayType || '';
+  if (colIdx.activityType >= 0) row[colIdx.activityType] = body.activityType || '';
+  if (colIdx.durationMin  >= 0) row[colIdx.durationMin]  = (body.durationMin != null ? body.durationMin : '');
+  if (colIdx.kcal         >= 0) row[colIdx.kcal]         = (body.kcal        != null ? body.kcal        : '');
+  if (colIdx.place        >= 0) row[colIdx.place]        = body.place   || '';
+
+  sh.appendRow(row);
   SpreadsheetApp.flush();
   return { success:true };
 }
 
+// Resolve a column-name → zero-based index map for the WorkoutLogs sheet.
+// Returns -1 for any column not yet present so callers can detect absence
+// via `colIdx.fieldName >= 0`. Header keys are lower-cased so casing in
+// the sheet doesn't matter.
+function _logColIdx(headerRow) {
+  const h = headerRow.map(v => (v||'').toString().trim().toLowerCase());
+  const find = name => h.indexOf(name.toLowerCase());
+  return {
+    logId:        find('logid'),
+    userId:       find('userid'),
+    email:        find('useremail'),
+    module:       find('module'),
+    day:          find('day'),
+    date:         find('date'),
+    timestamp:    find('timestamp'),
+    week:         find('week'),
+    phase:        find('phase'),
+    dayType:      find('daytype'),
+    activityType: find('activitytype'),
+    durationMin:  find('durationmin'),
+    kcal:         find('kcal'),
+    place:        find('place'),
+  };
+}
+
 function getUserLogs(userId) {
   const sh   = getSheet(SHEETS.LOGS);
-  _ensureLogCtCols(sh);   // backfill so r[7..9] exist on legacy sheets
+  _ensureLogCtCols(sh);
+  _ensureLogActivityCols(sh);
   const data = sh.getDataRange().getValues();
   if (data.length<2) return [];
+  const headerRow = data[0];
+  const c = _logColIdx(headerRow);
   return data.slice(1)
-    .filter(r => (r[1]||'').toString()===userId.toString())
+    .filter(r => (r[c.userId]||'').toString() === userId.toString())
     .map(r => {
-      const log = { id:r[0], userId:r[1], email:r[2], module:r[3], day:r[4], date:r[5], timestamp:r[6] };
-      // Only attach cross-training fields when actually present, so other
-      // modules' logs stay clean (and so optional-chaining checks downstream
-      // remain `if (log.phase)` rather than `if (log.phase !== '')`).
-      if (r[7] !== '' && r[7] != null) log.week    = parseInt(r[7]) || r[7];
-      if (r[8])                        log.phase   = (r[8]||'').toString();
-      if (r[9])                        log.dayType = (r[9]||'').toString();
+      const log = {
+        id:        r[c.logId],
+        userId:    r[c.userId],
+        email:     r[c.email],
+        module:    r[c.module],
+        day:       r[c.day],
+        date:      r[c.date],
+        timestamp: r[c.timestamp],
+      };
+      // Cross-training metadata — only attach when populated so other
+      // modules' logs stay clean.
+      if (c.week    >= 0 && r[c.week]    !== '' && r[c.week] != null) log.week    = parseInt(r[c.week]) || r[c.week];
+      if (c.phase   >= 0 && r[c.phase])     log.phase   = (r[c.phase]   ||'').toString();
+      if (c.dayType >= 0 && r[c.dayType])   log.dayType = (r[c.dayType] ||'').toString();
+      // Manual-activity metadata — same rule.
+      if (c.activityType >= 0 && r[c.activityType]) log.activityType = (r[c.activityType]||'').toString();
+      if (c.durationMin  >= 0 && r[c.durationMin] !== '' && r[c.durationMin] != null) log.durationMin = parseInt(r[c.durationMin]) || r[c.durationMin];
+      if (c.kcal         >= 0 && r[c.kcal]        !== '' && r[c.kcal]        != null) log.kcal        = parseInt(r[c.kcal])        || r[c.kcal];
+      if (c.place        >= 0 && r[c.place])  log.place = (r[c.place]||'').toString();
       return log;
     });
 }
@@ -739,21 +795,28 @@ function getUserLogs(userId) {
 function getAllLogs() {
   const sh   = getSheet(SHEETS.LOGS);
   _ensureLogCtCols(sh);
+  _ensureLogActivityCols(sh);
   const data = sh.getDataRange().getValues();
   if (data.length<2) return [];
+  const headerRow = data[0];
+  const c = _logColIdx(headerRow);
   return data.slice(1).map(r => {
     const log = {
-      id:        (r[0]||'').toString(),
-      userId:    (r[1]||'').toString(),
-      email:     (r[2]||'').toString(),
-      module:    (r[3]||'').toString(),
-      day:       (r[4]||'').toString(),
-      date:      toYMD(r[5]),
-      timestamp: toISOStr(r[6]),
+      id:        (r[c.logId]    ||'').toString(),
+      userId:    (r[c.userId]   ||'').toString(),
+      email:     (r[c.email]    ||'').toString(),
+      module:    (r[c.module]   ||'').toString(),
+      day:       (r[c.day]      ||'').toString(),
+      date:      toYMD(r[c.date]),
+      timestamp: toISOStr(r[c.timestamp]),
     };
-    if (r[7] !== '' && r[7] != null) log.week    = parseInt(r[7]) || r[7];
-    if (r[8])                        log.phase   = (r[8]||'').toString();
-    if (r[9])                        log.dayType = (r[9]||'').toString();
+    if (c.week    >= 0 && r[c.week]    !== '' && r[c.week] != null) log.week    = parseInt(r[c.week]) || r[c.week];
+    if (c.phase   >= 0 && r[c.phase])    log.phase   = (r[c.phase]   ||'').toString();
+    if (c.dayType >= 0 && r[c.dayType])  log.dayType = (r[c.dayType] ||'').toString();
+    if (c.activityType >= 0 && r[c.activityType]) log.activityType = (r[c.activityType]||'').toString();
+    if (c.durationMin  >= 0 && r[c.durationMin] !== '' && r[c.durationMin] != null) log.durationMin = parseInt(r[c.durationMin]) || r[c.durationMin];
+    if (c.kcal         >= 0 && r[c.kcal]        !== '' && r[c.kcal]        != null) log.kcal        = parseInt(r[c.kcal])        || r[c.kcal];
+    if (c.place        >= 0 && r[c.place])  log.place = (r[c.place]||'').toString();
     return log;
   });
 }
@@ -876,6 +939,31 @@ function deleteRunLog(logId, userId) {
   for (let i = 1; i < data.length; i++) {
     const rowLogId  = (data[i][0]||'').toString().trim();
     const rowUserId = (data[i][1]||'').toString().trim();
+    if (rowLogId === logId.toString().trim()) {
+      if (userId && rowUserId !== userId.toString().trim())
+        return { success:false, error:'Unauthorized.' };
+      sh.deleteRow(i+1);
+      SpreadsheetApp.flush();
+      return { success:true, deleted:logId };
+    }
+  }
+  return { success:false, error:'Log not found.' };
+}
+
+// Delete a workout log entry (any module — currently used by manual-activity
+// card delete button). Same safety pattern as deleteRunLog: matches by logId
+// AND verifies the userId so users can only ever delete their own rows.
+function deleteLog(body) {
+  const logId  = (body && body.logId)  || '';
+  const userId = (body && body.userId) || '';
+  if (!logId) return { success:false, error:'logId required.' };
+  const sh   = getSheet(SHEETS.LOGS);
+  const data = sh.getDataRange().getValues();
+  if (data.length < 2) return { success:false, error:'Log not found.' };
+  const c = _logColIdx(data[0]);
+  for (let i = 1; i < data.length; i++) {
+    const rowLogId  = (data[i][c.logId] ||'').toString().trim();
+    const rowUserId = (data[i][c.userId]||'').toString().trim();
     if (rowLogId === logId.toString().trim()) {
       if (userId && rowUserId !== userId.toString().trim())
         return { success:false, error:'Unauthorized.' };
@@ -2396,6 +2484,36 @@ function _ensureLogCtCols(sh) {
     SpreadsheetApp.flush();
   } catch (err) {
     Logger.log('_ensureLogCtCols failed: ' + err.message);
+  }
+}
+
+// Ensures the WorkoutLogs sheet has ActivityType / DurationMin / Kcal /
+// Place columns — used by manual-activity logs (Badminton, Tennis, etc.)
+// to round-trip the sport metadata so the shareable result card can be
+// reconstructed cross-device. Same idempotent backfill pattern as the
+// helpers above; safe to call from every read/write touch-point.
+function _ensureLogActivityCols(sh) {
+  try {
+    if (sh.getLastRow() === 0) return;
+    const lastCol = sh.getLastColumn();
+    const headers = sh.getRange(1, 1, 1, lastCol).getValues()[0]
+      .map(h => (h||'').toString().trim().toLowerCase());
+    const wanted = [
+      { key: 'activitytype', label: 'ActivityType' },
+      { key: 'durationmin',  label: 'DurationMin'  },
+      { key: 'kcal',         label: 'Kcal'         },
+      { key: 'place',        label: 'Place'        },
+    ];
+    let nextCol = lastCol + 1;
+    wanted.forEach(w => {
+      if (headers.includes(w.key)) return;
+      sh.getRange(1, nextCol).setValue(w.label)
+        .setFontWeight('bold').setBackground('#1B5E20').setFontColor('#FFFFFF');
+      nextCol++;
+    });
+    SpreadsheetApp.flush();
+  } catch (err) {
+    Logger.log('_ensureLogActivityCols failed: ' + err.message);
   }
 }
 
