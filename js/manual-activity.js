@@ -583,7 +583,7 @@ function renderActivityCard() {
     '<div style="padding:0 16px 24px">' +
 
       '<div id="activity-card-render"' +
-        ' style="border-radius:22px;color:#fff;' +
+        ' style="border-radius:44px;color:#fff;' +
           'background:linear-gradient(135deg,' + act.gradient[0] + ' 0%,' + act.gradient[1] + ' 100%);' +
           'position:relative;overflow:hidden;aspect-ratio:9 / 16;' +
           'display:flex;flex-direction:column;margin-bottom:16px;' +
@@ -600,61 +600,77 @@ function renderActivityCard() {
         '<div style="position:absolute;inset:0;pointer-events:none;z-index:3;' +
           'background:radial-gradient(ellipse at center,transparent 30%,rgba(0,0,0,0.35) 100%)"></div>' +
 
-        // ─── TOP BAR ─── 3 columns with vertical dividers. align-items:start
-        // so all three columns anchor to the top — the right column then
-        // extends downward with stacked time + weather under the date.
-        '<div style="position:relative;z-index:5;padding:16px 14px 0;' +
-          'display:grid;grid-template-columns:1fr 1.3fr 1fr;align-items:start;' +
+        // ─── TOP BAR ─── single-line row matching the reference layout:
+        // brand | user name | date — all 3 sit on one line, dividers are
+        // short and clean (only as tall as the line). Time + weather move
+        // to a SEPARATE right-aligned row below.
+        '<div style="position:relative;z-index:5;padding:26px 14px 0;' +
+          'display:grid;grid-template-columns:1fr 1.3fr 1fr;align-items:center;' +
           'font-size:11px;font-weight:700;letter-spacing:0.04em">' +
 
-          '<div style="display:flex;align-items:center;gap:5px;padding-top:2px;min-width:0">' +
+          '<div style="display:flex;align-items:center;gap:5px;min-width:0">' +
             '<span style="color:#f5d340;font-size:14px;line-height:1;flex-shrink:0">⚡</span>' +
             '<span style="white-space:nowrap">FITFLOW PRO</span>' +
           '</div>' +
 
-          '<div style="text-align:center;padding:4px 6px;min-width:0;' +
-            'border-left:1px solid rgba(255,255,255,0.22);' +
-            'border-right:1px solid rgba(255,255,255,0.22);font-weight:600;font-size:12px;' +
+          '<div style="text-align:center;padding:6px 8px;min-width:0;' +
+            'border-left:1px solid rgba(255,255,255,0.40);' +
+            'border-right:1px solid rgba(255,255,255,0.40);font-weight:600;font-size:12px;' +
             'white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' +
             _escapeHtml(displayName) +
           '</div>' +
 
-          // Right column: date / time / weather all stacked, right-aligned,
-          // so they read as a vertical column directly under the date.
-          '<div style="text-align:right;line-height:1.35;min-width:0;white-space:nowrap">' +
-            '<div>' + dateLabel + '</div>' +
-            (startTimeLabel
-              ? '<div style="font-size:10.5px;font-weight:500;opacity:0.85;margin-top:4px;' +
-                  'font-variant-numeric:lining-nums tabular-nums">' + startTimeLabel + '</div>'
-              : '') +
-            '<div id="ff-card-wx" style="display:inline-flex;align-items:center;gap:4px;' +
-              'font-size:11.5px;font-weight:600;margin-top:4px;' +
-              'opacity:' + (cachedWx ? '0.95' : '0') + ';transition:opacity .3s">' +
-              wxInline +
-            '</div>' +
+          '<div style="text-align:right;white-space:nowrap;min-width:0">' +
+            dateLabel +
           '</div>' +
 
         '</div>' +
 
-        // ─── HERO ─── positioned in upper-third, not vertically centered.
-        // 100px emoji + 36px title fit comfortably on one line at typical
-        // phone widths (340–400px); whiteSpace:nowrap is a safety net.
+        // ─── TIME + WEATHER ROW ─── right-aligned, sits just below the
+        // top bar. Matches the reference where the weather pill is its
+        // own row, not crammed into the right column of the top bar.
+        '<div style="position:relative;z-index:5;padding:10px 16px 0;' +
+          'display:flex;justify-content:flex-end;align-items:center;gap:14px;' +
+          'font-size:12px;font-weight:600">' +
+          (startTimeLabel
+            ? '<span style="opacity:0.85;font-weight:500;' +
+                'font-variant-numeric:lining-nums tabular-nums">' + startTimeLabel + '</span>'
+            : '') +
+          '<span id="ff-card-wx" style="display:inline-flex;align-items:center;gap:5px;' +
+            'opacity:' + (cachedWx ? '0.95' : '0') + ';transition:opacity .3s">' +
+            wxInline +
+          '</span>' +
+        '</div>' +
+
+        // ─── HERO ─── vertically centered in the remaining flex space
+        // (between top bar+weather row and stats card). justify-content:
+        // center handles the vertical positioning; each row inside uses
+        // its own full-width flex wrapper so the emoji glyph's character
+        // cell padding can't shift visual alignment.
         '<div style="position:relative;z-index:5;flex:1;display:flex;flex-direction:column;' +
-          'align-items:center;justify-content:flex-start;padding:36px 20px 0;text-align:center">' +
+          'align-items:stretch;justify-content:center;padding:0 20px;text-align:center">' +
 
-          '<div style="font-size:100px;line-height:1;' +
-            'filter:drop-shadow(0 8px 18px rgba(0,0,0,0.42))">' + act.emoji + '</div>' +
+          '<div style="width:100%;display:flex;justify-content:center;align-items:center;line-height:1">' +
+            '<span style="font-size:100px;line-height:1;display:inline-block;' +
+              'filter:drop-shadow(0 8px 18px rgba(0,0,0,0.42))">' + act.emoji + '</span>' +
+          '</div>' +
 
-          '<div style="font-family:\'Bebas Neue\',\'Anton\',\'Arial Black\',Impact,sans-serif;' +
-            'font-size:36px;font-weight:400;margin-top:18px;letter-spacing:0.04em;' +
-            'line-height:1;text-transform:uppercase;white-space:nowrap;' +
-            'text-shadow:0 3px 12px rgba(0,0,0,0.45)">' +
-            _escapeHtml(act.name) +
+          '<div style="width:100%;display:flex;justify-content:center;margin-top:18px">' +
+            '<span style="font-family:\'Bebas Neue\',\'Anton\',\'Arial Black\',Impact,sans-serif;' +
+              'font-size:36px;font-weight:400;letter-spacing:0.04em;' +
+              'line-height:1;text-transform:uppercase;white-space:nowrap;' +
+              'text-shadow:0 3px 12px rgba(0,0,0,0.45)">' +
+              _escapeHtml(act.name) +
+            '</span>' +
           '</div>' +
 
           (placeLabel
-            ? '<div style="font-size:13px;opacity:0.92;margin-top:12px;font-weight:500">' +
-                '📍 ' + _escapeHtml(placeLabel) +
+            ? '<div style="width:100%;display:flex;justify-content:center;margin-top:12px">' +
+                '<span style="display:inline-flex;align-items:center;gap:6px;' +
+                  'font-size:13px;opacity:0.92;font-weight:500;line-height:1.2">' +
+                  '<span style="font-size:14px;line-height:1">📍</span>' +
+                  '<span>' + _escapeHtml(placeLabel) + '</span>' +
+                '</span>' +
               '</div>'
             : '') +
 
@@ -662,9 +678,11 @@ function renderActivityCard() {
 
         // ─── STATS CARD ─── bottom, comfortable margin, proportionally
         // smaller values (26px) and tighter padding to match reference.
+        // 32px bottom margin lifts the card up so it doesn't hug the
+        // edge — feels more like a floating panel.
         // min-width:0 on each column so neither can overflow and hide the
         // other on narrow screens (the bug from the badminton screenshot).
-        '<div style="position:relative;z-index:5;margin:0 14px 16px;' +
+        '<div style="position:relative;z-index:5;margin:0 14px 32px;' +
           'background:rgba(0,0,0,0.42);border:1px solid rgba(255,255,255,0.14);' +
           'border-radius:18px;padding:14px 12px;' +
           'display:grid;grid-template-columns:1fr 1fr">' +
@@ -676,7 +694,7 @@ function renderActivityCard() {
               'font-variant-numeric:lining-nums tabular-nums;text-transform:uppercase">' +
               durationLabel +
             '</div>' +
-            '<div style="font-size:9.5px;opacity:0.68;margin-top:5px;' +
+            '<div style="font-size:9.5px;opacity:0.68;margin-top:12px;' +
               'text-transform:uppercase;letter-spacing:0.12em;font-weight:600">Duration</div>' +
           '</div>' +
 
@@ -687,7 +705,7 @@ function renderActivityCard() {
               'font-variant-numeric:lining-nums tabular-nums">' +
               kcalLabel +
             '</div>' +
-            '<div style="font-size:9.5px;opacity:0.68;margin-top:5px;' +
+            '<div style="font-size:9.5px;opacity:0.68;margin-top:12px;' +
               'text-transform:uppercase;letter-spacing:0.12em;font-weight:600">kcal</div>' +
           '</div>' +
 
