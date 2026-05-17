@@ -600,15 +600,17 @@ function renderActivityCard() {
         '<div style="position:absolute;inset:0;pointer-events:none;z-index:3;' +
           'background:radial-gradient(ellipse at center,transparent 30%,rgba(0,0,0,0.35) 100%)"></div>' +
 
-        // ─── TOP BAR ─── single-line row matching the reference layout:
-        // brand | user name | date — all 3 sit on one line, dividers are
-        // short and clean (only as tall as the line). Time + weather move
-        // to a SEPARATE right-aligned row below.
+        // ─── TOP BAR ─── single grid: brand | name | (date/time/temp stack)
+        // align-items:start keeps each cell's content at the top of the
+        // row, so the center column's borders (the dividers) only span
+        // ONE line of "Suneel Challa" while the right column extends
+        // downward with date, time, temp all sharing the same centerline.
         '<div style="position:relative;z-index:5;padding:26px 14px 0;' +
-          'display:grid;grid-template-columns:1fr 1.3fr 1fr;align-items:center;' +
+          'display:grid;grid-template-columns:1fr 1fr 1fr;align-items:start;' +
           'font-size:11px;font-weight:700;letter-spacing:0.04em">' +
 
-          '<div style="display:flex;align-items:center;gap:5px;min-width:0">' +
+          '<div style="display:flex;align-items:center;justify-content:center;gap:5px;' +
+            'padding:6px 0;min-width:0">' +
             '<span style="color:#f5d340;font-size:14px;line-height:1;flex-shrink:0">⚡</span>' +
             '<span style="white-space:nowrap">FITFLOW PRO</span>' +
           '</div>' +
@@ -620,26 +622,23 @@ function renderActivityCard() {
             _escapeHtml(displayName) +
           '</div>' +
 
-          '<div style="text-align:right;white-space:nowrap;min-width:0">' +
-            dateLabel +
+          // Right column: date / time / temp stacked, all centered so they
+          // share the same horizontal centerline as the date.
+          '<div style="text-align:center;padding:6px 0;line-height:1.4;min-width:0">' +
+            '<div style="white-space:nowrap">' + dateLabel + '</div>' +
+            (startTimeLabel
+              ? '<div style="font-size:10.5px;font-weight:500;opacity:0.85;margin-top:5px;' +
+                  'font-variant-numeric:lining-nums tabular-nums;white-space:nowrap">' +
+                  startTimeLabel +
+                '</div>'
+              : '') +
+            '<div id="ff-card-wx" style="display:inline-flex;align-items:center;gap:5px;' +
+              'font-size:11.5px;font-weight:600;margin-top:5px;' +
+              'opacity:' + (cachedWx ? '0.95' : '0') + ';transition:opacity .3s">' +
+              wxInline +
+            '</div>' +
           '</div>' +
 
-        '</div>' +
-
-        // ─── TIME + WEATHER ROW ─── right-aligned, sits just below the
-        // top bar. Matches the reference where the weather pill is its
-        // own row, not crammed into the right column of the top bar.
-        '<div style="position:relative;z-index:5;padding:10px 16px 0;' +
-          'display:flex;justify-content:flex-end;align-items:center;gap:14px;' +
-          'font-size:12px;font-weight:600">' +
-          (startTimeLabel
-            ? '<span style="opacity:0.85;font-weight:500;' +
-                'font-variant-numeric:lining-nums tabular-nums">' + startTimeLabel + '</span>'
-            : '') +
-          '<span id="ff-card-wx" style="display:inline-flex;align-items:center;gap:5px;' +
-            'opacity:' + (cachedWx ? '0.95' : '0') + ';transition:opacity .3s">' +
-            wxInline +
-          '</span>' +
         '</div>' +
 
         // ─── HERO ─── vertically centered in the remaining flex space
@@ -665,10 +664,10 @@ function renderActivityCard() {
           '</div>' +
 
           (placeLabel
-            ? '<div style="width:100%;display:flex;justify-content:center;margin-top:12px">' +
-                '<span style="display:inline-flex;align-items:center;gap:6px;' +
-                  'font-size:13px;opacity:0.92;font-weight:500;line-height:1.2">' +
-                  '<span style="font-size:14px;line-height:1">📍</span>' +
+            ? '<div style="width:100%;display:flex;justify-content:center;margin-top:14px">' +
+                '<span style="display:inline-flex;align-items:center;gap:7px;' +
+                  'font-size:14px;opacity:0.92;font-weight:500;line-height:1.2">' +
+                  '<span style="font-size:18px;line-height:1">📍</span>' +
                   '<span>' + _escapeHtml(placeLabel) + '</span>' +
                 '</span>' +
               '</div>'
