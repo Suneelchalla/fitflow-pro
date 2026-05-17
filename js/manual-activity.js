@@ -23,6 +23,8 @@ var _manualForm = {
 
 // ── ENTRY POINT — Picker ─────────────────────────────────────────
 function initManualLogPage() {
+  // Clear any stale sub-view back hook left over from a previous visit
+  if (typeof APP !== 'undefined') APP.subViewBack = null;
   _manualForm = {
     activityId: null,
     date: todayStr(),
@@ -80,6 +82,9 @@ function _persistUserWeight(kg) {
 function _renderManualPicker() {
   var container = document.getElementById('manual-log-content');
   if (!container) return;
+  // Picker is the "root" sub-view — no back-hook should be active here.
+  // Clears any stale hook so back from picker goes to dashboard normally.
+  if (typeof APP !== 'undefined') APP.subViewBack = null;
   var activities = (window.APP_DATA && window.APP_DATA.activities) || [];
 
   container.innerHTML =
@@ -124,6 +129,23 @@ function _renderManualPicker() {
 // ── ACTIVITY SELECTED — show the form ────────────────────────────
 function selectManualActivity(activityId) {
   _manualForm.activityId = activityId;
+  // Push a sub-state into history so the browser/system back gesture has a
+  // step to consume between "form" and "picker". Without this, popstate
+  // fires with the dashboard's state and goBack jumps straight there.
+  try {
+    window.history.pushState({ page: 'page-manual-log', subview: 'form' }, '', '#page-manual-log');
+  } catch (e) {}
+  // Register the back hook so goBack() returns to the picker, not the
+  // parent page. Cleared in _renderManualPicker, initManualLogPage,
+  // logManualActivity, and on page exit.
+  if (typeof APP !== 'undefined') {
+    APP.subViewBack = function () {
+      APP.subViewBack = null;
+      _manualForm.activityId = null;
+      _renderManualPicker();
+      return true;   // back consumed — don't navigate away
+    };
+  }
   _renderManualForm();
 }
 
@@ -403,6 +425,9 @@ function logManualActivity() {
   }, 600);
 
   APP._activityCardLogId = added.id || _findLatestActivityLogId(user.id, moduleId, today);
+  // Form is done — clear the sub-view back hook so back from the card goes
+  // to the parent page (dashboard) rather than restoring the form/picker.
+  if (typeof APP !== 'undefined') APP.subViewBack = null;
   showPage('page-activity-card');
   renderActivityCard();
   if (typeof showToast === 'function') showToast('🎉 ' + act.name + ' logged!', 'success');
