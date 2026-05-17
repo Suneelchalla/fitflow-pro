@@ -406,13 +406,24 @@ async function _syncUserLogs(userId) {
       localByKey.set(k, l);
     });
     fromSheet.forEach(sl => {
-      if (sl.module !== 'crosstraining') return;
       const k = (sl.module||'') + '|' + (sl.day||'') + '|' + (sl.date||'');
       const local = localByKey.get(k);
       if (!local) return;
-      if (sl.week    == null && local.week    != null) sl.week    = local.week;
-      if (!sl.phase            && local.phase)         sl.phase   = local.phase;
-      if (!sl.dayType          && local.dayType)       sl.dayType = local.dayType;
+      // Cross-training metadata
+      if (sl.module === 'crosstraining') {
+        if (sl.week    == null && local.week    != null) sl.week    = local.week;
+        if (!sl.phase            && local.phase)         sl.phase   = local.phase;
+        if (!sl.dayType          && local.dayType)       sl.dayType = local.dayType;
+      }
+      // Manual-activity metadata — same rule
+      if (typeof sl.module === 'string' && sl.module.startsWith('activity_')) {
+        if (!sl.activityType         && local.activityType)         sl.activityType = local.activityType;
+        if (sl.durationMin == null   && local.durationMin   != null) sl.durationMin  = local.durationMin;
+        if (sl.kcal        == null   && local.kcal          != null) sl.kcal         = local.kcal;
+        if (!sl.startTime            && local.startTime)            sl.startTime    = local.startTime;
+        if (!sl.endTime              && local.endTime)              sl.endTime      = local.endTime;
+        if (sl.place == null         && local.place        != null) sl.place        = local.place;
+      }
     });
 
     const otherUsers = allLocal.filter(l => l.userId !== userId);
