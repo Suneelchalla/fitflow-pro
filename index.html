@@ -26,6 +26,13 @@
     window.OneSignalDeferred = window.OneSignalDeferred || [];
     // Init handled inside push.js so we can wait for APP context.
   </script>
+
+  <!-- Bebas Neue — bold condensed display font for the activity-card title.
+       Used in the shareable card render only. Preconnect + display=swap so
+       it never blocks first paint. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&display=swap" rel="stylesheet">
 </head>
 <body>
 
@@ -3069,7 +3076,8 @@ window.addEventListener('DOMContentLoaded', function() {
 <script src="js/auth.js?v=87"></script>
 <script src="js/dashboard.js?v=95"></script>
 <script src="js/cross-training.js?v=6"></script>
-<script src="js/manual-activity.js?v=4"></script>
+<script src="js/activity-cards.js?v=1"></script>
+<script src="js/manual-activity.js?v=7"></script>
 <script src="js/running.js?v=100"></script>
 <script src="js/admin.js?v=82"></script>
 <script src="push.js?v=8"></script>
