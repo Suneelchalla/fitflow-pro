@@ -7,7 +7,7 @@
 // Import OneSignal's service worker — handles push notifications
 importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
 
-const CACHE = 'fitflow-v155';
+const CACHE = 'fitflow-v156';
 const ASSETS = [
   './',
   './index.html',
@@ -22,7 +22,7 @@ const ASSETS = [
   './js/cross-training.js?v=6',
   './js/activity-cards.js?v=1',
   './js/manual-activity.js?v=13',
-  './js/running.js?v=100',
+  './js/running.js?v=101',
   './js/admin.js?v=82',
   './push.js?v=8',
   './js/custom-workouts.js?v=75',
@@ -39,6 +39,10 @@ const ASSETS = [
   'https://unpkg.com/[email protected]/dist/leaflet-rotate-src.js',
   'https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap'
 ];
+
+// Declared here (before install/activate) so the activate handler's orphan-
+// notification sweep can reference it without depending on declaration order.
+const ACTIVITY_NOTIF_TAG = 'fitflow-activity';
 
 // ── INSTALL ───────────────────────────────────────────────────────
 // skipWaiting() takes over immediately on update so users get the new code
@@ -136,8 +140,6 @@ self.addEventListener('fetch', e => {
 // Handles persistent notification showing live run/walk/cycle stats
 // Posted from running.js via postMessage, updates every 3 seconds
 
-const ACTIVITY_NOTIF_TAG = 'fitflow-activity';
-
 self.addEventListener('message', e => {
   if (!e.data) return;
 
@@ -151,7 +153,7 @@ self.addEventListener('message', e => {
 
   if (e.data.type === 'ACTIVITY_STOP') {
     self.registration.getNotifications({ tag: ACTIVITY_NOTIF_TAG })
-      .then(notifs => notifs.forEach(n => n.close()));
+      .then(notifs => notifs && notifs.forEach(n => { try { n.close(); } catch {} }));
   }
 });
 
