@@ -256,15 +256,33 @@ function _tryFetchStartLocation(lat, lon) {
 
   _reverseGeocode(lat, lon).then(name => {
     _locationFetchInProgress = false;
-    if (name && APP.runSession) {
+    if (!name) return;  // failure — leave _locationFetched=false so next fix retries
+    _locationFetched = true;
+    if (APP.runSession) {
+      // Session still active — write into live session and persist
       APP.runSession.locationName = name;
-      _locationFetched = true;             // success → stop retrying
-      _saveRunSession();                   // persist so it survives background/kill
+      _saveRunSession();
+    } else {
+      // Session already finished (common for short walks/cycles that end
+      // before the 6s geocode timeout resolves). Patch the most-recent run
+      // log entry in localStorage so the location still appears in history.
+      try {
+        const userId = APP.currentUser && APP.currentUser.id;
+        if (userId) {
+          const allLogs = Store.getRunLogs();
+          // Find the most recent log for this user that has no locationName
+          const idx = allLogs.map((l, i) => ({ l, i }))
+            .reverse()
+            .find(({ l }) => l.userId === userId && !l.locationName);
+          if (idx) {
+            allLogs[idx.i].locationName = name;
+            Store.set('ff_runlogs', allLogs);
+          }
+        }
+      } catch (e) {
+        console.warn('[location] post-save patch failed:', e);
+      }
     }
-    // On failure (name is null/empty), leave _locationFetched=false so the
-    // next GPS fix retries after LOCATION_RETRY_MS. _locationAttempts caps
-    // total tries; once exhausted, the run finishes with locationName=''
-    // and the user can use backfillRunLocations() later if desired.
   }).catch(() => {
     _locationFetchInProgress = false;
   });
@@ -2210,6 +2228,11 @@ function startGPS() {
         // instead of falling back to a wide world view. Cheap LS write — at
         // most GPS_WARMUP_FIXES times per run.
         try { Store.set('ff_last_known_coord', { lat, lon }); } catch {}
+        // Start geocoding on the very first warmup fix — don't wait until
+        // post-warmup. Short walks/cycles can finish before warmup completes,
+        // which means _tryFetchStartLocation was never called and locationName
+        // stayed blank. Geocoding is idempotent — calling it here is safe.
+        if (_gpsWarmupCount === 1) _tryFetchStartLocation(lat, lon);
         // Move marker + re-centre map but do NOT draw the polyline yet.
         // If the map opened with the wide fallback view (zoom 2 — no GPS history),
         // snap to street-level zoom 17 on the first real fix. Otherwise preserve
