@@ -1789,22 +1789,35 @@ function _getSubscribedDeviceIds(userIds) {
   var apiKey = props.getProperty('ONESIGNAL_REST_API_KEY');
   if (!appId || !apiKey) return [];
   try {
-    var url = 'https://api.onesignal.com/players?app_id=' + appId + '&limit=300';
-    var res = UrlFetchApp.fetch(url, {
-      method: 'get',
-      headers: { 'Authorization': 'Basic ' + apiKey },
-      muteHttpExceptions: true,
-    });
-    var code = res.getResponseCode();
-    if (code !== 200) { Logger.log('Could not list players: HTTP ' + code); return []; }
-    var data    = JSON.parse(res.getContentText());
-    var players = data.players || [];
+    // Paginate through all players — the API hard-caps at 300 per page.
+    // Without pagination, any user registered after the 300th slot is
+    // silently excluded from every push send.
+    var allPlayers = [];
+    var offset     = 0;
+    var pageSize   = 300;
+    while (true) {
+      var url = 'https://api.onesignal.com/players?app_id=' + appId +
+                '&limit=' + pageSize + '&offset=' + offset;
+      var res = UrlFetchApp.fetch(url, {
+        method: 'get',
+        headers: { 'Authorization': 'Basic ' + apiKey },
+        muteHttpExceptions: true,
+      });
+      var code = res.getResponseCode();
+      if (code !== 200) { Logger.log('Could not list players: HTTP ' + code); break; }
+      var data    = JSON.parse(res.getContentText());
+      var players = data.players || [];
+      allPlayers  = allPlayers.concat(players);
+      // Stop if this page was smaller than pageSize — we've reached the end
+      if (players.length < pageSize) break;
+      offset += pageSize;
+    }
     var userIdFilter = null;
     if (userIds && userIds.length) {
       userIdFilter = {};
       userIds.forEach(function(uid) { userIdFilter[uid] = true; });
     }
-    var ids = players
+    var ids = allPlayers
       .filter(function(p) {
         if (p.invalid_identifier === true || !p.identifier) return false;
         if (userIdFilter && !userIdFilter[p.external_user_id]) return false;
@@ -1812,7 +1825,7 @@ function _getSubscribedDeviceIds(userIds) {
       })
       .map(function(p) { return p.id; });
     Logger.log('Found ' + ids.length + ' subscribed device(s)' +
-      (userIdFilter ? ' (filtered to ' + userIds.length + ' users)' : ' of ' + players.length + ' total'));
+      (userIdFilter ? ' (filtered to ' + userIds.length + ' users)' : ' of ' + allPlayers.length + ' total'));
     return ids;
   } catch (e) {
     Logger.log('Could not fetch subscribers: ' + e.message);
@@ -1885,17 +1898,26 @@ function _segmentDevicesByActivity() {
   allLogs.forEach(function(l) { if ((l.date||'').substring(0,10) === today) activeToday[l.userId] = true; });
   allRuns.forEach(function(r) { if ((r.date||'').substring(0,10) === today) activeToday[r.userId] = true; });
 
-  // Get all subscribed devices from OneSignal
+  // Get all subscribed devices from OneSignal — paginated to avoid the 300-cap
   try {
-    var url = 'https://api.onesignal.com/players?app_id=' + appId + '&limit=300';
-    var res = UrlFetchApp.fetch(url, {
-      method: 'get',
-      headers: { 'Authorization': 'Basic ' + apiKey },
-      muteHttpExceptions: true,
-    });
-    if (res.getResponseCode() !== 200) return { workedOut:[], notYet:[] };
-    var players = JSON.parse(res.getContentText()).players || [];
-    var valid   = players.filter(function(p) { return p.invalid_identifier !== true && p.identifier; });
+    var allPlayers = [];
+    var offset     = 0;
+    var pageSize   = 300;
+    while (true) {
+      var url = 'https://api.onesignal.com/players?app_id=' + appId +
+                '&limit=' + pageSize + '&offset=' + offset;
+      var res = UrlFetchApp.fetch(url, {
+        method: 'get',
+        headers: { 'Authorization': 'Basic ' + apiKey },
+        muteHttpExceptions: true,
+      });
+      if (res.getResponseCode() !== 200) break;
+      var page = JSON.parse(res.getContentText()).players || [];
+      allPlayers = allPlayers.concat(page);
+      if (page.length < pageSize) break;
+      offset += pageSize;
+    }
+    var valid = allPlayers.filter(function(p) { return p.invalid_identifier !== true && p.identifier; });
 
     var workedOut = [], notYet = [];
     valid.forEach(function(p) {
@@ -1936,13 +1958,17 @@ function getWellDoneMessage() {
 function _sendPushToIds(appId, apiKey, deviceIds, msg, buttons) {
   if (!deviceIds || !deviceIds.length) return { success:false, error:'No device IDs' };
   var payload = {
-    app_id:             appId,
-    include_player_ids: deviceIds,
-    headings:           { en: msg.title },
-    contents:           { en: msg.body  },
-    web_url:            'https://fitflowpro.in/index.html',
-    chrome_web_icon:    'https://fitflowpro.in/icons/icon-192.png',
-    chrome_web_badge:   'https://fitflowpro.in/icons/icon-192.png',
+    app_id:                    appId,
+    // include_subscription_ids is the current OneSignal API (replaces the
+    // deprecated include_player_ids from the v1 Players API). Player IDs and
+    // subscription IDs are the same UUID — no re-mapping needed. Using the
+    // old field causes silent failures on apps that OneSignal has migrated.
+    include_subscription_ids:  deviceIds,
+    headings:                  { en: msg.title },
+    contents:                  { en: msg.body  },
+    web_url:                   'https://fitflowpro.in/index.html',
+    chrome_web_icon:           'https://fitflowpro.in/icons/icon-192.png',
+    chrome_web_badge:          'https://fitflowpro.in/icons/icon-192.png',
     priority: 10,
     ttl:      86400,
   };
@@ -1957,6 +1983,7 @@ function _sendPushToIds(appId, apiKey, deviceIds, msg, buttons) {
   if (code >= 200 && code < 300 && parsed.id) {
     return { success:true, id:parsed.id, recipients:parsed.recipients };
   }
+  Logger.log('_sendPushToIds failed: HTTP ' + code + ' | ' + res.getContentText());
   return { success:false, error:'HTTP ' + code };
 }
 
@@ -2065,13 +2092,13 @@ function sendCustomPush(body) {
     return { success:false, error:errMsg };
   }
   var payload = {
-    app_id:             appId,
-    include_player_ids: deviceIds,
-    headings:           { en: String(body.title).substring(0, 80) },
-    contents:           { en: String(body.message).substring(0, 240) },
-    web_url:            'https://fitflowpro.in/index.html',
-    chrome_web_icon:    'https://fitflowpro.in/icons/icon-192.png',
-    chrome_web_badge:   'https://fitflowpro.in/icons/icon-192.png',
+    app_id:                   appId,
+    include_subscription_ids: deviceIds,
+    headings:                 { en: String(body.title).substring(0, 80) },
+    contents:                 { en: String(body.message).substring(0, 240) },
+    web_url:                  'https://fitflowpro.in/index.html',
+    chrome_web_icon:          'https://fitflowpro.in/icons/icon-192.png',
+    chrome_web_badge:         'https://fitflowpro.in/icons/icon-192.png',
     priority: 10,
     ttl:      86400,
   };
@@ -2115,14 +2142,14 @@ function sendPushToUser(subscriptionId, title, body, url) {
   if (!appId || !apiKey) return { success:false, error:'Missing OneSignal credentials' };
   if (!subscriptionId) return { success:false, error:'subscriptionId required' };
   var payload = {
-    app_id:             appId,
-    include_player_ids: [subscriptionId],
-    headings:           { en: title || 'FitFlow Pro' },
-    contents:           { en: body  || 'You have a new update!' },
-    web_url:            url || 'https://fitflowpro.in/index.html',
-    chrome_web_icon:    'https://fitflowpro.in/icons/icon-192.png',
-    chrome_web_badge:   'https://fitflowpro.in/icons/icon-192.png',
-    priority:           10,
+    app_id:                   appId,
+    include_subscription_ids: [subscriptionId],
+    headings:                 { en: title || 'FitFlow Pro' },
+    contents:                 { en: body  || 'You have a new update!' },
+    web_url:                  url || 'https://fitflowpro.in/index.html',
+    chrome_web_icon:          'https://fitflowpro.in/icons/icon-192.png',
+    chrome_web_badge:         'https://fitflowpro.in/icons/icon-192.png',
+    priority:                 10,
   };
   try {
     var res  = UrlFetchApp.fetch('https://api.onesignal.com/notifications', {
@@ -2320,11 +2347,11 @@ function testPushToDevice(playerId) {
     Logger.log('No playerId provided, using first: ' + playerId);
   }
   var payload = {
-    app_id:             appId,
-    include_player_ids: [playerId],
-    headings:           { en: 'Test Push 🧪' },
-    contents:           { en: 'If you see this, your device is receiving notifications!' },
-    web_url:            'https://fitflowpro.in/index.html',
+    app_id:                   appId,
+    include_subscription_ids: [playerId],
+    headings:                 { en: 'Test Push 🧪' },
+    contents:                 { en: 'If you see this, your device is receiving notifications!' },
+    web_url:                  'https://fitflowpro.in/index.html',
   };
   var res = UrlFetchApp.fetch('https://api.onesignal.com/notifications', {
     method:'post', contentType:'application/json',
