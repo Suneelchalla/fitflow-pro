@@ -70,35 +70,47 @@
   }
 
   // ── TILE FETCHER ─────────────────────────────────────────────────
-  async function fetchTiles(coords, tw, th) {
+  // Full-bleed: tiles fill the ENTIRE fullW×fullH canvas, while the route is
+  // fitted into the band [routeTop, routeBottom] (the area above the card).
+  // Map and route share one projection, so the route stays glued to its roads
+  // and the satellite imagery bleeds to every edge.
+  async function fetchTiles(coords, fullW, fullH, routeTop, routeBottom) {
     if (!coords || coords.length < 2) return null;
     try {
       const lats = coords.map(c => c[0]), lons = coords.map(c => c[1]);
       let minLat = Math.min(...lats), maxLat = Math.max(...lats);
       let minLon = Math.min(...lons), maxLon = Math.max(...lons);
-      const pLat = (maxLat - minLat) * 0.18 || 0.002;
-      const pLon = (maxLon - minLon) * 0.18 || 0.002;
+      const pLat = (maxLat - minLat) * 0.12 || 0.0015;
+      const pLon = (maxLon - minLon) * 0.12 || 0.0015;
       minLat -= pLat; maxLat += pLat;
       minLon -= pLon; maxLon += pLon;
 
-      const z        = pickZoom(minLat, maxLat, minLon, maxLon, tw, th);
-      const txMinF   = lon2x(minLon, z), txMaxF = lon2x(maxLon, z);
-      const tyMinF   = lat2y(maxLat, z), tyMaxF = lat2y(minLat, z);
-      const txMin    = Math.floor(txMinF), txMax = Math.floor(txMaxF);
-      const tyMin    = Math.floor(tyMinF), tyMax = Math.floor(tyMaxF);
+      const regionH = routeBottom - routeTop;
+      // Zoom so the padded route fits inside fullW × regionH at native scale.
+      let z = 17;
+      for (; z >= 3; z--) {
+        const pw = (lon2x(maxLon, z) - lon2x(minLon, z)) * TILE_SIZE;
+        const ph = (lat2y(minLat, z) - lat2y(maxLat, z)) * TILE_SIZE;
+        if (pw <= fullW * 0.92 && ph <= regionH * 0.92) break;
+      }
 
-      const bboxPxW  = (txMaxF - txMinF) * TILE_SIZE;
-      const bboxPxH  = (tyMaxF - tyMinF) * TILE_SIZE;
-      const scale    = Math.min(tw / bboxPxW, th / bboxPxH);
-      const drawW    = bboxPxW * scale;
-      const drawH    = bboxPxH * scale;
-      const offX     = (tw - drawW) / 2;
-      const offY     = (th - drawH) / 2;
+      // Route centre in world pixels (native zoom, scale = 1)
+      const cxW = ((lon2x(minLon, z) + lon2x(maxLon, z)) / 2) * TILE_SIZE;
+      const cyW = ((lat2y(maxLat, z) + lat2y(minLat, z)) / 2) * TILE_SIZE;
+      const routeCy = (routeTop + routeBottom) / 2;
+      // World-pixel coordinate that maps to canvas (0,0)
+      const offWx = cxW - fullW / 2;
+      const offWy = cyW - routeCy;
+      const toCanvasX = lon => lon2x(lon, z) * TILE_SIZE - offWx;
+      const toCanvasY = lat => lat2y(lat, z) * TILE_SIZE - offWy;
 
-      // Fetch tiles: satellite imagery base + place-label overlay composited on top.
-      // Esri World Imagery = satellite/aerial (same source as the live-map 🛰 style).
-      // World_Boundaries_and_Places = street/area/city names only.
-      // NOTE: ArcGIS tile URLs use {z}/{y}/{x} order (row before column).
+      // Every tile whose footprint touches the full canvas
+      const maxIdx = Math.pow(2, z);
+      const txMin = Math.floor(offWx / TILE_SIZE);
+      const txMax = Math.floor((offWx + fullW) / TILE_SIZE);
+      const tyMin = Math.floor(offWy / TILE_SIZE);
+      const tyMax = Math.floor((offWy + fullH) / TILE_SIZE);
+
       const loadImg = url => new Promise(res => {
         const img = new Image();
         img.crossOrigin = 'anonymous';
@@ -109,8 +121,10 @@
       const jobs = [], meta = [];
       for (let tx = txMin; tx <= txMax; tx++) {
         for (let ty = tyMin; ty <= tyMax; ty++) {
-          const base = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${ty}/${tx}`;
-          const lbls = `https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/${z}/${ty}/${tx}`;
+          if (ty < 0 || ty >= maxIdx) continue;            // off the world vertically
+          const wx = ((tx % maxIdx) + maxIdx) % maxIdx;     // wrap longitude
+          const base = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${ty}/${wx}`;
+          const lbls = `https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/${z}/${ty}/${wx}`;
           jobs.push(Promise.all([loadImg(base), loadImg(lbls)]));
           meta.push({ tx, ty });
         }
@@ -118,33 +132,24 @@
       const tilePairs = await Promise.all(jobs);
       const loaded = tilePairs.filter(([b]) => b).length;
       if (loaded < tilePairs.length * 0.4) return null;
+
       const tc  = document.createElement('canvas');
-      tc.width  = tw; tc.height = th;
+      tc.width  = fullW; tc.height = fullH;
       const tctx = tc.getContext('2d');
       tctx.fillStyle = '#0d1520';
-      tctx.fillRect(0, 0, tw, th);
+      tctx.fillRect(0, 0, fullW, fullH);
       tilePairs.forEach(([base], i) => {
         if (!base) return;
         const { tx, ty } = meta[i];
-        const px = offX + (tx * TILE_SIZE - txMinF * TILE_SIZE) * scale;
-        const py = offY + (ty * TILE_SIZE - tyMinF * TILE_SIZE) * scale;
-        tctx.drawImage(base, px, py, TILE_SIZE * scale, TILE_SIZE * scale);
+        tctx.drawImage(base, tx * TILE_SIZE - offWx, ty * TILE_SIZE - offWy, TILE_SIZE, TILE_SIZE);
       });
       tilePairs.forEach(([, lbl], i) => {
         if (!lbl) return;
         const { tx, ty } = meta[i];
-        const px = offX + (tx * TILE_SIZE - txMinF * TILE_SIZE) * scale;
-        const py = offY + (ty * TILE_SIZE - tyMinF * TILE_SIZE) * scale;
-        tctx.drawImage(lbl, px, py, TILE_SIZE * scale, TILE_SIZE * scale);
+        tctx.drawImage(lbl, tx * TILE_SIZE - offWx, ty * TILE_SIZE - offWy, TILE_SIZE, TILE_SIZE);
       });
-      // Light scrim only — keep satellite imagery clearly visible while still
-      // giving the route line and bottom stats panel enough contrast.
       tctx.fillStyle = 'rgba(4,12,8,0.14)';
-      tctx.fillRect(0, 0, tw, th);
-
-      // Build coordinate→canvas projection functions
-      const toCanvasX = lon => offX + (lon2x(lon, z) * TILE_SIZE - txMinF * TILE_SIZE) * scale;
-      const toCanvasY = lat => offY + (lat2y(lat, z) * TILE_SIZE - tyMinF * TILE_SIZE) * scale;
+      tctx.fillRect(0, 0, fullW, fullH);
 
       return { canvas: tc, toCanvasX, toCanvasY };
     } catch (e) {
@@ -154,30 +159,29 @@
   }
 
   // ── FALLBACK GRID BACKGROUND ─────────────────────────────────────
-  function makeFallbackBg(tw, th) {
+  function makeFallbackBg(fullW, fullH, routeTop, routeBottom) {
     const tc   = document.createElement('canvas');
-    tc.width   = tw; tc.height = th;
+    tc.width   = fullW; tc.height = fullH;
     const tctx = tc.getContext('2d');
     tctx.fillStyle = '#071510';
-    tctx.fillRect(0, 0, tw, th);
+    tctx.fillRect(0, 0, fullW, fullH);
     tctx.strokeStyle = 'rgba(255,255,255,0.04)';
     tctx.lineWidth   = 1;
-    for (let x = 0; x < tw; x += 80) {
-      tctx.beginPath(); tctx.moveTo(x, 0); tctx.lineTo(x, th); tctx.stroke();
+    for (let x = 0; x < fullW; x += 80) {
+      tctx.beginPath(); tctx.moveTo(x, 0); tctx.lineTo(x, fullH); tctx.stroke();
     }
-    for (let y = 0; y < th; y += 80) {
-      tctx.beginPath(); tctx.moveTo(0, y); tctx.lineTo(tw, y); tctx.stroke();
+    for (let y = 0; y < fullH; y += 80) {
+      tctx.beginPath(); tctx.moveTo(0, y); tctx.lineTo(fullW, y); tctx.stroke();
     }
-    // Project using simple equirectangular — good enough for fallback
+    // Project route into [routeTop, routeBottom] across the full width.
+    const padX = 0.12, padY = 0.08, regionH = routeBottom - routeTop;
     const toCanvasX = (lon, meta) => {
       const { minLon, maxLon } = meta;
-      const pad = 0.1;
-      return tw * pad + ((lon - minLon) / (maxLon - minLon || 0.001)) * tw * (1 - pad * 2);
+      return fullW * padX + ((lon - minLon) / (maxLon - minLon || 0.001)) * fullW * (1 - padX * 2);
     };
     const toCanvasY = (lat, meta) => {
       const { minLat, maxLat } = meta;
-      const pad = 0.1;
-      return th * pad + ((maxLat - lat) / (maxLat - minLat || 0.001)) * th * (1 - pad * 2);
+      return routeTop + regionH * padY + ((maxLat - lat) / (maxLat - minLat || 0.001)) * regionH * (1 - padY * 2);
     };
     return { canvas: tc, toCanvasX, toCanvasY };
   }
@@ -356,13 +360,16 @@
       setProgress(modal, 8, 'Loading map tiles…');
 
       // ── 2. Canvas + map region ──────────────────────────────────
-      // Portrait 1080×1920 (9:16). Map is the hero — give it ~70% of the
-      // frame so it fills the space; stats are anchored to the bottom below.
-      const mapH   = Math.round(H * 0.62);
-      const mapY   = 0;
+      // Portrait 1080×1920 (9:16). FULL-BLEED satellite map fills the whole
+      // frame; the route is fitted into the upper band [ROUTE_TOP, ROUTE_BOT]
+      // so it always sits clear of the floating glass card at the bottom.
+      const mapH     = H;                       // map covers the entire frame
+      const mapY     = 0;
+      const ROUTE_TOP = Math.round(H * 0.07);
+      const ROUTE_BOT = Math.round(H * 0.58);
 
-      // Fetch tiles for map area
-      let tileData = await fetchTiles(smoothed, W, mapH);
+      // Fetch full-frame tiles, route fitted into the top band
+      let tileData = await fetchTiles(smoothed, W, H, ROUTE_TOP, ROUTE_BOT);
       if (cancelled) return;
 
       // Fallback projection for non-tile case
@@ -372,7 +379,7 @@
       const minLon = Math.min(...lons), maxLon = Math.max(...lons);
 
       if (!tileData) {
-        tileData = makeFallbackBg(W, mapH);
+        tileData = makeFallbackBg(W, H, ROUTE_TOP, ROUTE_BOT);
         // Patch projection to include bounding box
         const origX = tileData.toCanvasX;
         const origY = tileData.toCanvasY;
@@ -511,35 +518,53 @@
       let lastProgressUpdate = 0;
       const renderStart = performance.now();
 
+      // ── Crossfade setup ────────────────────────────────────────
+      // Two offscreen buffers let us blend across phase boundaries: the
+      // outgoing phase is frozen on its final frame while the incoming phase
+      // fades in over it (title→map, then map→summary).
+      const _mkBuf = () => { const c = document.createElement('canvas'); c.width = W; c.height = H; return c.getContext('2d', { alpha: false }); };
+      const offA = _mkBuf(), offB = _mkBuf();
+      const B1    = INTRO_FRAMES;                       // intro → route boundary
+      const B2    = INTRO_FRAMES + ROUTE_FRAMES;        // route → outro boundary
+      const TRANS = Math.max(6, Math.min(15, Math.floor(ROUTE_FRAMES / 3))); // ~0.5 s
+      const smooth = p => p * p * (3 - 2 * p);          // smoothstep easing
+
+      function renderPhaseInto(c, f) {
+        c.fillStyle = '#040f08'; c.fillRect(0, 0, W, H);
+        if (f < INTRO_FRAMES) {
+          _drawIntroFrame(c, f, meta, titleStr, locStr, dateStr, tileData, mapH, projPts);
+        } else if (f < B2) {
+          const t = (f - INTRO_FRAMES) / ROUTE_FRAMES;  // linear — constant px/frame
+          _drawRouteFrame(c, t, meta, tileData, mapH, projPts, densePts, cumDist,
+            totalPxDist, pointAtProgress, statsAtProgress, locStr);
+        } else {
+          const t = easeOut((f - B2) / OUTRO_FRAMES);
+          _drawOutroFrame(c, t, meta, tileData, mapH, projPts, densePts,
+            titleStr, locStr, dateStr, distance, elapsed, kcal, speedKph, fmtT, fmtP);
+        }
+      }
+
       function drawFrame() {
         if (cancelled) { try { recorder.stop(); } catch {} return; }
 
-        ctx.clearRect(0, 0, W, H);
+        const f = frameIndex;
 
-        const f     = frameIndex;
-        const phase = f < INTRO_FRAMES
-          ? 'intro'
-          : f < INTRO_FRAMES + ROUTE_FRAMES
-            ? 'route'
-            : 'outro';
+        // Are we inside a boundary crossfade?
+        let inTrans = false, p = 0, prevF = 0;
+        if (f >= B1 && f < B1 + TRANS)      { inTrans = true; p = (f - B1 + 1) / TRANS; prevF = B1 - 1; }
+        else if (f >= B2 && f < B2 + TRANS) { inTrans = true; p = (f - B2 + 1) / TRANS; prevF = B2 - 1; }
 
-        // ── COMMON: full black background ─────────────────────────
-        ctx.fillStyle = '#040f08';
-        ctx.fillRect(0, 0, W, H);
-
-        if (phase === 'intro') {
-          _drawIntroFrame(ctx, f, meta, titleStr, locStr, dateStr, tileData, mapH, projPts);
-        } else if (phase === 'route') {
-          const routeF = f - INTRO_FRAMES;
-          const t      = routeF / ROUTE_FRAMES; // linear — constant px/frame, no easing stutter
-          _drawRouteFrame(ctx, t, meta, tileData, mapH, projPts, densePts, cumDist,
-            totalPxDist, pointAtProgress, statsAtProgress, locStr);
+        if (inTrans) {
+          renderPhaseInto(offA, prevF);                 // outgoing, frozen on last frame
+          renderPhaseInto(offB, f);                     // incoming, live
+          ctx.globalAlpha = 1;          ctx.drawImage(offA.canvas, 0, 0);
+          ctx.globalAlpha = smooth(p);  ctx.drawImage(offB.canvas, 0, 0);
+          ctx.globalAlpha = 1;
         } else {
-          const outroF = f - INTRO_FRAMES - ROUTE_FRAMES;
-          const t      = easeOut(outroF / OUTRO_FRAMES);
-          _drawOutroFrame(ctx, t, meta, tileData, mapH, projPts, densePts,
-            titleStr, locStr, dateStr, distance, elapsed, kcal, speedKph, fmtT, fmtP);
+          renderPhaseInto(ctx, f);
         }
+
+        _roundCorners(ctx);   // curved frame corners (rounded "map" look)
 
         frameIndex++;
 
@@ -646,6 +671,30 @@
     g.addColorStop(0, 'rgba(4,8,10,0.62)'); g.addColorStop(1, 'rgba(4,8,10,0)');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, 180);
   }
+  // Gentle darkening over the lower frame so the floating card + map read well,
+  // while the satellite imagery still bleeds through around the card.
+  function _botScrim(ctx) {
+    const g = ctx.createLinearGradient(0, H * 0.50, 0, H);
+    g.addColorStop(0, 'rgba(4,8,10,0)'); g.addColorStop(1, 'rgba(4,8,10,0.72)');
+    ctx.fillStyle = g; ctx.fillRect(0, H * 0.50, W, H * 0.50);
+  }
+  // Curved corners on the whole 9:16 frame (the "rounded map" look).
+  const _FRAME_R = Math.round(W * 0.055);
+  function _roundCorners(ctx) {
+    const r = _FRAME_R;
+    ctx.save();
+    ctx.fillStyle = '#040f08';
+    ctx.beginPath();
+    ctx.rect(0, 0, W, H);                 // outer rectangle
+    ctx.moveTo(r, 0);                     // rounded-rect subpath (carved out)
+    ctx.arcTo(W, 0, W, H, r);
+    ctx.arcTo(W, H, 0, H, r);
+    ctx.arcTo(0, H, 0, 0, r);
+    ctx.arcTo(0, 0, W, 0, r);
+    ctx.closePath();
+    ctx.fill('evenodd');                  // paints only the 4 corner notches
+    ctx.restore();
+  }
 
   // ── INTRO FRAME ──────────────────────────────────────────────────
   function _drawIntroFrame(ctx, f, meta, title, loc, date, tileData, mapH, projPts) {
@@ -660,18 +709,28 @@
 
     const cy = H * 0.40;
 
-    // Tinted glass circle + bright emoji (springs in)
+    // Frosted badge BEHIND + a soft glow that lifts a big, bright emoji in FRONT.
     const sc = _easeBack(clamp((t - 0.05) / 0.55, 0, 1));
+    const R  = 168;
     ctx.save();
     ctx.translate(W/2, cy - 108);
-    ctx.globalAlpha = clamp(t / 0.3, 0, 1);
-    const R = 168;
-    rrect(ctx, -R, -R, R*2, R*2, 112); ctx.fillStyle = meta.color + '2e'; ctx.fill();
-    rrect(ctx, -R, -R, R*2, R*2, 112); ctx.strokeStyle = meta.color + '73'; ctx.lineWidth = 5; ctx.stroke();
-    ctx.globalAlpha = clamp((t - 0.1) / 0.3, 0, 1);
     ctx.scale(sc, sc);
-    ctx.font = '190px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(meta.emoji, 0, 8);
+    // 1) glass panel (back): clearly darker than the glyph so it recedes
+    ctx.globalAlpha = clamp(t / 0.3, 0, 1);
+    rrect(ctx, -R, -R, R*2, R*2, 116); ctx.fillStyle = 'rgba(12,14,18,0.62)'; ctx.fill();
+    rrect(ctx, -R, -R, R*2, R*2, 116); ctx.strokeStyle = meta.color + 'b3'; ctx.lineWidth = 6; ctx.stroke();
+    // 2) soft light glow centred behind the glyph so the emoji pops off the panel
+    ctx.globalAlpha = clamp((t - 0.1) / 0.3, 0, 1);
+    const glow = ctx.createRadialGradient(0, 6, 0, 0, 6, R * 0.95);
+    glow.addColorStop(0, 'rgba(255,255,255,0.22)');
+    glow.addColorStop(0.6, 'rgba(255,255,255,0.06)');
+    glow.addColorStop(1, 'rgba(255,255,255,0)');
+    rrect(ctx, -R, -R, R*2, R*2, 116); ctx.fillStyle = glow; ctx.fill();
+    // 3) emoji (front): big, full opacity, drop shadow → floats above the glass
+    ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = 26; ctx.shadowOffsetY = 8;
+    ctx.font = '230px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(meta.emoji, 0, 10);
+    ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
     ctx.restore();
     ctx.textBaseline = 'alphabetic';
 
@@ -699,13 +758,11 @@
   function _drawRouteFrame(ctx, t, meta, tileData, mapH, projPts, densePts, cumDist,
     totalPxDist, pointAtProgress, statsAtProgress, locStr) {
 
-    // Map (top) fading into a dark backdrop the glass card floats on
-    ctx.drawImage(tileData.canvas, 0, 0, W, mapH);
-    const fade = ctx.createLinearGradient(0, mapH * 0.70, 0, mapH);
-    fade.addColorStop(0, 'rgba(5,8,10,0)'); fade.addColorStop(1, 'rgba(5,8,10,1)');
-    ctx.fillStyle = fade; ctx.fillRect(0, 0, W, mapH);
-    ctx.fillStyle = '#05080a'; ctx.fillRect(0, mapH, W, H - mapH);
+    // Full-bleed map; gentle scrims keep the route + card readable while the
+    // satellite imagery bleeds to every edge (incl. around the floating card).
+    ctx.drawImage(tileData.canvas, 0, 0, W, H);
     _topScrim(ctx);
+    _botScrim(ctx);
 
     // Route up to progress t (densePts for smooth sub-pixel drawing)
     const target = t * totalPxDist;
@@ -757,8 +814,10 @@
   function _drawOutroFrame(ctx, t, meta, tileData, mapH, projPts, densePts,
     title, loc, date, distance, elapsed, kcal, speedKph, fmtT, fmtP) {
 
-    // Map (top) + dark backdrop below
-    ctx.drawImage(tileData.canvas, 0, 0, W, mapH);
+    // Full-bleed map → scrims → full route
+    ctx.drawImage(tileData.canvas, 0, 0, W, H);
+    _topScrim(ctx);
+    _botScrim(ctx);
 
     // Full route
     if (densePts.length >= 2) {
@@ -775,12 +834,6 @@
       ctx.beginPath(); ctx.arc(last.px, last.py, 11, 0, Math.PI*2);
       ctx.fillStyle = meta.color; ctx.fill(); ctx.strokeStyle='#fff'; ctx.lineWidth=4; ctx.stroke();
     }
-
-    const fade = ctx.createLinearGradient(0, mapH * 0.62, 0, mapH);
-    fade.addColorStop(0, 'rgba(5,8,10,0)'); fade.addColorStop(1, 'rgba(5,8,10,1)');
-    ctx.fillStyle = fade; ctx.fillRect(0, 0, W, mapH);
-    ctx.fillStyle = '#05080a'; ctx.fillRect(0, mapH, W, H - mapH);
-    _topScrim(ctx);
     _drawWatermark(ctx, 1);
 
     // ── Glass summary card (slides + fades up) ────────────────────
