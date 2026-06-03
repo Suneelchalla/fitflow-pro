@@ -358,7 +358,7 @@
       // ── 2. Canvas + map region ──────────────────────────────────
       // Portrait 1080×1920 (9:16). Map is the hero — give it ~70% of the
       // frame so it fills the space; stats are anchored to the bottom below.
-      const mapH   = Math.round(H * 0.70);
+      const mapH   = Math.round(H * 0.62);
       const mapY   = 0;
 
       // Fetch tiles for map area
@@ -533,7 +533,7 @@
           const routeF = f - INTRO_FRAMES;
           const t      = routeF / ROUTE_FRAMES; // linear — constant px/frame, no easing stutter
           _drawRouteFrame(ctx, t, meta, tileData, mapH, projPts, densePts, cumDist,
-            totalPxDist, pointAtProgress, statsAtProgress);
+            totalPxDist, pointAtProgress, statsAtProgress, locStr);
         } else {
           const outroF = f - INTRO_FRAMES - ROUTE_FRAMES;
           const t      = easeOut(outroF / OUTRO_FRAMES);
@@ -585,371 +585,231 @@
     }
   }
 
+  // ── APPLE-STYLE HELPERS ─────────────────────────────────────────
+  // On Android WebView (where the video is generated) -apple-system falls
+  // back to Roboto — still a clean system face. The "Apple" feel comes from
+  // the glass card, tight numerals and iOS label colours below.
+  const _SF   = '-apple-system, "Segoe UI", Roboto, system-ui, Arial, sans-serif';
+  const _LBL  = 'rgba(235,235,245,0.62)';   // iOS secondary label
+  const _LBL2 = 'rgba(235,235,245,0.40)';   // iOS tertiary label
+  function _ls(ctx, v) { try { ctx.letterSpacing = v; } catch (e) {} }
+  function _easeBack(t) { const c = 1.70158, c3 = c + 1; return 1 + c3*Math.pow(t-1,3) + c*Math.pow(t-1,2); }
+
+  // Translucent "glass" card — flat dark fill, hairline border, top highlight.
+  function _glassCard(ctx, x, y, w, h, r) {
+    rrect(ctx, x, y, w, h, r); ctx.fillStyle = 'rgba(16,18,22,0.66)'; ctx.fill();
+    rrect(ctx, x, y, w, h, r); ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.save(); rrect(ctx, x, y, w, h, r); ctx.clip();
+    ctx.strokeStyle = 'rgba(255,255,255,0.22)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(x + r, y + 1.5); ctx.lineTo(x + w - r, y + 1.5); ctx.stroke();
+    ctx.restore();
+  }
+
+  // Big distance value + small accent "KM", measured so they never overlap.
+  function _distBlock(ctx, mode, x, baseY, numStr, numSize, color) {
+    const kmSize = Math.round(numSize * 0.32);
+    ctx.font = `600 ${numSize}px ${_SF}`; _ls(ctx, (-numSize * 0.03) + 'px');
+    const nw = ctx.measureText(numStr).width; _ls(ctx, '0px');
+    ctx.font = `600 ${kmSize}px ${_SF}`; const kw = ctx.measureText('KM').width;
+    const gap = numSize * 0.16, tot = nw + gap + kw, sx = (mode === 'center') ? x - tot / 2 : x;
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#fff'; ctx.font = `600 ${numSize}px ${_SF}`; _ls(ctx, (-numSize * 0.03) + 'px');
+    ctx.fillText(numStr, sx, baseY); _ls(ctx, '0px');
+    ctx.fillStyle = color; ctx.font = `600 ${kmSize}px ${_SF}`;
+    ctx.fillText('KM', sx + nw + gap, baseY - numSize * 0.02);
+  }
+
+  // 4-column stat row: bold value, small uppercase label beneath.
+  function _statRow(ctx, x, y, w, valueSize, labelSize, cols) {
+    const cwid = w / cols.length;
+    cols.forEach((c, i) => {
+      const cx = x + i * cwid;
+      ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = '#fff'; ctx.font = `600 ${valueSize}px ${_SF}`; _ls(ctx, '-1px');
+      ctx.fillText(c[1], cx, y); _ls(ctx, '0px');
+      ctx.fillStyle = _LBL; ctx.font = `500 ${labelSize}px ${_SF}`; _ls(ctx, '0.06em');
+      ctx.fillText(c[0], cx, y + labelSize + 9); _ls(ctx, '0px');
+    });
+  }
+
+  function _activityChip(ctx, x, y, w, h, meta) {
+    rrect(ctx, x, y, w, h, h/2); ctx.fillStyle = meta.color + '26'; ctx.fill();
+    rrect(ctx, x, y, w, h, h/2); ctx.strokeStyle = meta.color + '73'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = meta.color; ctx.font = `600 ${Math.round(h*0.42)}px ${_SF}`;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(meta.emoji + ' ' + meta.label, x + w/2, y + h/2 + 1);
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  function _topScrim(ctx) {
+    const g = ctx.createLinearGradient(0, 0, 0, 180);
+    g.addColorStop(0, 'rgba(4,8,10,0.62)'); g.addColorStop(1, 'rgba(4,8,10,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, 180);
+  }
+
   // ── INTRO FRAME ──────────────────────────────────────────────────
   function _drawIntroFrame(ctx, f, meta, title, loc, date, tileData, mapH, projPts) {
     const t = f / INTRO_FRAMES;  // 0→1
 
-    // Faded map background
-    ctx.globalAlpha = easeOut(t) * 0.35;
+    // Faded, darkened map
+    ctx.globalAlpha = easeOut(t) * 0.5;
     ctx.drawImage(tileData.canvas, 0, 0, W, mapH);
     ctx.globalAlpha = 1;
-
-    // Dark overlay
-    ctx.fillStyle = `rgba(4,15,8,${0.65 + (1-t)*0.35})`;
+    ctx.fillStyle = `rgba(5,8,10,${0.6 + (1-t)*0.34})`;
     ctx.fillRect(0, 0, W, H);
 
-    // Centered content
-    const cy = H * 0.42;
+    const cy = H * 0.40;
 
-    // Emoji — scales in
-    const emojiScale = easeOut(clamp((t - 0.1) / 0.4, 0, 1));
+    // Tinted glass circle + bright emoji (springs in)
+    const sc = _easeBack(clamp((t - 0.05) / 0.55, 0, 1));
     ctx.save();
-    ctx.translate(W/2, cy - 60);
-    ctx.scale(emojiScale, emojiScale);
-    ctx.font      = '120px serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(meta.emoji, 0, 0);
+    ctx.translate(W/2, cy - 108);
+    ctx.globalAlpha = clamp(t / 0.3, 0, 1);
+    const R = 168;
+    rrect(ctx, -R, -R, R*2, R*2, 112); ctx.fillStyle = meta.color + '2e'; ctx.fill();
+    rrect(ctx, -R, -R, R*2, R*2, 112); ctx.strokeStyle = meta.color + '73'; ctx.lineWidth = 5; ctx.stroke();
+    ctx.globalAlpha = clamp((t - 0.1) / 0.3, 0, 1);
+    ctx.scale(sc, sc);
+    ctx.font = '190px serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(meta.emoji, 0, 8);
     ctx.restore();
-
-    // Activity type — fades in
-    const textAlpha = easeOut(clamp((t - 0.25) / 0.4, 0, 1));
-    ctx.globalAlpha = textAlpha;
-    ctx.font        = `700 ${Math.round(W * 0.085)}px -apple-system, Arial, sans-serif`;
-    ctx.fillStyle   = '#ffffff';
-    ctx.textAlign   = 'center';
     ctx.textBaseline = 'alphabetic';
-    ctx.shadowColor = 'rgba(0,0,0,0.8)';
-    ctx.shadowBlur  = 24;
-    ctx.fillText(meta.label.toUpperCase(), W/2, cy + 60);
-    ctx.shadowBlur  = 0;
 
-    // Title — slides up
-    const titleAlpha = easeOut(clamp((t - 0.4) / 0.35, 0, 1));
-    const titleY     = cy + 120 + (1 - titleAlpha) * 30;
-    ctx.globalAlpha  = titleAlpha;
-    ctx.font         = `600 ${Math.round(W * 0.045)}px -apple-system, Arial, sans-serif`;
-    ctx.fillStyle    = 'rgba(255,255,255,0.7)';
-    ctx.fillText(title, W/2, titleY);
+    const a1 = easeOut(clamp((t - 0.32) / 0.4, 0, 1));
+    ctx.globalAlpha = a1; ctx.fillStyle = '#fff';
+    ctx.font = `600 ${Math.round(W*0.10)}px ${_SF}`; ctx.textAlign = 'center'; _ls(ctx, '-2px');
+    ctx.fillText(title, W/2, cy + 222 + (1-a1)*30); _ls(ctx, '0px');
 
-    // Location pill — slides up from bottom
     if (loc) {
-      const locAlpha = easeOut(clamp((t - 0.55) / 0.3, 0, 1));
-      const locY     = cy + 185 + (1 - locAlpha) * 40;
-      ctx.globalAlpha = locAlpha;
-      const pillW    = Math.min(W - 120, ctx.measureText('📍 ' + loc).width + 60);
-      const pillH    = 52;
-      rrect(ctx, (W - pillW) / 2, locY - pillH/2, pillW, pillH, 26);
-      ctx.fillStyle = 'rgba(67,160,90,0.25)';
-      ctx.fill();
-      rrect(ctx, (W - pillW) / 2, locY - pillH/2, pillW, pillH, 26);
-      ctx.strokeStyle = 'rgba(67,160,90,0.5)';
-      ctx.lineWidth   = 1.5;
-      ctx.stroke();
-      ctx.fillStyle   = '#7ed9a0';
-      ctx.font        = `600 ${Math.round(W * 0.034)}px -apple-system, Arial, sans-serif`;
-      ctx.fillText('📍 ' + loc, W/2, locY + 10);
+      const a2 = easeOut(clamp((t - 0.46) / 0.4, 0, 1));
+      ctx.globalAlpha = a2; ctx.fillStyle = _LBL;
+      ctx.font = `500 ${Math.round(W*0.043)}px ${_SF}`;
+      ctx.fillText('📍 ' + loc, W/2, cy + 314);
     }
-
-    // Date
-    const dateAlpha = easeOut(clamp((t - 0.65) / 0.3, 0, 1));
-    ctx.globalAlpha = dateAlpha;
-    ctx.font        = `400 ${Math.round(W * 0.032)}px -apple-system, Arial, sans-serif`;
-    ctx.fillStyle   = 'rgba(255,255,255,0.4)';
-    ctx.fillText(date, W/2, cy + (loc ? 255 : 195));
+    const a3 = easeOut(clamp((t - 0.58) / 0.4, 0, 1));
+    ctx.globalAlpha = a3; ctx.fillStyle = _LBL2;
+    ctx.font = `400 ${Math.round(W*0.039)}px ${_SF}`;
+    ctx.fillText(date, W/2, cy + (loc ? 386 : 320));
 
     ctx.globalAlpha = 1;
-    ctx.shadowBlur  = 0;
-
-    // FitFlow watermark bottom
     _drawWatermark(ctx, easeOut(clamp((t - 0.7) / 0.3, 0, 1)));
   }
 
   // ── ROUTE ANIMATION FRAME ─────────────────────────────────────────
   function _drawRouteFrame(ctx, t, meta, tileData, mapH, projPts, densePts, cumDist,
-    totalPxDist, pointAtProgress, statsAtProgress) {
+    totalPxDist, pointAtProgress, statsAtProgress, locStr) {
 
-    // Map tiles
+    // Map (top) fading into a dark backdrop the glass card floats on
     ctx.drawImage(tileData.canvas, 0, 0, W, mapH);
+    const fade = ctx.createLinearGradient(0, mapH * 0.70, 0, mapH);
+    fade.addColorStop(0, 'rgba(5,8,10,0)'); fade.addColorStop(1, 'rgba(5,8,10,1)');
+    ctx.fillStyle = fade; ctx.fillRect(0, 0, W, mapH);
+    ctx.fillStyle = '#05080a'; ctx.fillRect(0, mapH, W, H - mapH);
+    _topScrim(ctx);
 
-    // Gradient fade at bottom of map — longer fade so the big map melts
-    // smoothly into the dark stats area instead of a hard seam.
-    const fadeGrad = ctx.createLinearGradient(0, mapH * 0.58, 0, mapH);
-    fadeGrad.addColorStop(0, 'rgba(4,15,8,0)');
-    fadeGrad.addColorStop(1, 'rgba(4,15,8,1)');
-    ctx.fillStyle = fadeGrad;
-    ctx.fillRect(0, 0, W, mapH);
-
-    // Bottom stats panel background
-    ctx.fillStyle = '#040f08';
-    ctx.fillRect(0, mapH, W, H - mapH);
-
-    // Draw route up to progress t — use densePts for smooth sub-pixel drawing
-    const target  = t * totalPxDist;
-    let   ptCount = 0;
-    for (let i = 0; i < densePts.length; i++) {
-      if (cumDist[i] <= target) ptCount = i + 1;
-      else break;
-    }
+    // Route up to progress t (densePts for smooth sub-pixel drawing)
+    const target = t * totalPxDist;
+    let ptCount = 0;
+    for (let i = 0; i < densePts.length; i++) { if (cumDist[i] <= target) ptCount = i + 1; else break; }
     const current = pointAtProgress(t);
-
     if (ptCount >= 2) {
-      // densePts already has points every ~4px, so no extra interpolation needed.
-      // Still append the exact interpolated tip for pixel-perfect lead position.
-      const drawPts = densePts.slice(0, ptCount);
-      drawPts.push({ px: current.px, py: current.py });
-
-      // Shadow stroke
-      ctx.beginPath();
-      ctx.moveTo(drawPts[0].px, drawPts[0].py);
-      drawPts.forEach((p, i) => { if (i > 0) ctx.lineTo(p.px, p.py); });
-      ctx.strokeStyle = 'rgba(0,0,0,0.5)';
-      ctx.lineWidth   = 12;
-      ctx.lineCap     = 'round';
-      ctx.lineJoin    = 'round';
-      ctx.stroke();
-
-      // Main route line
-      ctx.beginPath();
-      ctx.moveTo(drawPts[0].px, drawPts[0].py);
-      drawPts.forEach((p, i) => { if (i > 0) ctx.lineTo(p.px, p.py); });
-      ctx.strokeStyle = meta.color;
-      ctx.lineWidth   = 7;
-      ctx.stroke();
-
-      // Highlight
-      ctx.beginPath();
-      ctx.moveTo(drawPts[0].px, drawPts[0].py);
-      drawPts.forEach((p, i) => { if (i > 0) ctx.lineTo(p.px, p.py); });
-      ctx.strokeStyle = 'rgba(255,255,255,0.5)';
-      ctx.lineWidth   = 2;
-      ctx.stroke();
-
-      // Start dot
-      ctx.beginPath();
-      ctx.arc(densePts[0].px, densePts[0].py, 9, 0, Math.PI*2);
-      ctx.fillStyle = meta.color;
-      ctx.fill();
-      ctx.strokeStyle = '#fff';
-      ctx.lineWidth   = 2.5;
-      ctx.stroke();
+      const dp = densePts.slice(0, ptCount); dp.push({ px: current.px, py: current.py });
+      ctx.beginPath(); ctx.moveTo(dp[0].px, dp[0].py); dp.forEach((p,i)=>{ if(i) ctx.lineTo(p.px,p.py); });
+      ctx.strokeStyle = 'rgba(0,0,0,0.40)'; ctx.lineWidth = 13; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(dp[0].px, dp[0].py); dp.forEach((p,i)=>{ if(i) ctx.lineTo(p.px,p.py); });
+      ctx.strokeStyle = meta.color; ctx.lineWidth = 7; ctx.stroke();
+      ctx.beginPath(); ctx.arc(densePts[0].px, densePts[0].py, 11, 0, Math.PI*2);
+      ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = meta.color; ctx.lineWidth = 4; ctx.stroke();
     }
-
-    // Glowing lead dot
     const glow = 0.6 + 0.4 * Math.sin(Date.now() / 150);
-    ctx.save();
-    ctx.shadowColor = meta.color;
-    ctx.shadowBlur  = 18 * glow;
-    ctx.beginPath();
-    ctx.arc(current.px, current.py, 11, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffffff';
-    ctx.fill();
-    ctx.shadowBlur = 0;
+    ctx.save(); ctx.shadowColor = meta.color; ctx.shadowBlur = 22 * glow;
+    ctx.beginPath(); ctx.arc(current.px, current.py, 13, 0, Math.PI*2); ctx.fillStyle = '#fff'; ctx.fill();
     ctx.restore();
 
-    // Outer pulse ring
-    ctx.beginPath();
-    ctx.arc(current.px, current.py, 18 + 6 * glow, 0, Math.PI * 2);
-    ctx.strokeStyle = `rgba(255,255,255,${0.35 * glow})`;
-    ctx.lineWidth   = 2;
-    ctx.stroke();
-
-    // ── LIVE STATS PANEL ──────────────────────────────────────────
-    const stats   = statsAtProgress(t);
-    // Anchor the whole stats block to the BOTTOM of the frame (the block is
-    // ~262px tall, so this leaves a ~38px bottom margin) instead of pinning
-    // it right under the map — which used to leave a big black gap below.
-    const panelY  = H - 300;
-
-    // Row 1: big distance (left) + activity pill (right) — well separated
-    const bigF = Math.round(W * 0.17);
-    ctx.font         = `700 ${bigF}px -apple-system, Arial, sans-serif`;
-    ctx.fillStyle    = '#ffffff';
-    ctx.textAlign    = 'left';
-    ctx.textBaseline = 'alphabetic';
-    ctx.shadowColor  = 'rgba(0,0,0,0.6)';
-    ctx.shadowBlur   = 12;
-    ctx.fillText(stats.dist.replace(' km',''), 60, panelY + 130);
-    const distW = ctx.measureText(stats.dist.replace(' km','')).width;
-    ctx.font      = `600 ${Math.round(W*0.05)}px -apple-system, Arial, sans-serif`;
-    ctx.fillStyle = meta.color;
-    ctx.fillText('km', 60 + distW + 14, panelY + 110);
-    ctx.shadowBlur = 0;
-
-    // Activity pill — top-right, vertically centred on its own row
-    const pillW = 160, pillH = 52, pillX = W - pillW - 56, pillY = panelY + 50;
-    rrect(ctx, pillX, pillY, pillW, pillH, 26);
-    ctx.fillStyle = meta.color + '2a'; ctx.fill();
-    rrect(ctx, pillX, pillY, pillW, pillH, 26);
-    ctx.strokeStyle = meta.color + '99'; ctx.lineWidth = 1.5; ctx.stroke();
-    ctx.font      = `700 ${Math.round(W*0.033)}px -apple-system, Arial, sans-serif`;
-    ctx.fillStyle = meta.color;
-    ctx.textAlign = 'center';
-    ctx.fillText(meta.emoji + ' ' + meta.label, pillX + pillW / 2, pillY + 34);
-
-    // Divider
-    ctx.strokeStyle = 'rgba(255,255,255,0.09)';
-    ctx.lineWidth   = 1;
-    ctx.beginPath();
-    ctx.moveTo(60, panelY + 158); ctx.lineTo(W - 60, panelY + 158);
-    ctx.stroke();
-
-    // Row 2: 4-col stats — TIME  PACE  SPEED  KCAL
-    const statsRowY = panelY + 178;
-    const cols = [
-      { label:'TIME',     val:stats.time  },
-      { label:'PACE /km', val:stats.pace  },
-      { label:'SPEED',    val:stats.speed },
-      { label:'KCAL',     val:stats.kcal  },
-    ];
-    const colW = (W - 120) / cols.length;
-    cols.forEach((col, i) => {
-      const cx = 60 + i * colW;
-      if (i > 0) {
-        ctx.strokeStyle = 'rgba(255,255,255,0.08)';
-        ctx.lineWidth   = 1;
-        ctx.beginPath();
-        ctx.moveTo(cx, statsRowY - 4); ctx.lineTo(cx, statsRowY + 88);
-        ctx.stroke();
-      }
-      ctx.font      = `700 ${Math.round(W*0.052)}px -apple-system, Arial, sans-serif`;
-      ctx.fillStyle = '#ffffff';
-      ctx.textAlign = 'left';
-      ctx.fillText(col.val, cx + (i > 0 ? 18 : 0), statsRowY + 54);
-      ctx.font      = `500 ${Math.round(W*0.027)}px -apple-system, Arial, sans-serif`;
-      ctx.fillStyle = 'rgba(255,255,255,0.42)';
-      ctx.fillText(col.label, cx + (i > 0 ? 18 : 0), statsRowY + 84);
-    });
-
-    // Watermark — sits below stats row, never overlaps
     _drawWatermark(ctx, 1);
+
+    // ── Glass stats card (floating, bottom) ───────────────────────
+    const stats = statsAtProgress(t);
+    const cardX = 60, cardW = W - 120, pad = 56, cardH = 600, cardY = H - cardH - 60;
+    _glassCard(ctx, cardX, cardY, cardW, cardH, 44);
+
+    _activityChip(ctx, cardX + pad, cardY + 52, 250, 86, meta);
+    if (locStr) {
+      ctx.fillStyle = _LBL; ctx.font = `500 ${Math.round(W*0.035)}px ${_SF}`;
+      ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
+      ctx.fillText('📍 ' + locStr, cardX + cardW - pad, cardY + 108);
+    }
+
+    _distBlock(ctx, 'left', cardX + pad, cardY + 300, stats.dist.replace(' km',''), Math.round(W*0.155), meta.color);
+
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(cardX + pad, cardY + 372); ctx.lineTo(cardX + cardW - pad, cardY + 372); ctx.stroke();
+
+    _statRow(ctx, cardX + pad, cardY + 490, cardW - pad*2, Math.round(W*0.052), Math.round(W*0.028), [
+      ['TIME',  stats.time],
+      ['PACE',  stats.pace],
+      ['SPEED', stats.speed.replace(' km/h','')],
+      ['CAL',   stats.kcal.replace(' kcal','')],
+    ]);
   }
 
   // ── OUTRO FRAME ──────────────────────────────────────────────────
   function _drawOutroFrame(ctx, t, meta, tileData, mapH, projPts, densePts,
     title, loc, date, distance, elapsed, kcal, speedKph, fmtT, fmtP) {
 
-    // Full map
+    // Map (top) + dark backdrop below
     ctx.drawImage(tileData.canvas, 0, 0, W, mapH);
 
-    // Full route — always fully drawn (use densePts for smooth curves)
+    // Full route
     if (densePts.length >= 2) {
-      ctx.beginPath();
-      ctx.moveTo(densePts[0].px, densePts[0].py);
-      densePts.forEach((p, i) => { if (i > 0) ctx.lineTo(p.px, p.py); });
-      ctx.strokeStyle = 'rgba(0,0,0,0.45)';
-      ctx.lineWidth   = 12; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-      ctx.stroke();
-
-      ctx.beginPath();
-      ctx.moveTo(densePts[0].px, densePts[0].py);
-      densePts.forEach((p, i) => { if (i > 0) ctx.lineTo(p.px, p.py); });
-      ctx.strokeStyle = meta.color;
-      ctx.lineWidth   = 7; ctx.stroke();
-
-      ctx.beginPath();
-      ctx.moveTo(densePts[0].px, densePts[0].py);
-      densePts.forEach((p, i) => { if (i > 0) ctx.lineTo(p.px, p.py); });
-      ctx.strokeStyle = 'rgba(255,255,255,0.45)';
-      ctx.lineWidth   = 2; ctx.stroke();
-
-      // Start dot (green)
-      ctx.beginPath();
-      ctx.arc(densePts[0].px, densePts[0].py, 10, 0, Math.PI*2);
-      ctx.fillStyle   = '#2d9e5a'; ctx.fill();
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.stroke();
-
-      // End dot (red)
+      ctx.beginPath(); ctx.moveTo(densePts[0].px, densePts[0].py);
+      densePts.forEach((p, i) => { if (i) ctx.lineTo(p.px, p.py); });
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 13; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(densePts[0].px, densePts[0].py);
+      densePts.forEach((p, i) => { if (i) ctx.lineTo(p.px, p.py); });
+      ctx.strokeStyle = meta.color; ctx.lineWidth = 7; ctx.stroke();
+      // Start (white/green) + end (accent) dots
+      ctx.beginPath(); ctx.arc(densePts[0].px, densePts[0].py, 11, 0, Math.PI*2);
+      ctx.fillStyle='#fff'; ctx.fill(); ctx.strokeStyle='#2d9e5a'; ctx.lineWidth=4; ctx.stroke();
       const last = densePts[densePts.length - 1];
-      ctx.beginPath();
-      ctx.arc(last.px, last.py, 10, 0, Math.PI*2);
-      ctx.fillStyle   = '#ef5350'; ctx.fill();
-      ctx.strokeStyle = '#fff'; ctx.lineWidth = 2.5; ctx.stroke();
+      ctx.beginPath(); ctx.arc(last.px, last.py, 11, 0, Math.PI*2);
+      ctx.fillStyle = meta.color; ctx.fill(); ctx.strokeStyle='#fff'; ctx.lineWidth=4; ctx.stroke();
     }
 
-    // Gradient fade
-    const fadeGrad = ctx.createLinearGradient(0, mapH * 0.65, 0, mapH);
-    fadeGrad.addColorStop(0, 'rgba(4,15,8,0)');
-    fadeGrad.addColorStop(1, 'rgba(4,15,8,1)');
-    ctx.fillStyle = fadeGrad;
-    ctx.fillRect(0, 0, W, mapH);
+    const fade = ctx.createLinearGradient(0, mapH * 0.62, 0, mapH);
+    fade.addColorStop(0, 'rgba(5,8,10,0)'); fade.addColorStop(1, 'rgba(5,8,10,1)');
+    ctx.fillStyle = fade; ctx.fillRect(0, 0, W, mapH);
+    ctx.fillStyle = '#05080a'; ctx.fillRect(0, mapH, W, H - mapH);
+    _topScrim(ctx);
+    _drawWatermark(ctx, 1);
 
-    // Stats panel slides up
-    const panelSlide = easeOut(clamp(t * 2, 0, 1));
-    const panelY     = mapH + (1 - panelSlide) * (H - mapH);
-    ctx.fillStyle    = '#040f08';
-    ctx.fillRect(0, panelY, W, H - panelY);
+    // ── Glass summary card (slides + fades up) ────────────────────
+    const cardX = 60, cardW = W - 120, pad = 56, cardH = 640;
+    const slide = easeOut(clamp(t * 1.6, 0, 1));
+    const cardY = (H - cardH - 60) + (1 - slide) * 150;
+    ctx.globalAlpha = clamp(t * 2, 0, 1);
+    _glassCard(ctx, cardX, cardY, cardW, cardH, 44);
 
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, panelY, W, H);
-    ctx.clip();
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = '#fff'; ctx.font = `600 ${Math.round(W*0.06)}px ${_SF}`; _ls(ctx, '-1.2px');
+    ctx.fillText(meta.emoji + '  ' + title, W/2, cardY + 96); _ls(ctx, '0px');
+    ctx.fillStyle = _LBL; ctx.font = `500 ${Math.round(W*0.034)}px ${_SF}`;
+    ctx.fillText((loc ? '📍 ' + loc + '  ·  ' : '') + date, W/2, cardY + 158);
 
-    // Title + date
-    const cy = panelY + 56;
-    ctx.font      = `700 ${Math.round(W * 0.065)}px -apple-system, Arial, sans-serif`;
-    ctx.fillStyle = '#ffffff';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'alphabetic';
-    ctx.shadowColor = 'rgba(0,0,0,0.5)';
-    ctx.shadowBlur  = 10;
-    ctx.fillText(meta.emoji + '  ' + title, W/2, cy);
-    ctx.shadowBlur  = 0;
+    _distBlock(ctx, 'center', W/2, cardY + 330, distance.toFixed(2), Math.round(W*0.145), meta.color);
 
-    if (loc) {
-      ctx.font      = `500 ${Math.round(W * 0.033)}px -apple-system, Arial, sans-serif`;
-      ctx.fillStyle = 'rgba(126,217,160,0.9)';
-      ctx.fillText('📍 ' + loc, W/2, cy + 44);
-    }
-    ctx.font      = `400 ${Math.round(W * 0.028)}px -apple-system, Arial, sans-serif`;
-    ctx.fillStyle = 'rgba(255,255,255,0.38)';
-    ctx.fillText(date, W/2, cy + (loc ? 84 : 48));
+    ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(cardX + pad, cardY + 404); ctx.lineTo(cardX + cardW - pad, cardY + 404); ctx.stroke();
 
-    // Separator
-    ctx.strokeStyle = 'rgba(255,255,255,0.1)';
-    ctx.lineWidth   = 1;
-    ctx.beginPath();
-    const sepY = cy + (loc ? 108 : 72);
-    ctx.moveTo(60, sepY); ctx.lineTo(W-60, sepY);
-    ctx.stroke();
-
-    // Stats grid 2×3
-    const gridY    = sepY + 20;
-    const gridData = [
-      { label:'DISTANCE',  val: distance.toFixed(2) + ' km', color: meta.color },
-      { label:'TIME',      val: fmtT(elapsed),               color: '#ffffff'   },
-      { label:'AVG PACE',  val: fmtP(distance,elapsed)+'/km',color: '#ffffff'   },
-      { label:'AVG SPEED', val: speedKph.toFixed(1)+' km/h', color: '#ffffff'   },
-      { label:'CALORIES',  val: kcal + ' kcal',              color: '#ffffff'   },
-      { label:'ACTIVITY',  val: meta.label,                  color: meta.color  },
-    ];
-    const cellW = (W - 120 - 10) / 2;
-    const cellH = 110;
     const fadeT = easeOut(clamp((t - 0.3) / 0.7, 0, 1));
-    ctx.globalAlpha = fadeT;
-    gridData.forEach((g, i) => {
-      const col = i % 2, row = Math.floor(i / 2);
-      const gx  = 60 + col * (cellW + 10);
-      const gy  = gridY + row * (cellH + 10);
-      rrect(ctx, gx, gy, cellW, cellH, 16);
-      ctx.fillStyle = '#0d2218'; ctx.fill();
-      rrect(ctx, gx, gy, cellW, cellH, 16);
-      ctx.strokeStyle = 'rgba(255,255,255,0.07)'; ctx.lineWidth = 1; ctx.stroke();
-
-      ctx.font      = `700 ${Math.round(W*0.026)}px -apple-system, Arial, sans-serif`;
-      ctx.fillStyle = 'rgba(255,255,255,0.45)';
-      ctx.textAlign = 'left';
-      ctx.fillText(g.label, gx + 18, gy + 32);
-      ctx.font      = `700 ${Math.round(W*0.048)}px -apple-system, Arial, sans-serif`;
-      ctx.fillStyle = g.color;
-      ctx.fillText(g.val, gx + 18, gy + 82);
-    });
+    ctx.globalAlpha = clamp(t * 2, 0, 1) * fadeT;
+    _statRow(ctx, cardX + pad, cardY + 520, cardW - pad*2, Math.round(W*0.052), Math.round(W*0.028), [
+      ['TIME',  fmtT(elapsed)],
+      ['PACE',  fmtP(distance, elapsed)],
+      ['SPEED', speedKph.toFixed(1)],
+      ['CAL',   String(kcal)],
+    ]);
     ctx.globalAlpha = 1;
-    ctx.restore();
-
-    // Branding fades in
-    const brandAlpha = easeOut(clamp((t - 0.6) / 0.4, 0, 1));
-    _drawWatermark(ctx, brandAlpha);
   }
 
   // ── WATERMARK — top-center, above the map ───────────────────────
@@ -958,15 +818,17 @@
   // and never competes with the stats panel at the bottom.
   function _drawWatermark(ctx, alpha) {
     ctx.save();
-    ctx.globalAlpha  = alpha * 0.82;
-    ctx.font         = `700 ${Math.round(W * 0.034)}px -apple-system, Arial, sans-serif`;
-    ctx.fillStyle    = '#43d17a';
+    ctx.globalAlpha  = alpha * 0.9;
+    ctx.font         = `600 ${Math.round(W * 0.032)}px ${_SF}`;
+    ctx.fillStyle    = 'rgba(255,255,255,0.9)';
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'alphabetic';
-    ctx.shadowColor  = 'rgba(0,0,0,0.9)';
+    _ls(ctx, '0.08em');
+    ctx.shadowColor  = 'rgba(0,0,0,0.6)';
     ctx.shadowBlur   = 10;
-    ctx.fillText('⚡ FITFLOW PRO', W / 2, 68);
+    ctx.fillText('⚡ FITFLOW PRO', W / 2, 72);
     ctx.shadowBlur   = 0;
+    _ls(ctx, '0px');
     ctx.restore();
   }
 
