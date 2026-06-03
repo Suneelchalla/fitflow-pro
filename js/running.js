@@ -1297,9 +1297,11 @@ function _tryRecoverRunSession() {
   _activityType  = APP.runSession.activityType;
   // Location was already fetched in the previous session — don't refetch.
   // If it wasn't (app was killed before geocoding completed), kick off a
-  // geocode from the ORIGINAL start coord (coords[0]) rather than waiting
-  // for a fresh fix from wherever the user is now — preserving the true
-  // start-area on the history card.
+  // geocode from coords[0] — the very first real GPS fix — which IS the
+  // true start location (recorded by watchPosition with high accuracy).
+  // Do NOT use ff_last_known_coord here: that cache is updated by the
+  // low-accuracy bootstrap getCurrentPosition in _initLiveMap, which can
+  // hold a stale network location from a completely different place.
   _locationFetched         = !!(saved.locationName);
   _locationFetchInProgress = false;
   _locationLastAttemptTs   = 0;
@@ -1729,7 +1731,13 @@ function _initLiveMap() {
         // Clear the spinner — we have a position to show
         const ov = document.getElementById('run-gps-overlay');
         if (ov && ov.style.display !== 'none') ov.style.display = 'none';
-        // Cache so the next cold start opens at this location with NO spinner
+        // Cache so the next cold start opens at this location with NO spinner.
+        // NOTE: do NOT call _tryFetchStartLocation here — this bootstrap fix uses
+        // enableHighAccuracy:false + maximumAge:60000, meaning it can return a
+        // stale cached network location (e.g. your last known city/area) that is
+        // NOT where you actually started. Geocoding it would stamp the wrong place
+        // on the activity card. Location is geocoded ONLY from the real high-accuracy
+        // watchPosition fixes inside startGPS() (_gpsWarmupCount === 1).
         try { Store.set('ff_last_known_coord', { lat, lon }); } catch {}
       },
       () => {
@@ -2550,7 +2558,7 @@ function saveRun() {
     title:        activityTitle,
     description:  activityDesc,
     locationName: s.locationName || '',   // start-area from reverse geocoding
-    timestamp:    new Date().toISOString(),
+    timestamp:    new Date(s.startTime).toISOString(),  // activity START time, not save time
     // Save coords for history detail map (thin to max 500 points to keep storage small)
     coords:       APP.gpsCoords.length > 500
                     ? APP.gpsCoords.filter((_, i) => i % Math.ceil(APP.gpsCoords.length / 500) === 0)
