@@ -397,7 +397,7 @@
         stream   = cv.captureStream(FPS);
         recorder = new MediaRecorder(stream, {
           mimeType:       supportedMime || '',
-          videoBitsPerSecond: 8_000_000,
+          videoBitsPerSecond: 12_000_000,   // 12 Mbps — crisp 1080×1920 (9:16) output
         });
         recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
       } catch (e) {
@@ -495,14 +495,23 @@
 
       setProgress(modal, 25, 'Rendering frames…');
 
-      // ── 5. FRAME LOOP ──────────────────────────────────────────
+      // ── 5. FRAME LOOP (real-time paced) ────────────────────────
+      // captureStream(FPS) samples the canvas on its own ~30 fps clock, so the
+      // draw loop must advance ONE frame per (1000/FPS) ms of WALL-CLOCK time.
+      // The old setTimeout(…, 0) ran every frame as fast as the CPU allowed, so
+      // the whole animation finished in ~3 s of wall clock while the recorder
+      // only sampled 30 frames/sec — the result played far too fast and looked
+      // choppy. Pacing each frame to its real-time slot (with drift correction)
+      // makes the recorded duration and smoothness correct.
+      const FRAME_MS = 1000 / FPS;
       recorder.start();
 
       let frameIndex = 0;
       let lastProgressUpdate = 0;
+      const renderStart = performance.now();
 
       function drawFrame() {
-        if (cancelled) { recorder.stop(); return; }
+        if (cancelled) { try { recorder.stop(); } catch {} return; }
 
         ctx.clearRect(0, 0, W, H);
 
@@ -541,11 +550,14 @@
         }
 
         if (frameIndex < TOTAL_FRAMES) {
-          // Use setTimeout(0) so browser can breathe between frames
-          setTimeout(drawFrame, 0);
+          // Schedule the next frame at its exact wall-clock slot. If a draw runs
+          // long, delay clamps to 0 so we catch up without drifting slower.
+          const nextAt = renderStart + frameIndex * FRAME_MS;
+          const delay  = Math.max(0, nextAt - performance.now());
+          setTimeout(drawFrame, delay);
         } else {
-          // Done rendering
-          recorder.stop();
+          // Hold the final outro frame a beat so the recorder captures it, then stop.
+          setTimeout(() => { try { recorder.stop(); } catch {} }, FRAME_MS * 2);
         }
       }
 
@@ -564,7 +576,7 @@
       };
 
       // Kick off frame loop
-      setTimeout(drawFrame, 0);
+      drawFrame();
 
     } catch (err) {
       console.error('[VideoGen]', err);
