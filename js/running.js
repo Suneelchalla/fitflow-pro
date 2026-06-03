@@ -307,20 +307,21 @@ async function _reverseGeocode(lat, lon) {
     const res  = await fetch(url, { signal: ctrl.signal });
     clearTimeout(tid);
     if (res.ok) {
-      const data = await res.json();
-      // Preferred fields: locality (neighbourhood), city, principalSubdivision (state/region)
-      const area = (data.locality && data.locality !== data.city) ? data.locality : '';
+      const data  = await res.json();
+      const info  = (data.localityInfo && data.localityInfo.informative)   || [];
+      const admin = (data.localityInfo && data.localityInfo.administrative) || [];
+      // Most-specific named place = highest adminLevel. This surfaces the
+      // neighbourhood / suburb / village (e.g. "Siruseri") rather than the
+      // broad taluk/town (e.g. "Tiruporur") that `city`/`locality` often give.
+      const specific = [...info, ...admin]
+        .filter(a => a && a.name && typeof a.adminLevel === 'number')
+        .sort((a, b) => b.adminLevel - a.adminLevel)[0];
+      const area = (specific && specific.name)
+                 || (data.locality && data.locality !== data.city ? data.locality : '');
       const city = data.city || data.principalSubdivision || data.countryName || '';
-      if (area && city) return `${area}, ${city}`;
-      if (city)         return city;
-      if (area)         return area;
-      // Last resort: walk localityInfo administrative names from most-specific outward
-      const admin = data.localityInfo && data.localityInfo.administrative;
-      if (Array.isArray(admin) && admin.length) {
-        const named = admin.map(a => a.name).filter(Boolean);
-        if (named.length >= 2) return named.slice(-2).reverse().join(', ');
-        if (named.length === 1) return named[0];
-      }
+      if (area && city && area !== city) return `${area}, ${city}`;
+      if (area) return area;
+      if (city) return city;
     } else {
       console.warn('[reverseGeocode] BigDataCloud returned HTTP', res.status);
     }
@@ -330,7 +331,7 @@ async function _reverseGeocode(lat, lon) {
 
   // ── 2. FALLBACK: Nominatim (OSM) ───────────────────────────────────
   try {
-    const url  = `https://nominatim.openstreetmap.org/reverse?lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}&format=json&zoom=14&accept-language=en`;
+    const url  = `https://nominatim.openstreetmap.org/reverse?lat=${lat.toFixed(6)}&lon=${lon.toFixed(6)}&format=json&zoom=16&accept-language=en`;
     const ctrl = new AbortController();
     const tid  = setTimeout(() => ctrl.abort(), 6000);
     const res  = await fetch(url, { signal: ctrl.signal });
@@ -1699,9 +1700,24 @@ function _initLiveMap() {
     _attachMapRotationGesture(container);
 
     // Tell Leaflet the real container size now that the div is visible.
-    // Without this, Leaflet may have measured 0×0 (div was hidden) and not
-    // render tiles correctly — causing the blank white area on first zoom.
-    setTimeout(() => { if (_liveMap) _liveMap.invalidateSize({ animate: false }); }, 150);
+    // The run-active screen uses a flex layout whose final height is only
+    // resolved after the browser lays it out, so a single early call can
+    // measure a too-small box and leave large grey unloaded patches in the
+    // map. Fire a staggered series (rAF + several delays) so that whatever
+    // the final size turns out to be, Leaflet re-measures and requests the
+    // full tile grid for the visible area.
+    const _reflowLiveMap = () => { if (_liveMap) _liveMap.invalidateSize({ animate: false }); };
+    requestAnimationFrame(_reflowLiveMap);
+    [120, 350, 700, 1200].forEach(ms => setTimeout(_reflowLiveMap, ms));
+    // If tiles fail to load (transient CDN/network hiccup on mobile), nudge the
+    // layer to re-request them rather than leaving a permanent grey block.
+    if (_liveMapTileLayer && _liveMapTileLayer.on) {
+      _liveMapTileLayer.on('tileerror', () => {
+        if (!_liveMap) return;
+        clearTimeout(_liveMap._tileRetryTimer);
+        _liveMap._tileRetryTimer = setTimeout(_reflowLiveMap, 600);
+      });
+    }
 
     // ── BOOTSTRAP FIX (Strava-style) ─────────────────────────────────
     // The map already has SOME starting view from the fallback chain above
@@ -4108,6 +4124,21 @@ function openHistoryCardFromDetail() {
   setTimeout(() => openHistoryCardModal(log), 300);
 }
 
+// Resolve an activity's START time as a Date. Prefer the timestamp of the
+// first recorded GPS fix (coords[0].ts = the true start moment); fall back to
+// the stored `timestamp`, then the date. This guarantees the run detail /
+// activity card always show when the activity STARTED — never the save/finish
+// moment — regardless of how the log was written or synced.
+function _activityStartDate(r) {
+  const firstTs = Array.isArray(r.coords) && r.coords.length && r.coords[0] && r.coords[0].ts;
+  if (firstTs) { const d = new Date(firstTs); if (!isNaN(d.getTime())) return d; }
+  if (r.timestamp) { const d = new Date(r.timestamp); if (!isNaN(d.getTime())) return d; }
+  return new Date(r.date);
+}
+function _activityHasStartTime(r) {
+  return !!((Array.isArray(r.coords) && r.coords[0] && r.coords[0].ts) || r.timestamp);
+}
+
 function _showRunDetail(idx) {
   const user = APP.currentUser;
   const logs = Store.getUserRunLogs(user.id)
@@ -4125,9 +4156,9 @@ function _showRunDetail(idx) {
   const meta     = ACTIVITY_META[type] || ACTIVITY_META.run;
   const speedKph = r.duration > 0 ? (r.distance / r.duration * 3600) : 0;
   const kcal     = Math.round((r.distance || 0) * meta.kcalPerKm);
-  const dateObj  = r.timestamp ? new Date(r.timestamp) : new Date(r.date);
+  const dateObj  = _activityStartDate(r);
   const dateStr  = dateObj.toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
-  const timeStr  = r.timestamp ? dateObj.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true }) : '';
+  const timeStr  = _activityHasStartTime(r) ? dateObj.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true }) : '';
   const hasMap   = r.coords && r.coords.length >= 2;
 
   const el = document.getElementById('run-detail-content');
@@ -4314,9 +4345,9 @@ async function _downloadRunDetailCard() {
   const elapsed  = r.duration || 0;
   const speedKph = elapsed > 0 ? (r.distance / elapsed * 3600) : 0;
   const kcal     = Math.round((r.distance || 0) * meta.kcalPerKm);
-  const dateObj  = r.timestamp ? new Date(r.timestamp) : new Date(r.date);
+  const dateObj  = _activityStartDate(r);
   const dateStr  = dateObj.toLocaleDateString('en-IN', { weekday:'long', day:'numeric', month:'long', year:'numeric' });
-  const timeStr  = r.timestamp ? dateObj.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true }) : '';
+  const timeStr  = _activityHasStartTime(r) ? dateObj.toLocaleTimeString('en-IN', { hour:'2-digit', minute:'2-digit', hour12:true }) : '';
   const splits   = (r.coords && r.coords.length >= 2)
                    ? _calcKmSplits(r.coords, r.distance, elapsed)
                    : [];
