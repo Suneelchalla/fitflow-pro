@@ -2270,6 +2270,16 @@ window.addEventListener('DOMContentLoaded', function() {
       <!-- Km splits -->
       <div id="sum-km-splits" style="margin-bottom:14px"></div>
 
+      <!-- Create Video button -->
+      <button onclick="generateActivityVideoFromSession()"
+        style="width:100%;padding:13px;border-radius:14px;border:none;
+          background:linear-gradient(135deg,#1a3a4a,#1e6a8a);
+          color:#fff;font-size:15px;font-weight:700;cursor:pointer;
+          margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:8px;
+          box-shadow:0 2px 12px rgba(30,106,138,0.35)">
+        🎬 <span>Create Activity Video</span>
+      </button>
+
       <!-- Save / Discard / Share -->
       <div style="display:flex;gap:10px">
         <button class="btn btn-outline" onclick="discardRun()" style="flex:1">Discard</button>
@@ -3078,7 +3088,8 @@ window.addEventListener('DOMContentLoaded', function() {
 <script src="js/cross-training.js?v=6"></script>
 <script src="js/activity-cards.js?v=1"></script>
 <script src="js/manual-activity.js?v=13"></script>
-<script src="js/running.js?v=100"></script>
+<script src="js/running.js?v=102"></script>
+<script src="js/run-video.js?v=4"></script>
 <script src="js/admin.js?v=82"></script>
 <script src="push.js?v=8"></script>
 <script src="js/custom-workouts.js?v=75"></script>
@@ -3430,6 +3441,15 @@ document.addEventListener('DOMContentLoaded', () => {
         style="width:100%;padding:11px;border-radius:12px;border:1px solid var(--g4);
           background:var(--g1);color:var(--g5);font-size:14px;font-weight:700;cursor:pointer">
         🎴 Generate Activity Card
+      </button>
+    </div>
+    <div style="padding:0 16px 6px">
+      <button onclick="generateActivityVideo(window._currentRunDetailLog)"
+        style="width:100%;padding:11px;border-radius:12px;border:none;
+          background:linear-gradient(135deg,#1a3a4a,#1e6a8a);
+          color:#fff;font-size:14px;font-weight:700;cursor:pointer;
+          display:flex;align-items:center;justify-content:center;gap:7px">
+        🎬 Create Activity Video
       </button>
     </div>
     <div style="padding:6px 16px 16px;display:flex;gap:10px">
