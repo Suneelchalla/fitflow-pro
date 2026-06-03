@@ -853,7 +853,7 @@ function logRun(body) {
     newId, userId, body.email||'', toYMD(body.date)||(body.date||''),
     body.distance||0, body.duration||0, body.pace||0,
     body.planType||('Free '+(body.activityType||'Run').charAt(0).toUpperCase()+(body.activityType||'run').slice(1)),
-    new Date().toISOString(),
+    body.timestamp || new Date().toISOString(),  // use activity START time from client; fall back to now only if missing
     body.activityType||'run',
     coordsJson,
     body.title||'',
