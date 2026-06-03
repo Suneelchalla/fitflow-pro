@@ -95,10 +95,10 @@
       const offX     = (tw - drawW) / 2;
       const offY     = (th - drawH) / 2;
 
-      // Fetch tiles: base (no labels) + labels overlay composited on top
-      // dark_matter_nolabels = roads/buildings without text
-      // dark_matter_only_labels = street/area/city names only
-      // Together = full dark labeled map (same as Strava night mode)
+      // Fetch tiles: satellite imagery base + place-label overlay composited on top.
+      // Esri World Imagery = satellite/aerial (same source as the live-map 🛰 style).
+      // World_Boundaries_and_Places = street/area/city names only.
+      // NOTE: ArcGIS tile URLs use {z}/{y}/{x} order (row before column).
       const loadImg = url => new Promise(res => {
         const img = new Image();
         img.crossOrigin = 'anonymous';
@@ -109,9 +109,8 @@
       const jobs = [], meta = [];
       for (let tx = txMin; tx <= txMax; tx++) {
         for (let ty = tyMin; ty <= tyMax; ty++) {
-          const sd   = TILE_SUBDOMAINS[(tx + ty) % 4];
-          const base = `https://${sd}.basemaps.cartocdn.com/dark_matter_nolabels/${z}/${tx}/${ty}.png`;
-          const lbls = `https://${sd}.basemaps.cartocdn.com/dark_matter_only_labels/${z}/${tx}/${ty}.png`;
+          const base = `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${ty}/${tx}`;
+          const lbls = `https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/${z}/${ty}/${tx}`;
           jobs.push(Promise.all([loadImg(base), loadImg(lbls)]));
           meta.push({ tx, ty });
         }
@@ -138,7 +137,9 @@
         const py = offY + (ty * TILE_SIZE - tyMinF * TILE_SIZE) * scale;
         tctx.drawImage(lbl, px, py, TILE_SIZE * scale, TILE_SIZE * scale);
       });
-      tctx.fillStyle = 'rgba(4,12,8,0.30)';
+      // Light scrim only — keep satellite imagery clearly visible while still
+      // giving the route line and bottom stats panel enough contrast.
+      tctx.fillStyle = 'rgba(4,12,8,0.14)';
       tctx.fillRect(0, 0, tw, th);
 
       // Build coordinate→canvas projection functions
@@ -521,12 +522,12 @@
         } else if (phase === 'route') {
           const routeF = f - INTRO_FRAMES;
           const t      = routeF / ROUTE_FRAMES; // linear — constant px/frame, no easing stutter
-          _drawRouteFrame(ctx, t, meta, tileData, mapH, projPts, cumDist,
+          _drawRouteFrame(ctx, t, meta, tileData, mapH, projPts, densePts, cumDist,
             totalPxDist, pointAtProgress, statsAtProgress);
         } else {
           const outroF = f - INTRO_FRAMES - ROUTE_FRAMES;
           const t      = easeOut(outroF / OUTRO_FRAMES);
-          _drawOutroFrame(ctx, t, meta, tileData, mapH, projPts,
+          _drawOutroFrame(ctx, t, meta, tileData, mapH, projPts, densePts,
             titleStr, locStr, dateStr, distance, elapsed, kcal, speedKph, fmtT, fmtP);
         }
 
@@ -652,7 +653,7 @@
   }
 
   // ── ROUTE ANIMATION FRAME ─────────────────────────────────────────
-  function _drawRouteFrame(ctx, t, meta, tileData, mapH, projPts, cumDist,
+  function _drawRouteFrame(ctx, t, meta, tileData, mapH, projPts, densePts, cumDist,
     totalPxDist, pointAtProgress, statsAtProgress) {
 
     // Map tiles
@@ -808,7 +809,7 @@
   }
 
   // ── OUTRO FRAME ──────────────────────────────────────────────────
-  function _drawOutroFrame(ctx, t, meta, tileData, mapH, projPts,
+  function _drawOutroFrame(ctx, t, meta, tileData, mapH, projPts, densePts,
     title, loc, date, distance, elapsed, kcal, speedKph, fmtT, fmtP) {
 
     // Full map
