@@ -356,8 +356,9 @@
       setProgress(modal, 8, 'Loading map tiles…');
 
       // ── 2. Canvas + map region ──────────────────────────────────
-      // Portrait 1080×1920 — landscape map area = top 55%
-      const mapH   = Math.round(H * 0.46);
+      // Portrait 1080×1920 (9:16). Map is the hero — give it ~70% of the
+      // frame so it fills the space; stats are anchored to the bottom below.
+      const mapH   = Math.round(H * 0.70);
       const mapY   = 0;
 
       // Fetch tiles for map area
@@ -671,8 +672,9 @@
     // Map tiles
     ctx.drawImage(tileData.canvas, 0, 0, W, mapH);
 
-    // Gradient fade at bottom of map
-    const fadeGrad = ctx.createLinearGradient(0, mapH * 0.75, 0, mapH);
+    // Gradient fade at bottom of map — longer fade so the big map melts
+    // smoothly into the dark stats area instead of a hard seam.
+    const fadeGrad = ctx.createLinearGradient(0, mapH * 0.58, 0, mapH);
     fadeGrad.addColorStop(0, 'rgba(4,15,8,0)');
     fadeGrad.addColorStop(1, 'rgba(4,15,8,1)');
     ctx.fillStyle = fadeGrad;
@@ -754,7 +756,10 @@
 
     // ── LIVE STATS PANEL ──────────────────────────────────────────
     const stats   = statsAtProgress(t);
-    const panelY  = mapH + 32;
+    // Anchor the whole stats block to the BOTTOM of the frame (the block is
+    // ~262px tall, so this leaves a ~38px bottom margin) instead of pinning
+    // it right under the map — which used to leave a big black gap below.
+    const panelY  = H - 300;
 
     // Row 1: big distance (left) + activity pill (right) — well separated
     const bigF = Math.round(W * 0.17);
