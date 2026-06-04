@@ -19,19 +19,6 @@ function _ymdLocal(d) {
 // 10. Calorie formula — corrected to 70 kcal/km
 // ════════════════════════════════════════════════════════════════
 
-// ── SERVICE WORKER MESSAGE LISTENER ──────────────────────────────
-// sw.js sends SW_ACTIVATED_SWEEP_NOTIFS after every SW update/activate.
-// This gives the page a chance to call _killAllActivityNotifications()
-// which CAN iterate all registrations (unlike the SW context), closing
-// orphan notifications from old SW versions that the SW itself can't reach.
-if ('serviceWorker' in navigator) {
-  navigator.serviceWorker.addEventListener('message', e => {
-    if (e?.data?.type === 'SW_ACTIVATED_SWEEP_NOTIFS') {
-      _killAllActivityNotifications();
-    }
-  });
-}
-
 // ── SESSION PERSISTENCE KEY ───────────────────────────────────────
 const RUN_SESSION_KEY = 'ff_active_run';
 
@@ -1299,7 +1286,14 @@ function _tryRecoverRunSession() {
   // This is the root-cause fix for "activity starts automatically when user walks."
   APP.runSession = {
     startTime:    saved.startTime,
-    pausedAt:     saved.pausedAt || Date.now(),
+    // If the session was already paused when the app was killed, preserve the
+    // original pausedAt timestamp. _calcElapsed uses (now - pausedAt) as
+    // pauseExtra, so keeping the original value correctly accounts for all
+    // time since the pause — including the gap while the app was closed.
+    // Using Date.now() here would lose that gap, inflating elapsed by however
+    // long the app was closed. For sessions killed while RUNNING (saved.paused
+    // is false, saved.pausedAt is null), Date.now() is the right fallback.
+    pausedAt:     saved.paused ? (saved.pausedAt || Date.now()) : Date.now(),
     totalPaused:  saved.totalPaused || 0,
     distance:     saved.distance    || 0,
     paused:       true,   // ← always paused on recovery, regardless of saved state
@@ -1326,14 +1320,6 @@ function _tryRecoverRunSession() {
       _tryFetchStartLocation(c0.lat, c0.lon);
     }
   }
-
-  // Kill any orphan activity notification from the previous session immediately.
-  // requireInteraction:true keeps it pinned in the shade forever unless we
-  // explicitly close it. This can't be deferred — if the user opens any page
-  // other than running (e.g. dashboard), initRunningPage never runs and the
-  // stale notification stays visible indefinitely.
-  _swPost({ type: 'ACTIVITY_STOP' });     // fast path: active controller
-  _killAllActivityNotifications();         // thorough path: all registrations
 
   _startRunTimerLoop();
   // Do NOT call startGPS() here — user must press Resume explicitly.
@@ -1757,45 +1743,35 @@ function _initLiveMap() {
     // from watchPosition. So a slightly imprecise network fix just orients
     // the map; when satellite GPS locks moments later, the marker snaps to
     // the precise position. Exactly how Strava / Google Maps behave.
-    //
-    // SKIP this call when recovering a paused session that already has coords.
-    // The map already centered on lastCoord (the most recent GPS fix) above —
-    // calling getCurrentPosition here is redundant AND shows the GPS icon in
-    // the Android status bar, making users think tracking is active when the
-    // session is actually paused. Only call it for fresh (cold-start) runs
-    // where we have no existing coords to center on.
-    const _isRecoveringWithCoords = APP.runSession?.paused && APP.gpsCoords.length > 0;
-    if (!_isRecoveringWithCoords) {
-      navigator.geolocation.getCurrentPosition(
-        pos => {
-          const { latitude: lat, longitude: lon } = pos.coords;
-          if (_liveMap) {
-            _liveMap.setView([lat, lon], 17, { animate: false });
-            if (_liveMarker) _liveMarker.setLatLng([lat, lon]);
-            _userPanned = false;  // ensure auto-center re-engages after map set
-          }
-          // Clear the spinner — we have a position to show
-          const ov = document.getElementById('run-gps-overlay');
-          if (ov && ov.style.display !== 'none') ov.style.display = 'none';
-          // Cache so the next cold start opens at this location with NO spinner.
-          // NOTE: do NOT call _tryFetchStartLocation here — this bootstrap fix uses
-          // enableHighAccuracy:false + maximumAge:60000, meaning it can return a
-          // stale cached network location (e.g. your last known city/area) that is
-          // NOT where you actually started. Geocoding it would stamp the wrong place
-          // on the activity card. Location is geocoded ONLY from the real high-accuracy
-          // watchPosition fixes inside startGPS() (_gpsWarmupCount === 1).
-          try { Store.set('ff_last_known_coord', { lat, lon }); } catch {}
-        },
-        () => {
-          // Bootstrap failed (rare — usually means location services are off).
-          // If we have any previous coord, use it; otherwise wait for watchPosition.
-          if (_liveMap && lastCoord) {
-            _liveMap.setView(lastCoord, 17, { animate: false });
-          }
-        },
-        { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
-      );
-    }
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        const { latitude: lat, longitude: lon } = pos.coords;
+        if (_liveMap) {
+          _liveMap.setView([lat, lon], 17, { animate: false });
+          if (_liveMarker) _liveMarker.setLatLng([lat, lon]);
+          _userPanned = false;  // ensure auto-center re-engages after map set
+        }
+        // Clear the spinner — we have a position to show
+        const ov = document.getElementById('run-gps-overlay');
+        if (ov && ov.style.display !== 'none') ov.style.display = 'none';
+        // Cache so the next cold start opens at this location with NO spinner.
+        // NOTE: do NOT call _tryFetchStartLocation here — this bootstrap fix uses
+        // enableHighAccuracy:false + maximumAge:60000, meaning it can return a
+        // stale cached network location (e.g. your last known city/area) that is
+        // NOT where you actually started. Geocoding it would stamp the wrong place
+        // on the activity card. Location is geocoded ONLY from the real high-accuracy
+        // watchPosition fixes inside startGPS() (_gpsWarmupCount === 1).
+        try { Store.set('ff_last_known_coord', { lat, lon }); } catch {}
+      },
+      () => {
+        // Bootstrap failed (rare — usually means location services are off).
+        // If we have any previous coord, use it; otherwise wait for watchPosition.
+        if (_liveMap && lastCoord) {
+          _liveMap.setView(lastCoord, 17, { animate: false });
+        }
+      },
+      { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+    );
   });
 }
 
@@ -1960,7 +1936,7 @@ let _gpsWarmupCount  = 0;          // counts received fixes during warmup phase
 let _gpsLastGoodFix  = null;       // last confirmed-accurate position
 let _stillSince      = null;       // timestamp when user stopped moving (for auto-pause)
 let _currentGpsSpeed = null;       // real-time speed from GPS (km/h), null if unavailable
-const AUTO_PAUSE_STILL_MS = 180000; // suggest auto-pause after 60s of no movement
+const AUTO_PAUSE_STILL_MS = 180000; // suggest auto-pause after 180s (3 min) of no movement
 
 // ── LOCK SCREEN AUTO-PAUSE ───────────────────────────────────────
 // When screen locks, GPS stops — we auto-pause the timer so no fake
@@ -4010,8 +3986,10 @@ async function _deleteRunLog(logId) {
   const user = APP.currentUser;
   if (!user || !logId) return;
 
-  // 1. Delete from localStorage immediately
+  // 1. Delete from localStorage immediately + record tombstone so the log
+  //    can't resurrect from Sheets on next sync if the network call below fails.
   const removed = Store.deleteRunLog(user.id, logId);
+  Store.addDeletedRunLog(logId);
 
   // 2. Close modal
   closeModal('modal-run-detail');
@@ -4031,12 +4009,16 @@ async function _deleteRunLog(logId) {
   // 4. Delete from Google Sheets in background
   try {
     const res = await sheetsPost('deleteRunLog', { logId, userId: user.id });
-    if (!res?.success) {
+    if (res?.success) {
+      // Confirmed deleted from Sheets — safe to clear the tombstone.
+      Store.removeDeletedRunLog(logId);
+    } else {
       console.warn('GAS delete failed:', res?.error);
+      // Tombstone stays — sync will filter it out until next successful delete.
     }
   } catch(e) {
     console.warn('GAS delete error:', e);
-    // Local delete already done — not critical if sheets fails
+    // Local delete already done — tombstone ensures it doesn't resurrect.
   }
 
   _currentDetailRunId = null;
@@ -4642,8 +4624,9 @@ async function deleteRunActivity(logId) {
 
   if (!confirm('Delete this activity?\n\nThis will permanently remove it from your history and cloud backup. This cannot be undone.')) return;
 
-  // 1. Delete from localStorage immediately
+  // 1. Delete from localStorage immediately + record tombstone
   Store.deleteRunLog(user.id, logId);
+  Store.addDeletedRunLog(logId);
 
   // 2. Close the detail modal
   closeModal('modal-run-detail');
@@ -4657,9 +4640,13 @@ async function deleteRunActivity(logId) {
 
   // 4. Delete from Google Sheets in background (non-blocking)
   try {
-    await sheetsPost('deleteRunLog', { userId: user.id, logId });
+    const res = await sheetsPost('deleteRunLog', { userId: user.id, logId });
+    if (res?.success) {
+      Store.removeDeletedRunLog(logId);
+    }
   } catch(e) {
     console.warn('Sheets delete failed — removed locally:', e);
+    // Tombstone stays — prevents resurrection on next sync.
   }
 }
 
