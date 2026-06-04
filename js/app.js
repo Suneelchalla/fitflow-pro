@@ -127,7 +127,24 @@ const Store = {
     return logs.length !== updated.length; // true if something was removed
   },
 
-  getContent(key)             { return this.get('ff_content_' + key); },
+  // ── DELETED RUN LOG TOMBSTONES ────────────────────────────────
+  // When a run is deleted locally we record its ID here. _syncUserRunLogs
+  // filters these out so a failed Sheets delete can't resurrect the log on
+  // next login. Once the Sheets delete confirms, the tombstone is cleared.
+  addDeletedRunLog(logId) {
+    if (!logId) return;
+    const ids = this.get('ff_deleted_runlogs', []);
+    if (!ids.includes(logId)) this.set('ff_deleted_runlogs', [...ids, logId]);
+  },
+  removeDeletedRunLog(logId) {
+    const ids = this.get('ff_deleted_runlogs', []);
+    this.set('ff_deleted_runlogs', ids.filter(id => id !== logId));
+  },
+  getDeletedRunLogs() {
+    return this.get('ff_deleted_runlogs', []);
+  },
+
+
   setContent(key, val)        { this.set('ff_content_' + key, val); },
 
   // ── SHEETS URL ────────────────────────────────────────────────
