@@ -1929,7 +1929,7 @@ let _gpsWarmupCount  = 0;          // counts received fixes during warmup phase
 let _gpsLastGoodFix  = null;       // last confirmed-accurate position
 let _stillSince      = null;       // timestamp when user stopped moving (for auto-pause)
 let _currentGpsSpeed = null;       // real-time speed from GPS (km/h), null if unavailable
-const AUTO_PAUSE_STILL_MS = 60000; // suggest auto-pause after 60s of no movement
+const AUTO_PAUSE_STILL_MS = 180000; // suggest auto-pause after 60s of no movement
 
 // ── LOCK SCREEN AUTO-PAUSE ───────────────────────────────────────
 // When screen locks, GPS stops — we auto-pause the timer so no fake
@@ -2189,10 +2189,10 @@ function _showAutoPausePrompt() {
     box-shadow:0 8px 32px rgba(0,0,0,0.6);text-align:center;animation:slideUp .25s ease`;
   el.innerHTML = `
     <div style="font-size:24px;margin-bottom:8px">🛑</div>
-    <div style="font-weight:700;font-size:14px;margin-bottom:4px">You've been still for 1 min</div>
-    <div style="font-size:12px;color:var(--text3);margin-bottom:14px">Timer is still running. Auto-pause?</div>
+    <div style="font-weight:700;font-size:14px;margin-bottom:4px">Stop detected</div>
+    <div style="font-size:12px;color:var(--text3);margin-bottom:14px">Timer is running. Pausing in 15s...</div>
     <div style="display:flex;gap:10px">
-      <button onclick="document.getElementById('auto-pause-prompt')?.remove()"
+      <button onclick="window._dismissAutoPause()"
         style="flex:1;padding:10px;border-radius:12px;border:1px solid var(--border);
           background:var(--surface);color:var(--text);cursor:pointer;font-size:13px">Keep Going</button>
       <button onclick="togglePauseRun();document.getElementById('auto-pause-prompt')?.remove()"
@@ -2201,9 +2201,26 @@ function _showAutoPausePrompt() {
     </div>`;
   document.body.appendChild(el);
   navigator.vibrate && navigator.vibrate([100, 50, 100]);
-  // Auto-dismiss after 15s if no action taken
-  setTimeout(() => document.getElementById('auto-pause-prompt')?.remove(), 15000);
+  
+  // FIX: Actually auto-pause after 15s if no action taken (prevents multi-hour ghost runs)
+  setTimeout(() => {
+    const prompt = document.getElementById('auto-pause-prompt');
+    if (prompt) {
+      prompt.remove();
+      // If the run is still active and not already paused, force the pause
+      if (APP.runSession && !APP.runSession.paused) {
+        togglePauseRun();
+        if (typeof showToast === 'function') showToast('Auto-paused due to inactivity.', 'info');
+      }
+    }
+  }, 15000);
 }
+
+// Add this helper to correctly reset the delay when "Keep Going" is tapped
+window._dismissAutoPause = function() {
+  document.getElementById('auto-pause-prompt')?.remove();
+  _stillSince = Date.now();
+};
 
 function startGPS() {
   if (APP.runWatchId != null) {
