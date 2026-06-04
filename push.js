@@ -46,6 +46,7 @@ const PUSH = {
       window.OneSignalDeferred.push(async OneSignal => {
         if (!this._initStarted) {
           this._initStarted = true;
+          let initOk = true;
           try {
             await OneSignal.init({
               appId: this.ONESIGNAL_APP_ID,
@@ -61,9 +62,16 @@ const PUSH = {
             });
           } catch (e) {
             console.warn('OneSignal init error:', e?.message || e);
+            initOk = false;
           }
+          // Resolve null on init failure so the .then() cleanup below resets
+          // _initPromise and _initStarted — allowing a retry on the next tap.
+          // Previously we always resolved with OneSignal (truthy), so a broken
+          // instance was cached permanently and push silently stopped working.
+          resolve(initOk ? OneSignal : null);
+        } else {
+          resolve(OneSignal);
         }
-        resolve(OneSignal);
       });
     });
 
