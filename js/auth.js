@@ -96,9 +96,13 @@ function _handleSessionExpired() {
 }
 
 // Start periodic session validation every 5 minutes
+let _sessionValidationInterval = null;
 function _startSessionValidation() {
   if (!Store.getSession()?.sessionToken) return;
-  setInterval(async () => {
+  // Clear any existing interval first — prevents duplicate polling if called
+  // more than once (e.g. session restored after expiry and re-login).
+  if (_sessionValidationInterval) clearInterval(_sessionValidationInterval);
+  _sessionValidationInterval = setInterval(async () => {
     await validateCurrentSession();
   }, 5 * 60 * 1000); // every 5 minutes
 }
@@ -504,16 +508,30 @@ async function _syncUserRunLogs(userId) {
         if (!r.locationName && localMatch.locationName) r.locationName = localMatch.locationName;
         if (!r.title        && localMatch.title)        r.title        = localMatch.title;
         if (!r.description  && localMatch.description)  r.description  = localMatch.description;
+        // Preserve GPS coords — Sheet may return empty coordsjson for runs logged
+        // before the coordsjson column was added. Without this, the history detail
+        // map goes blank permanently for those runs after the first sync.
+        if ((!r.coords || !r.coords.length) && localMatch.coords?.length) {
+          r.coords = localMatch.coords;
+        }
       }
 
       myRuns.push(r);
     });
 
-    Store.set('ff_runlogs', [...otherUsers, ...myRuns]);
+    // Filter out tombstoned (locally deleted) run logs so a failed or pending
+    // Sheets delete can't resurrect them on next login sync.
+    const deletedIds = Store.getDeletedRunLogs();
+    const myRunsFiltered = deletedIds.length
+      ? myRuns.filter(r => !r.id || !deletedIds.includes(r.id))
+      : myRuns;
+
+    Store.set('ff_runlogs', [...otherUsers, ...myRunsFiltered]);
   } catch (e) {
     console.warn('Run log sync skipped:', e.message);
   }
 }
+
 
 async function _syncUserProfile(userId) {
   // Restore all user data that was only in localStorage
@@ -1049,6 +1067,12 @@ async function submitChangePassword() {
 
 // ── LOGOUT ────────────────────────────────────────────────────────
 function logout() {
+  // Stop session validation polling — interval must be cleared here or it
+  // keeps firing Sheets requests for a session that no longer exists.
+  if (_sessionValidationInterval) {
+    clearInterval(_sessionValidationInterval);
+    _sessionValidationInterval = null;
+  }
   // Reset theme to dark on logout
   document.documentElement.classList.remove('theme-light');
   const tm = document.querySelector('meta[name="theme-color"]');
