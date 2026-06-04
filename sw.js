@@ -69,22 +69,41 @@ self.addEventListener('activate', e => {
     // run's JS heap is gone, the timer is dead, no one is going to send
     // another ACTIVITY_UPDATE. Without this sweep the notification stays
     // pinned in the shade indefinitely (requireInteraction:true).
-    .then(() => self.registration.getNotifications({ tag: ACTIVITY_NOTIF_TAG }))
-    .then(notifs => notifs && notifs.forEach(n => { try { n.close(); } catch {} }))
-    // Also sweep untagged "live" notifications from older SW versions whose
-    // bodies look like activity stats (heuristic — older versions used
-    // different tags or different titles).
-    .then(() => self.registration.getNotifications())
-    .then(notifs => notifs && notifs.forEach(n => {
-      const blob = ((n.title || '') + ' ' + (n.body || '')).toLowerCase();
-      if (
-        /\bkm\b|\bpace\b|\bkcal\b|tap to open fitflow|km\/h/.test(blob) &&
-        !/reminder|streak/i.test(blob)
-      ) {
-        try { n.close(); } catch {}
-      }
-    }))
+    //
+    // We sweep ALL registrations (not just self.registration) because orphan
+    // notifications are owned by the OLD registration — self.registration only
+    // sees notifications posted by the NEW SW and would miss them entirely.
+    .then(async () => {
+      try {
+        const regs = await self.clients.matchAll({ includeUncontrolled: true })
+          .then(() => [self.registration])   // start with own registration
+          .catch(() => [self.registration]);
+        // Sweep own registration + attempt to sweep other regs via clients API.
+        // In SW context we can't call navigator.serviceWorker.getRegistrations(),
+        // so we sweep self.registration thoroughly (tagged + heuristic) and
+        // rely on the page-side _killAllActivityNotifications for older regs.
+        const tagged = await self.registration.getNotifications({ tag: ACTIVITY_NOTIF_TAG });
+        tagged.forEach(n => { try { n.close(); } catch {} });
+        const all = await self.registration.getNotifications();
+        all.forEach(n => {
+          const blob = ((n.title || '') + ' ' + (n.body || '')).toLowerCase();
+          if (
+            /\bkm\b|\bpace\b|\bkcal\b|tap to open fitflow|km\/h/.test(blob) &&
+            !/reminder|streak/i.test(blob)
+          ) {
+            try { n.close(); } catch {}
+          }
+        });
+      } catch {}
+    })
     .then(() => self.clients.claim())  // take control of all open tabs immediately
+    // After claiming, tell every open page to run its own thorough sweep via
+    // _killAllActivityNotifications (which CAN iterate all registrations from
+    // the page context, unlike the SW context above).
+    .then(() => self.clients.matchAll({ type: 'window' }))
+    .then(clients => clients.forEach(c => {
+      try { c.postMessage({ type: 'SW_ACTIVATED_SWEEP_NOTIFS' }); } catch {}
+    }))
   );
 });
 
