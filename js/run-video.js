@@ -42,7 +42,6 @@
   const FPS          = 30;
   const INTRO_FRAMES = 60;   // 2 s
   const OUTRO_FRAMES = 120;  // 4 s
-  const ROUTE_SECS   = 12;   // seconds to animate route drawing
   const W            = 1080;
   const H            = 1920;
   const MIME_TYPES   = [
@@ -80,8 +79,10 @@
       const lats = coords.map(c => c[0]), lons = coords.map(c => c[1]);
       let minLat = Math.min(...lats), maxLat = Math.max(...lats);
       let minLon = Math.min(...lons), maxLon = Math.max(...lons);
-      const pLat = (maxLat - minLat) * 0.12 || 0.0015;
-      const pLon = (maxLon - minLon) * 0.12 || 0.0015;
+      
+      // Tightened padding so the map track renders closer
+      const pLat = (maxLat - minLat) * 0.05 || 0.0015;
+      const pLon = (maxLon - minLon) * 0.05 || 0.0015;
       minLat -= pLat; maxLat += pLat;
       minLon -= pLon; maxLon += pLon;
 
@@ -91,7 +92,7 @@
       for (; z >= 3; z--) {
         const pw = (lon2x(maxLon, z) - lon2x(minLon, z)) * TILE_SIZE;
         const ph = (lat2y(minLat, z) - lat2y(maxLat, z)) * TILE_SIZE;
-        if (pw <= fullW * 0.92 && ph <= regionH * 0.92) break;
+        if (pw <= fullW * 0.95 && ph <= regionH * 0.95) break; 
       }
 
       // Route centre in world pixels (native zoom, scale = 1)
@@ -174,7 +175,7 @@
       tctx.beginPath(); tctx.moveTo(0, y); tctx.lineTo(fullW, y); tctx.stroke();
     }
     // Project route into [routeTop, routeBottom] across the full width.
-    const padX = 0.12, padY = 0.08, regionH = routeBottom - routeTop;
+    const padX = 0.05, padY = 0.05, regionH = routeBottom - routeTop;
     const toCanvasX = (lon, meta) => {
       const { minLon, maxLon } = meta;
       return fullW * padX + ((lon - minLon) / (maxLon - minLon || 0.001)) * fullW * (1 - padX * 2);
@@ -365,8 +366,8 @@
       // so it always sits clear of the floating glass card at the bottom.
       const mapH     = H;                       // map covers the entire frame
       const mapY     = 0;
-      const ROUTE_TOP = Math.round(H * 0.07);
-      const ROUTE_BOT = Math.round(H * 0.58);
+      const ROUTE_TOP = Math.round(H * 0.11);
+      const ROUTE_BOT = Math.round(H * 0.60);
 
       // Fetch full-frame tiles, route fitted into the top band
       let tileData = await fetchTiles(smoothed, W, H, ROUTE_TOP, ROUTE_BOT);
@@ -431,11 +432,11 @@
         } catch { return log.date || ''; }
       })();
 
-      // Scale route animation 15–30 s based on activity distance:
-      //   ≤ 2 km  → 15 s   (short run / walk)
-      //   ≥ 10 km → 30 s   (long run / cycle)
-      //   in between → linear interpolation
-      const routeSecs    = Math.round(clamp(15 + (distance - 2) / (10 - 2) * (30 - 15), 15, 30));
+      // Scale route animation 9–14 s based on activity distance:
+      //   ≤ 2 km  → 9 s   (short run / walk)
+      //   ≥ 100 km → 14 s   (long run / cycle / ultra)
+      // Total video length will be: 2s intro + (9-14s) route + 4s outro = 15-20s total.
+      const routeSecs    = Math.round(clamp(9 + (distance - 2) / (100 - 2) * (14 - 9), 9, 14));
       const ROUTE_FRAMES = FPS * routeSecs;
       const TOTAL_FRAMES = INTRO_FRAMES + ROUTE_FRAMES + OUTRO_FRAMES;
 
@@ -772,15 +773,15 @@
     if (ptCount >= 2) {
       const dp = densePts.slice(0, ptCount); dp.push({ px: current.px, py: current.py });
       ctx.beginPath(); ctx.moveTo(dp[0].px, dp[0].py); dp.forEach((p,i)=>{ if(i) ctx.lineTo(p.px,p.py); });
-      ctx.strokeStyle = 'rgba(0,0,0,0.40)'; ctx.lineWidth = 13; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
+      ctx.strokeStyle = 'rgba(0,0,0,0.40)'; ctx.lineWidth = 18; ctx.lineCap = 'round'; ctx.lineJoin = 'round'; ctx.stroke();
       ctx.beginPath(); ctx.moveTo(dp[0].px, dp[0].py); dp.forEach((p,i)=>{ if(i) ctx.lineTo(p.px,p.py); });
-      ctx.strokeStyle = meta.color; ctx.lineWidth = 7; ctx.stroke();
-      ctx.beginPath(); ctx.arc(densePts[0].px, densePts[0].py, 11, 0, Math.PI*2);
-      ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = meta.color; ctx.lineWidth = 4; ctx.stroke();
+      ctx.strokeStyle = meta.color; ctx.lineWidth = 10; ctx.stroke();
+      ctx.beginPath(); ctx.arc(densePts[0].px, densePts[0].py, 13, 0, Math.PI*2);
+      ctx.fillStyle = '#fff'; ctx.fill(); ctx.strokeStyle = meta.color; ctx.lineWidth = 5; ctx.stroke();
     }
     const glow = 0.6 + 0.4 * Math.sin(Date.now() / 150);
-    ctx.save(); ctx.shadowColor = meta.color; ctx.shadowBlur = 22 * glow;
-    ctx.beginPath(); ctx.arc(current.px, current.py, 13, 0, Math.PI*2); ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.save(); ctx.shadowColor = meta.color; ctx.shadowBlur = 35 * glow;
+    ctx.beginPath(); ctx.arc(current.px, current.py, 16, 0, Math.PI*2); ctx.fillStyle = '#fff'; ctx.fill();
     ctx.restore();
 
     _drawWatermark(ctx, 1);
@@ -823,16 +824,16 @@
     if (densePts.length >= 2) {
       ctx.beginPath(); ctx.moveTo(densePts[0].px, densePts[0].py);
       densePts.forEach((p, i) => { if (i) ctx.lineTo(p.px, p.py); });
-      ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 13; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.stroke();
+      ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 18; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.stroke();
       ctx.beginPath(); ctx.moveTo(densePts[0].px, densePts[0].py);
       densePts.forEach((p, i) => { if (i) ctx.lineTo(p.px, p.py); });
-      ctx.strokeStyle = meta.color; ctx.lineWidth = 7; ctx.stroke();
+      ctx.strokeStyle = meta.color; ctx.lineWidth = 10; ctx.stroke();
       // Start (white/green) + end (accent) dots
-      ctx.beginPath(); ctx.arc(densePts[0].px, densePts[0].py, 11, 0, Math.PI*2);
-      ctx.fillStyle='#fff'; ctx.fill(); ctx.strokeStyle='#2d9e5a'; ctx.lineWidth=4; ctx.stroke();
+      ctx.beginPath(); ctx.arc(densePts[0].px, densePts[0].py, 13, 0, Math.PI*2);
+      ctx.fillStyle='#fff'; ctx.fill(); ctx.strokeStyle='#2d9e5a'; ctx.lineWidth=5; ctx.stroke();
       const last = densePts[densePts.length - 1];
-      ctx.beginPath(); ctx.arc(last.px, last.py, 11, 0, Math.PI*2);
-      ctx.fillStyle = meta.color; ctx.fill(); ctx.strokeStyle='#fff'; ctx.lineWidth=4; ctx.stroke();
+      ctx.beginPath(); ctx.arc(last.px, last.py, 13, 0, Math.PI*2);
+      ctx.fillStyle = meta.color; ctx.fill(); ctx.strokeStyle='#fff'; ctx.lineWidth=5; ctx.stroke();
     }
     _drawWatermark(ctx, 1);
 
