@@ -43,6 +43,11 @@ const ACTIVITY_META = {
   walk:  { emoji: '🚶', label: 'Walk',  kcalPerKm: 50, color: '#1e88e5' },
   cycle: { emoji: '🚴', label: 'Cycle', kcalPerKm: 40, color: '#f0c040' },
 };
+// Expose globally so run-video.js (which runs in a separate IIFE scope)
+// can look up the correct emoji, label and colour for any activity type.
+// Without this, global.ACTIVITY_META is undefined in run-video.js and
+// every generated video falls back to the hardcoded Run defaults.
+window.ACTIVITY_META = ACTIVITY_META;
 let _activityType = 'run';   // selected on idle screen, saved with run
 
 // ── WARMUP + COOLDOWN GUIDES (per activity type) ─────────────────
