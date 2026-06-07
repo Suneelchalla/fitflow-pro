@@ -504,6 +504,26 @@
 
       setProgress(modal, 25, 'Rendering frames…');
 
+      // ── PRE-ROLL: paint intro frame 0 onto the canvas BEFORE recorder.start()
+      // ─────────────────────────────────────────────────────────────────────────
+      // captureStream() begins sampling the canvas the moment recorder.start() is
+      // called. If the canvas is still black at that instant, the very first chunk
+      // captured — which most gallery apps and file managers use as the poster /
+      // thumbnail — is a solid black frame. By rendering frame 0 (the intro card)
+      // onto the canvas first and giving the stream one rAF tick to latch onto it
+      // before we call recorder.start(), we guarantee the first recorded frame is
+      // the activity intro card (emoji, title, location, date) with the correct
+      // activity-specific colour and emoji — making every video show a unique,
+      // recognisable thumbnail in the gallery grid instead of a black square.
+      ctx.fillStyle = '#040f08';
+      ctx.fillRect(0, 0, W, H);
+      _drawIntroFrame(ctx, 0, meta, titleStr, locStr, dateStr, tileData, mapH, projPts);
+      _roundCorners(ctx);
+      // Wait one rAF so the stream's internal sampler picks up the painted frame
+      // before we arm the recorder. Without this yield the canvas capture thread
+      // may not have flushed the draw commands yet on some Android WebViews.
+      await new Promise(r => requestAnimationFrame(r));
+
       // ── 5. FRAME LOOP (real-time paced) ────────────────────────
       // captureStream(FPS) samples the canvas on its own ~30 fps clock, so the
       // draw loop must advance ONE frame per (1000/FPS) ms of WALL-CLOCK time.
