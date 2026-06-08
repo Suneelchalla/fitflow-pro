@@ -145,6 +145,7 @@ const Store = {
   },
 
 
+  getContent(key)             { return this.get('ff_content_' + key); },
   setContent(key, val)        { this.set('ff_content_' + key, val); },
 
   // ── SHEETS URL ────────────────────────────────────────────────
