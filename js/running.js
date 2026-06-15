@@ -1409,6 +1409,25 @@ function initRunningPage() {
   renderRunningTabs('log');
   renderRunHistory();
   _initCardSwipe();  // attach swipe-to-change-activity on the start card (once only)
+
+  // Sync the pill highlight, emoji and label to _activityType.
+  // index.html hardcodes the Run pill as active; _activityType persists across
+  // page visits. Without this sync, returning to the page after having used
+  // Walk/Cycle shows Run highlighted but Walk/Cycle content — confusing, and
+  // makes tapping the correct pill appear to do nothing (it re-renders the
+  // same content that's already showing).
+  if (!APP.runSession) {
+    document.querySelectorAll('.activity-pill').forEach(p => p.classList.remove('active'));
+    const activePill = document.querySelector(`.activity-pill[data-type="${_activityType}"]`);
+    if (activePill) activePill.classList.add('active');
+    const meta = ACTIVITY_META[_activityType] || ACTIVITY_META.run;
+    const emojiEl = document.getElementById('run-idle-emoji');
+    const labelEl = document.getElementById('run-idle-label');
+    if (emojiEl) emojiEl.textContent = meta.emoji;
+    if (labelEl) labelEl.textContent = 'START A ' + meta.label.toUpperCase();
+    _syncSwipeDots(_activityType);
+  }
+
   // Sync global bottom-nav visibility — handles session-recovery case
   // (run-active visible → nav hidden) vs cold open (run-idle → nav visible)
   window.refreshBottomNav?.();
@@ -2349,7 +2368,7 @@ function startGPS() {
         if (d >= GPS_MIN_DISTANCE_KM) {
           APP.runSession.distance += d;
           updateRunDisplay();
-          _saveRunSession();  // persist every distance update — critical for long activities
+          _saveRunSession();
           _gpsLastGoodFix = { lat, lon, ts: nowTs };
         }
       } else {
@@ -2717,6 +2736,9 @@ function discardRun() {
   if (emojiEl) emojiEl.textContent = '🏃';
   if (labelEl) labelEl.textContent = 'START A RUN';
   _syncSwipeDots('run');
+  // Re-render the Log tab so the just-saved activity immediately appears in
+  // "Recent Runs" without needing a manual pill tap or page reload.
+  _renderActivityWarmupCooldown('run');
 
   document.getElementById('run-summary')?.classList.add('hidden');
   document.getElementById('run-save-screen')?.classList.add('hidden');
