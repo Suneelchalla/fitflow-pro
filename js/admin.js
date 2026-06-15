@@ -4086,6 +4086,27 @@ async function renderAdminNotify() {
   const container = document.getElementById('admin-notify-content');
   if (!container) return;
 
+  // Read last force-reload timestamp from Sheets content store
+  const lastReloadTs = Store.get('ff_force_reload_ts', 0);
+  const lastReloadStr = lastReloadTs
+    ? new Date(lastReloadTs).toLocaleTimeString('en-IN', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit', hour12:true })
+    : 'never';
+
+  // Deployed cache version — read from the active SW registration
+  let cacheVersion = 'unknown';
+  try {
+    const regs = await navigator.serviceWorker?.getRegistrations?.() || [];
+    // The SW script URL contains the sw.js file; the CACHE const isn't directly
+    // readable from here — but we expose it via a message in sw.js if needed.
+    // For now surface the SW script URL so admin can see which sw.js is active.
+    if (regs.length > 0) {
+      const active = regs.find(r => r.active)?.active;
+      if (active?.scriptURL) {
+        cacheVersion = active.scriptURL.split('/').pop() || 'sw.js';
+      }
+    }
+  } catch(e) {}
+
   // Render compose form
   container.innerHTML = `
 
@@ -4105,7 +4126,10 @@ async function renderAdminNotify() {
               onclick="adminForceRefresh()">
               🔄 Force Refresh All Users
             </button>
-            <div id="force-refresh-last" style="font-size:12px;color:var(--text3)">Last triggered: never</div>
+            <div id="force-refresh-last" style="font-size:12px;color:var(--text3)">Last triggered: ${lastReloadStr}</div>
+          </div>
+          <div style="margin-top:10px;font-size:11px;color:var(--text3)">
+            Active SW: <code style="font-size:10px;color:var(--text2)">${cacheVersion}</code>
           </div>
         </div>
       </div>
