@@ -237,6 +237,7 @@ function doGet(e) {
       case 'getAllOnboarding':      result = { success:true, onboardings:getAllOnboarding() };            break;
       case 'getAdminPushLog':      result = getAdminPushLog();                                           break;
       case 'getSubscribedDevices': result = getSubscribedDevices();                                      break;
+      case 'getPushDiagnostics':   result = getPushDiagnostics();                                        break;
       case 'validateSession':      result = validateSession(p.userId, p.sessionToken);                   break;
       default:                     result = { success:false, error:'Unknown action: ' + p.action };
     }
@@ -1880,6 +1881,124 @@ function getSubscribedDevices() {
 // ════════════════════════════════════════════════════════════════
 // SMART PUSH HELPERS
 // ════════════════════════════════════════════════════════════════
+
+// getPushDiagnostics — cross-references PushSubscriptions sheet with OneSignal
+// to show admin exactly who is subscribed, who has stale sheet-only records,
+// and who has never subscribed. Called by _loadPushDiagnostics in admin.js.
+function getPushDiagnostics() {
+  var props  = PropertiesService.getScriptProperties();
+  var appId  = props.getProperty('ONESIGNAL_APP_ID');
+  var apiKey = props.getProperty('ONESIGNAL_REST_API_KEY');
+
+  var allUsers    = getAllUsers() || [];
+  var nonAdmins   = allUsers.filter(function(u) { return (u.role||'').toUpperCase() !== 'ADMIN'; });
+  var totalUsers  = nonAdmins.length;
+
+  // Read our PushSubscriptions sheet for user → subscriptionId mapping
+  var subSheet = getSheet(SHEETS.PUSH_SUBS);
+  var subData  = subSheet ? subSheet.getDataRange().getValues() : [];
+  // Columns: userId, subscriptionId, email, updatedAt (row 0 = header)
+  var sheetSubs = {}; // userId → subscriptionId
+  for (var i = 1; i < subData.length; i++) {
+    var uid = (subData[i][0] || '').toString().trim();
+    var sid = (subData[i][1] || '').toString().trim();
+    if (uid && sid) sheetSubs[uid] = sid;
+  }
+
+  // Fetch active subscriptions from OneSignal
+  var osPlayers    = [];
+  var osTotal      = 0;
+  var osValid      = 0;
+  var oneSignalError = null;
+
+  if (appId && apiKey) {
+    try {
+      var url = 'https://api.onesignal.com/players?app_id=' + appId + '&limit=300';
+      var res = UrlFetchApp.fetch(url, {
+        method: 'get',
+        headers: { 'Authorization': 'Basic ' + apiKey },
+        muteHttpExceptions: true,
+      });
+      if (res.getResponseCode() === 200) {
+        var osData = JSON.parse(res.getContentText());
+        osPlayers  = osData.players || [];
+        osTotal    = osPlayers.length;
+        osValid    = osPlayers.filter(function(p) {
+          return p.invalid_identifier !== true && p.identifier;
+        }).length;
+      } else {
+        oneSignalError = 'HTTP ' + res.getResponseCode();
+      }
+    } catch (e) {
+      oneSignalError = e.message;
+    }
+  } else {
+    oneSignalError = 'OneSignal credentials not configured in Script Properties';
+  }
+
+  // Build set of external_user_ids active in OneSignal
+  var osActiveUserIds = {};
+  osPlayers.forEach(function(p) {
+    if (p.invalid_identifier !== true && p.identifier && p.external_user_id) {
+      osActiveUserIds[p.external_user_id] = {
+        lastActive: p.last_active ? new Date(p.last_active * 1000).toISOString() : '',
+      };
+    }
+  });
+
+  // Cross-reference per user
+  var activeInOS    = 0;
+  var sheetOnly     = 0;
+  var notSubscribed = 0;
+  var userRows      = [];
+
+  nonAdmins.forEach(function(u) {
+    var uid        = u.id;
+    var inSheet    = !!sheetSubs[uid];
+    var inOS       = !!osActiveUserIds[uid];
+    var status, lastActive;
+
+    if (inOS) {
+      status     = 'active';
+      lastActive = osActiveUserIds[uid].lastActive;
+      activeInOS++;
+    } else if (inSheet) {
+      status     = 'sheet_only';
+      lastActive = '';
+      sheetOnly++;
+    } else {
+      status     = 'none';
+      lastActive = '';
+      notSubscribed++;
+    }
+
+    userRows.push({
+      userId:     uid,
+      name:       u.name  || '',
+      email:      u.email || '',
+      status:     status,
+      lastActive: lastActive,
+    });
+  });
+
+  // Sort: active first, then sheet_only, then none
+  var order = { active:0, sheet_only:1, none:2 };
+  userRows.sort(function(a, b) {
+    return (order[a.status] || 0) - (order[b.status] || 0);
+  });
+
+  return {
+    success:        true,
+    totalUsers:     totalUsers,
+    activeInOS:     activeInOS,
+    sheetOnly:      sheetOnly,
+    notSubscribed:  notSubscribed,
+    osTotal:        osTotal,
+    osValid:        osValid,
+    oneSignalError: oneSignalError,
+    users:          userRows,
+  };
+}
 
 // Returns { workedOut: [playerIds], notYet: [playerIds] }
 // by checking CompletionLog + RunningLog for today
