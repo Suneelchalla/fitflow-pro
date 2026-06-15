@@ -1293,9 +1293,11 @@ function _tryRecoverRunSession() {
   const saved = Store.get(RUN_SESSION_KEY);
   if (!saved || APP.runSession) return;
 
-  // Don't restore sessions older than 45 minutes — they're stale abandonments.
+  // Don't restore sessions older than 6 hours — they're stale abandonments.
+  // 45 min was too aggressive: any long cycling or walking session (50km+)
+  // exceeded it and would be wiped on the first page reload.
   const sessionAge = Date.now() - (saved.startTime || 0);
-  if (sessionAge > 45 * 60 * 1000) {
+  if (sessionAge > 6 * 60 * 60 * 1000) {
     Store.remove(RUN_SESSION_KEY);
     return;
   }
@@ -2347,7 +2349,7 @@ function startGPS() {
         if (d >= GPS_MIN_DISTANCE_KM) {
           APP.runSession.distance += d;
           updateRunDisplay();
-          _saveRunSession();
+          _saveRunSession();  // persist every distance update — critical for long activities
           _gpsLastGoodFix = { lat, lon, ts: nowTs };
         }
       } else {
