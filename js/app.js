@@ -511,6 +511,43 @@ function setActiveNav(tab) {
 }
 
 function navTo(tab) {
+  // ── ACTIVE RUN GUARD ──────────────────────────────────────────────
+  // If a run is actively tracking (not paused) and the user taps a nav
+  // button that would leave page-running, intercept and show a
+  // "Pause & Exit" confirmation instead of silently orphaning the session.
+  // Tapping "running" while a run is active just returns to the run — no confirmation.
+  if (APP.runSession && !APP.runSession.paused && tab !== 'running') {
+    const _destTab = tab;
+    if (typeof showConfirm === 'function') {
+      showConfirm(
+        'Pause and exit?',
+        'Your activity will be paused and GPS will stop. Return any time from the banner.',
+        'Pause & Exit',
+        'Stay',
+        () => {
+          if (APP.runSession && !APP.runSession.paused) {
+            if (typeof togglePauseRun === 'function') togglePauseRun();
+          }
+          _navToInternal(_destTab);
+          if (typeof _updateRunInProgressBanner === 'function') _updateRunInProgressBanner();
+        },
+        null,
+        null
+      );
+    } else if (confirm('Pause activity and navigate away?')) {
+      if (APP.runSession && !APP.runSession.paused) {
+        if (typeof togglePauseRun === 'function') togglePauseRun();
+      }
+      _navToInternal(tab);
+    }
+    return;
+  }
+  _navToInternal(tab);
+}
+
+// Internal navTo — actual navigation without the run guard.
+// Called after guard checks pass, and by the confirmation callback above.
+function _navToInternal(tab) {
   setActiveNav(tab);
   APP.pageHistory = [];
   if      (tab === 'home')    { showPage('page-dashboard', false); refreshDashboard(); }
@@ -688,8 +725,12 @@ document.addEventListener('DOMContentLoaded', () => {
   setTimeout(() => {
     try {
       const saved = Store.get('ff_active_run');
+      // 6 hours — long enough for a full cycling century or marathon.
+      // 45 min was too short: any activity over ~16km at moderate pace
+      // exceeded it, causing the session to be silently wiped on next
+      // page load before _tryRecoverRunSession could restore it.
       const isStale = saved && saved.startTime &&
-        (Date.now() - saved.startTime > 45 * 60 * 1000);
+        (Date.now() - saved.startTime > 6 * 60 * 60 * 1000);
       if (isStale) {
         Store.remove('ff_active_run');
       }
