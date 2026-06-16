@@ -162,11 +162,23 @@ async function attemptLogin(email, password) {
 
   if (cfg.webAppUrl) {
     try {
-      // Use GET with pwcodes — Apps Script supports GET with CORS
-      // POST with Content-Type:application/json triggers CORS preflight which Apps Script blocks
-      const pwCodes = Array.from(password).map(c => c.charCodeAt(0)).join('-');
-      const qs = new URLSearchParams({ action: 'login', email: email.trim().toLowerCase(), pwcodes: pwCodes }).toString();
-      const r = await fetch(`${cfg.webAppUrl}?${qs}`);
+      // Hash password client-side with SHA-256 before sending.
+      // GAS _passwordMatches() supports "sha256:" prefix (backward compatible).
+      let pwParam;
+      try {
+        const msgBuf  = new TextEncoder().encode(password.trim());
+        const hashBuf = await crypto.subtle.digest('SHA-256', msgBuf);
+        const hashHex = Array.from(new Uint8Array(hashBuf)).map(b => ('0'+b.toString(16)).slice(-2)).join('');
+        pwParam = 'sha256:' + hashHex;
+      } catch {
+        // Fallback for environments without crypto.subtle (very rare)
+        pwParam = password.trim();
+      }
+      const qs = new URLSearchParams({ action: 'login', email: email.trim().toLowerCase(), password: pwParam }).toString();
+      const ctrl = new AbortController();
+      const tid  = setTimeout(() => ctrl.abort(), 12000);
+      const r    = await fetch(`${cfg.webAppUrl}?${qs}`, { signal: ctrl.signal });
+      clearTimeout(tid);
 
       // Guard against Apps Script returning HTML error page instead of JSON
       const text = await r.text();
