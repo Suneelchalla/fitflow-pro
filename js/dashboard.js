@@ -325,7 +325,7 @@ function _buildWeekBreakdownHtml(user, logs, runs) {
 // ── MODULE ORDER STORAGE ─────────────────────────────────────────
 const ALL_MODULES = [
   { id: 'cardio',        name: 'Home Cardio',       emoji: '🏠',    color: 'grad-cardio',     sub: '8-9 exercises · 6 days' },
-  { id: 'gym',           name: 'Gym Workouts',      emoji: '🏋️',    color: 'grad-gym',        sub: '7 exercises · 6 days' },
+  { id: 'gym',           name: 'Gym Workouts',      emoji: '🏋️',    color: 'grad-gym',        sub: '8 exercises · 6 days' },
   { id: 'yoga',          name: 'Yoga',              emoji: '🧘',    color: 'grad-yoga',       sub: '8-12 poses · 6 days' },
   { id: 'running',       name: 'Running & Walking', emoji: '🏃',    color: 'grad-running',    sub: 'GPS tracker + plans' },
   { id: 'stretching',    name: 'Stretching',        emoji: '🙆',    color: 'grad-stretch',    sub: '10 body parts · 100 stretches' },
@@ -728,7 +728,7 @@ function openModule(moduleId) {
   if (moduleId === 'crosstraining') { showPage('page-cross-training'); if (typeof initCrossTrainingPage === 'function') initCrossTrainingPage(); return; }
   if (moduleId === 'log_activity') { showPage('page-manual-log'); if (typeof initManualLogPage === 'function') initManualLogPage(); return; }
   if (moduleId === 'yoga') { showPage('page-module'); renderYogaProgressivePage(); return; }
-  // Gym: show a program-picker card before entering the day view
+  // Gym tile opens a program picker inside page-module
   if (moduleId === 'gym') { showPage('page-module'); _showGymProgramPicker(); return; }
   showPage('page-module');
   renderModulePage(moduleId);
@@ -741,44 +741,32 @@ function openRunningModule() {
 
 
 // ── GYM PROGRAM PICKER ────────────────────────────────────────────
-// Shown when user taps the Gym Workouts tile. Two program cards:
-//  • Gym Workouts   — classic body-part split (Mon=Chest, Tue=Shoulders…)
-//  • Physique Split — science-backed 2-muscle-group split (Mon=Chest+Biceps…)
-// Tapping a card calls renderModulePage() with the right module key.
+// Shows two program cards inside page-module when user taps the Gym tile.
 function _showGymProgramPicker() {
-  // Set the header to show we're inside Gym
   document.getElementById('module-title').textContent        = 'Gym Workouts';
   document.getElementById('module-emoji-header').textContent = '🏋️';
-
-  // Hide day strip and inner tabs — not needed on the picker screen
   const strip = document.getElementById('day-tab-strip');
   if (strip) strip.innerHTML = '';
   document.querySelectorAll('.module-inner-tab').forEach(t => t.classList.remove('active'));
   document.querySelectorAll('.module-tab-content').forEach(t => t.classList.remove('active'));
-
   const wTab = document.getElementById('module-workout-tab');
   if (wTab) {
     wTab.classList.add('active');
     wTab.innerHTML = `
       <div style="padding:4px 0 20px">
         <div style="font-size:13px;color:var(--text2);margin-bottom:18px;line-height:1.6">
-          Choose your training program. Both use the same 6-day week and work within your gym.
+          Choose your training program. Both use a 6-day gym week.
         </div>
-
-        <!-- Card 1: Classic Gym Split -->
         <div onclick="_selectGymProgram('gym')" style="
           background:linear-gradient(135deg,rgba(14,116,144,0.18),rgba(14,116,144,0.08));
-          border:1.5px solid rgba(14,116,144,0.45);
-          border-radius:16px;padding:18px;margin-bottom:14px;cursor:pointer;
-          transition:border-color .15s;
-        ">
+          border:1.5px solid rgba(14,116,144,0.45);border-radius:16px;
+          padding:18px;margin-bottom:14px;cursor:pointer">
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
-            <div style="width:48px;height:48px;border-radius:13px;
-              background:rgba(14,116,144,0.25);display:flex;align-items:center;
-              justify-content:center;font-size:26px;flex-shrink:0">🏋️</div>
+            <div style="width:48px;height:48px;border-radius:13px;background:rgba(14,116,144,0.25);
+              display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0">🏋️</div>
             <div>
               <div style="font-size:16px;font-weight:700;color:var(--text)">Gym Workouts</div>
-              <div style="font-size:12px;color:var(--text3);margin-top:2px">1 muscle group per day · 6 days</div>
+              <div style="font-size:12px;color:var(--text3);margin-top:2px">1 muscle group · 6 days</div>
             </div>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
@@ -787,32 +775,22 @@ function _showGymProgramPicker() {
                 background:rgba(14,116,144,0.15);color:#67e8f9;border:1px solid rgba(14,116,144,0.25)">${d}</span>`
             ).join('')}
           </div>
-          <div style="font-size:12px;color:var(--text3);line-height:1.6">
-            Classic bro split. Maximum focus on one muscle group per session. 7 exercises per day, high volume.
-          </div>
-          <div style="margin-top:12px;text-align:right">
-            <span style="font-size:13px;font-weight:700;color:#67e8f9">Start →</span>
-          </div>
+          <div style="font-size:12px;color:var(--text3);line-height:1.6">Classic body-part split. Maximum focus per session. 7 exercises per day.</div>
+          <div style="margin-top:12px;text-align:right"><span style="font-size:13px;font-weight:700;color:#67e8f9">Start →</span></div>
         </div>
-
-        <!-- Card 2: Physique Split -->
         <div onclick="_selectGymProgram('gymSplit')" style="
           background:linear-gradient(135deg,rgba(124,58,237,0.18),rgba(124,58,237,0.08));
-          border:1.5px solid rgba(124,58,237,0.45);
-          border-radius:16px;padding:18px;cursor:pointer;
-          transition:border-color .15s;
-          position:relative;overflow:hidden;
-        ">
+          border:1.5px solid rgba(124,58,237,0.45);border-radius:16px;
+          padding:18px;cursor:pointer;position:relative;overflow:hidden">
           <div style="position:absolute;top:12px;right:12px;font-size:10px;font-weight:700;
             padding:3px 9px;border-radius:20px;background:rgba(124,58,237,0.4);color:#e9d5ff;
             letter-spacing:.04em">SCIENCE-BASED</div>
           <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
-            <div style="width:48px;height:48px;border-radius:13px;
-              background:rgba(124,58,237,0.25);display:flex;align-items:center;
-              justify-content:center;font-size:26px;flex-shrink:0">💪</div>
+            <div style="width:48px;height:48px;border-radius:13px;background:rgba(124,58,237,0.25);
+              display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0">💪</div>
             <div>
               <div style="font-size:16px;font-weight:700;color:var(--text)">Physique Split</div>
-              <div style="font-size:12px;color:var(--text3);margin-top:2px">2 muscle groups per day · 6 days</div>
+              <div style="font-size:12px;color:var(--text3);margin-top:2px">2 muscle groups · 6 days</div>
             </div>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
@@ -821,12 +799,8 @@ function _showGymProgramPicker() {
                 background:rgba(124,58,237,0.15);color:#c4b5fd;border:1px solid rgba(124,58,237,0.25)">${d}</span>`
             ).join('')}
           </div>
-          <div style="font-size:12px;color:var(--text3);line-height:1.6">
-            Each muscle trained 2× per week. Pairings chosen so no muscle is pre-fatigued. Based on research by Schoenfeld, Nippard & RP Strength.
-          </div>
-          <div style="margin-top:12px;text-align:right">
-            <span style="font-size:13px;font-weight:700;color:#c4b5fd">Start →</span>
-          </div>
+          <div style="font-size:12px;color:var(--text3);line-height:1.6">Each muscle 2× per week. Evidence-based pairings — no pre-fatigue interference.</div>
+          <div style="margin-top:12px;text-align:right"><span style="font-size:13px;font-weight:700;color:#c4b5fd">Start →</span></div>
         </div>
       </div>
     `;
@@ -835,7 +809,7 @@ function _showGymProgramPicker() {
 
 function _selectGymProgram(moduleKey) {
   APP.currentModule = moduleKey;
-  // Clear stale day labels from either program before rendering
+  // Clear any stale day labels from either program
   document.getElementById('gym-day-label')?.remove();
   document.getElementById('gymsplit-day-label')?.remove();
   renderModulePage(moduleKey);
@@ -1305,19 +1279,19 @@ function renderExercises(moduleId, day) {
 
   // Gym / gymSplit: show muscle group label for the day
   if (moduleId === 'gym' || moduleId === 'gymSplit') {
-    // Use `mod` (already resolved at top of renderExercises) for reliable label lookup.
-    // This avoids any APP_DATA_DEFAULT vs APP_DATA inconsistency for new modules.
-    const _savedContent = Store.getContent('exercises_' + moduleId);
-    const _savedLabels  = _savedContent?.dayLabels || {};
+    // Use mod (already resolved above) for reliable label lookup — avoids
+    // any APP_DATA_DEFAULT vs APP_DATA inconsistency for newly added modules.
+    const _savedContent  = Store.getContent('exercises_' + moduleId);
+    const _savedLabels   = _savedContent?.dayLabels || {};
     const _defaultLabels = mod?.dayLabels || {};
     const dayLabel = _savedLabels[day] || _defaultLabels[day]
       || (moduleId === 'gymSplit' ? day + ' — Physique Split' : day + ' — Gym Workout');
-    // Remove BOTH label types so a stale label from the other gym program never shows through
+    // Remove BOTH label types so a stale label never shows through
     document.getElementById('gym-day-label')?.remove();
     document.getElementById('gymsplit-day-label')?.remove();
-    const _labelId = (moduleId === 'gymSplit') ? 'gymsplit-day-label' : 'gym-day-label';
-    const labelEl = document.createElement('div');
-    labelEl.id = _labelId;
+    const _labelId = moduleId === 'gymSplit' ? 'gymsplit-day-label' : 'gym-day-label';
+    const labelEl  = document.createElement('div');
+    labelEl.id     = _labelId;
     labelEl.style.cssText = moduleId === 'gymSplit'
       ? 'background:linear-gradient(135deg,rgba(124,58,237,0.2),rgba(109,40,217,0.1));border:1px solid rgba(124,58,237,0.4);border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:15px;font-weight:700;color:#c4b5fd;letter-spacing:0.02em;'
       : 'background:linear-gradient(135deg,rgba(46,125,70,0.25),rgba(30,100,50,0.15));border:1px solid rgba(46,125,70,0.4);border-radius:12px;padding:12px 16px;margin-bottom:14px;font-size:15px;font-weight:700;color:var(--g5);letter-spacing:0.02em;';
@@ -1547,7 +1521,7 @@ function updateCompleteBtn() {
 
   // Gym uses plain text rows — no interactive checkboxes, so sets can never be
   // "checked". Treat gym as always ready to log (or already logged).
-  const isGymModule = mod === 'gym';
+  const isGymModule = mod === 'gym' || mod === 'gymSplit';
   const isHoldBased = mod === 'yoga' || mod === 'stretching';
 
   const totalSets = isHoldBased
@@ -2207,7 +2181,7 @@ function _showHistoryWorkoutDetail(moduleId, date, day) {
   // ── MODULE-AWARE EXERCISE FETCHING ────────────────────────────────
   // Each module stores its exercise data differently.
   // We must read from the right source or the list will be empty.
-  const isGymModule    = moduleId === 'gym';
+  const isGymModule    = moduleId === 'gym' || moduleId === 'gymSplit';
   const isYogaModule   = moduleId === 'yoga';
   const isCaliModule   = moduleId === 'calisthenics';
   const isCrossTrainModule = moduleId === 'crosstraining';
@@ -2291,7 +2265,7 @@ function _showHistoryWorkoutDetail(moduleId, date, day) {
   const rawDoneSets = Object.values(sessionData).flat().length;
   const totalSets   = allExercises.reduce((a, ex) => a + (parseInt(ex.sets) || 1), 0);
   const noSetData   = rawDoneSets === 0;
-  const treatAsFull = wasLogged && (isGymModule || isYogaModule || isCaliModule || isCustomModule || noSetData);
+  const treatAsFull = wasLogged && (isGymModule || isYogaModule || isCaliModule || isCustomModule || noSetData); // isGymModule already includes gymSplit
   const doneSets    = treatAsFull ? totalSets : rawDoneSets;
   const pct         = totalSets > 0 ? Math.round(doneSets / totalSets * 100) : (wasLogged ? 100 : 0);
 
@@ -2748,14 +2722,14 @@ function getModuleEmoji(mod) {
     const act = window.APP_DATA?.getActivity?.(mod.replace(/^activity_/, ''));
     if (act) return act.emoji;
   }
-  return { cardio: '🏠', gym: '🏋️', yoga: '🧘', stretching: '🙆', running: '🏃', calisthenics: '🤸‍♂️', crosstraining: '💪', core: '🔥' }[mod] || '💪';
+  return { cardio: '🏠', gym: '🏋️', gymSplit: '💪', yoga: '🧘', stretching: '🙆', running: '🏃', calisthenics: '🤸‍♂️', crosstraining: '💪', core: '🔥' }[mod] || '💪';
 }
 function getModuleName(mod) {
   if (typeof mod === 'string' && mod.startsWith('activity_')) {
     const act = window.APP_DATA?.getActivity?.(mod.replace(/^activity_/, ''));
     if (act) return act.name;
   }
-  return { cardio: 'Home Cardio', gym: 'Gym Workouts', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics', crosstraining: 'Cross Training', core: 'Core & Abs' }[mod] || mod;
+  return { cardio: 'Home Cardio', gym: 'Gym Workouts', gymSplit: 'Physique Split', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics', crosstraining: 'Cross Training', core: 'Core & Abs' }[mod] || mod;
 }
 // Activity-aware emoji/label for GPS activities (run / walk / cycle)
 function _getActivityEmoji(activityType) {
