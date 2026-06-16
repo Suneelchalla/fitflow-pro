@@ -466,6 +466,12 @@ window.addEventListener('appinstalled', () => {
 });
 
 function selectActivityType(type, el) {
+  // Block switching activity type while a session is alive
+  if (APP.runSession) {
+    const _am = ACTIVITY_META[APP.runSession.activityType || _activityType] || ACTIVITY_META.run;
+    showToast(`${_am.emoji} ${_am.label} is already active — end it first to switch.`, 'info');
+    return;
+  }
   _activityType = type;
   document.querySelectorAll('.activity-pill').forEach(p => p.classList.remove('active'));
   if (el) el.classList.add('active');
@@ -2756,122 +2762,212 @@ function discardRun() {
 // arrow, ended up on dashboard, and had no idea their run was still polling
 // GPS in the background. The pill has two actions: "Return" (back to the
 // running page) and "End" (fully clear the session — calls discardRun()).
-const _BANNER_ID = 'run-in-progress-banner';
+
+
+const _BANNER_ID = 'live-activity-pill';
+
+// One-time CSS: pulse animation + pill styles injected into <head> once
+function _injectPillStyles() {
+  if (document.getElementById('_lapKf')) return;
+  const st = document.createElement('style');
+  st.id = '_lapKf';
+  st.textContent = `
+    @keyframes _lapFadeIn {
+      from { transform: translateX(-50%) translateY(14px) scale(0.97); opacity: 0; }
+      to   { transform: translateX(-50%) translateY(0)    scale(1);    opacity: 1; }
+    }
+    @keyframes _lapPulse {
+      0%, 100% { opacity: 1;   transform: scale(1);    }
+      50%       { opacity: 0.3; transform: scale(0.75); }
+    }
+    #live-activity-pill {
+      position: fixed;
+      bottom: calc(env(safe-area-inset-bottom, 0px) + 68px);
+      left: 50%; transform: translateX(-50%);
+      width: calc(100% - 24px); max-width: 456px;
+      z-index: 9990;
+      background: rgba(7, 21, 16, 0.97);
+      border: 1.5px solid rgba(67, 160, 90, 0.55);
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 6px 28px rgba(0,0,0,0.55), 0 0 0 1px rgba(67,160,90,0.15);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      font-family: var(--font-body, sans-serif);
+      animation: _lapFadeIn .22s cubic-bezier(.22,.68,0,1.2) both;
+      cursor: pointer;
+    }
+    #live-activity-pill:active { filter: brightness(1.12); }
+    #live-activity-pill ._lap-inner {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 10px 10px 14px;
+    }
+    #live-activity-pill ._lap-dot {
+      width: 9px; height: 9px; border-radius: 50%;
+      background: #e53935; flex-shrink: 0;
+      animation: _lapPulse 1.4s ease-in-out infinite;
+      box-shadow: 0 0 6px rgba(229,57,53,0.7);
+    }
+    #live-activity-pill[data-paused="true"] ._lap-dot {
+      background: #f0c040;
+      box-shadow: 0 0 6px rgba(240,192,64,0.6);
+      animation: none;
+    }
+    #live-activity-pill ._lap-text { flex: 1; min-width: 0; }
+    #live-activity-pill ._lap-top {
+      font-size: 10px; font-weight: 700; color: var(--g5, #7ed9a0);
+      text-transform: uppercase; letter-spacing: .08em; line-height: 1;
+    }
+    #live-activity-pill ._lap-stats {
+      font-size: 13px; font-weight: 500; color: #fff;
+      margin-top: 3px; white-space: nowrap;
+      overflow: hidden; text-overflow: ellipsis; line-height: 1;
+    }
+    #live-activity-pill ._lap-pace {
+      font-size: 11px; color: rgba(255,255,255,0.55);
+      margin-top: 2px; line-height: 1;
+    }
+    #live-activity-pill ._lap-actions {
+      display: flex; align-items: center; gap: 6px; flex-shrink: 0;
+    }
+    #live-activity-pill ._lap-return {
+      border: none;
+      background: linear-gradient(135deg, #2e7d46, #43a05a);
+      color: #fff; font-size: 12px; font-weight: 700;
+      padding: 8px 13px; border-radius: 10px; cursor: pointer;
+      white-space: nowrap;
+    }
+    #live-activity-pill ._lap-end {
+      border: 1px solid rgba(229,57,53,0.45);
+      background: transparent; color: #ef9a9a;
+      font-size: 11px; font-weight: 600;
+      padding: 7px 9px; border-radius: 10px; cursor: pointer;
+      white-space: nowrap;
+    }
+  `;
+  document.head.appendChild(st);
+}
 
 function _updateRunInProgressBanner() {
-  const existing = document.getElementById(_BANNER_ID);
+  const existing      = document.getElementById(_BANNER_ID);
   const onRunningPage = APP.currentPage === 'page-running';
   const sessionAlive  = !!APP.runSession;
 
-  // Hide / remove when: no session, OR currently viewing the run page itself
   if (!sessionAlive || onRunningPage) {
-    if (existing) existing.remove();
+    if (existing) {
+      existing.style.transition = 'opacity .18s, transform .18s';
+      existing.style.opacity   = '0';
+      existing.style.transform = 'translateX(-50%) translateY(10px)';
+      setTimeout(() => { if (existing.parentNode) existing.remove(); }, 180);
+    }
     return;
   }
 
-  // Compute live snapshot for the label
-  const s        = APP.runSession;
-  const meta     = ACTIVITY_META[s.activityType || _activityType] || ACTIVITY_META.run;
-  const elapsed  = _calcElapsed(s);
-  const distTxt  = (s.distance || 0).toFixed(2) + ' km';
-  const timeTxt  = fmtTime(elapsed);
-  const stateTag = s.paused ? '⏸ Paused' : `${meta.emoji} ${meta.label}`;
+  _injectPillStyles();
+
+  const s       = APP.runSession;
+  const meta    = ACTIVITY_META[s.activityType || _activityType] || ACTIVITY_META.run;
+  const elapsed = _calcElapsed(s);
+  const distTxt = (s.distance || 0).toFixed(2) + ' km';
+  const timeTxt = fmtTime(elapsed);
+  const paceTxt = s.distance > 0.05 ? fmtPace(s.distance, elapsed) + '/km' : '—';
+  const isPaused = !!s.paused;
+  const stateLabel = isPaused ? '⏸ Paused' : `${meta.emoji} ${meta.label} · Recording`;
 
   if (existing) {
-    // Repaint label in place — preserves entry animation, no DOM churn
-    const lbl = existing.querySelector('[data-banner-label]');
-    if (lbl) lbl.textContent = `${stateTag}  ·  ${distTxt}  ·  ${timeTxt}`;
+    existing.setAttribute('data-paused', isPaused ? 'true' : 'false');
+    const statsEl = existing.querySelector('._lap-stats');
+    const paceEl  = existing.querySelector('._lap-pace');
+    const topEl   = existing.querySelector('._lap-top');
+    if (statsEl) statsEl.textContent = `${distTxt}  ·  ${timeTxt}`;
+    if (paceEl)  paceEl.textContent  = isPaused ? 'Tap to return' : `Pace ${paceTxt}`;
+    if (topEl)   topEl.textContent   = stateLabel;
     return;
   }
 
-  // Build the banner from scratch
   const el = document.createElement('div');
   el.id = _BANNER_ID;
-  el.style.cssText = `
-    position:fixed;left:12px;right:12px;
-    bottom:calc(env(safe-area-inset-bottom,0px) + 76px);
-    z-index:9990;
-    background:rgba(7,21,16,0.96);
-    border:1px solid rgba(67,160,90,0.5);
-    border-radius:14px;
-    padding:10px 12px 10px 14px;
-    display:flex;align-items:center;gap:10px;
-    box-shadow:0 8px 24px rgba(0,0,0,0.5);
-    backdrop-filter:blur(10px);
-    font-family:var(--font-body);
-    animation:_rbnFadeIn .25s ease;
-  `;
+  el.setAttribute('data-paused', isPaused ? 'true' : 'false');
+  el.setAttribute('role', 'button');
+  el.setAttribute('aria-label', 'Return to active ' + meta.label);
+
   el.innerHTML = `
-    <div style="flex:1;min-width:0">
-      <div style="font-size:10px;font-weight:700;color:var(--g5);text-transform:uppercase;letter-spacing:.08em">Run in progress</div>
-      <div data-banner-label style="font-size:13px;color:#fff;font-weight:500;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${stateTag}  ·  ${distTxt}  ·  ${timeTxt}</div>
+    <div class="_lap-inner">
+      <div class="_lap-dot"></div>
+      <div class="_lap-text">
+        <div class="_lap-top">${stateLabel}</div>
+        <div class="_lap-stats">${distTxt}  ·  ${timeTxt}</div>
+        <div class="_lap-pace">${isPaused ? 'Tap to return' : 'Pace ' + paceTxt}</div>
+      </div>
+      <div class="_lap-actions">
+        <button class="_lap-return" aria-label="Return to run">Return</button>
+        <button class="_lap-end"    aria-label="End and clear">End</button>
+      </div>
     </div>
-    <button data-banner-return aria-label="Return to run"
-      style="flex-shrink:0;border:none;background:linear-gradient(135deg,#2e7d46,#43a05a);color:#fff;font-size:12px;font-weight:700;padding:8px 12px;border-radius:10px;cursor:pointer">
-      Return
-    </button>
-    <button data-banner-end aria-label="End run and clear"
-      style="flex-shrink:0;border:1px solid rgba(229,57,53,0.5);background:transparent;color:#ef9a9a;font-size:12px;font-weight:600;padding:8px 10px;border-radius:10px;cursor:pointer">
-      End
-    </button>
   `;
-  // One-time CSS keyframe injection
-  if (!document.getElementById('_rbnKf')) {
-    const st = document.createElement('style');
-    st.id = '_rbnKf';
-    st.textContent = '@keyframes _rbnFadeIn{from{transform:translateY(12px);opacity:0}to{transform:translateY(0);opacity:1}}';
-    document.head.appendChild(st);
-  }
+
   document.body.appendChild(el);
 
-  el.querySelector('[data-banner-return]').addEventListener('click', e => {
-    e.stopPropagation();
-    if (typeof openModule === 'function') openModule('running');
-    else showPage('page-running');
+  el.addEventListener('click', e => {
+    if (e.target.closest('._lap-end')) return;
+    _returnToActivity();
   });
-  el.querySelector('[data-banner-end]').addEventListener('click', e => {
+
+  el.querySelector('._lap-end').addEventListener('click', e => {
     e.stopPropagation();
-    if (typeof showConfirm === 'function') {
-      showConfirm(
-        'End run?',
-        'This clears the saved session — distance and route will be lost.',
-        'End run',
-        'Keep',
-        () => { discardRun(); _updateRunInProgressBanner(); },
-        null,
-        'danger'
-      );
-    } else if (confirm('End run? Saved session will be discarded.')) {
-      discardRun(); _updateRunInProgressBanner();
-    }
+    _confirmEndActivity();
   });
 }
 
-// Refresh the banner every second so the live time/distance stay current
-// while the user is on dashboard / other pages with an active run alive.
-// Also self-heals if a page transition happens — re-adds the banner when
-// returning from page-running, removes it when leaving for page-running.
+function _returnToActivity() {
+  showPage('page-running');
+  if (typeof _syncRunPageState === 'function') {
+    _syncRunPageState();
+  } else {
+    const active = document.getElementById('run-active');
+    const idle   = document.getElementById('run-idle');
+    if (active && APP.runSession) active.classList.remove('hidden');
+    if (idle)                     idle.style.display = 'none';
+  }
+  if (typeof window.refreshBottomNav === 'function') window.refreshBottomNav();
+}
+
+function _confirmEndActivity() {
+  const meta = APP.runSession
+    ? ACTIVITY_META[APP.runSession.activityType || _activityType] || ACTIVITY_META.run
+    : ACTIVITY_META.run;
+  if (typeof showConfirm === 'function') {
+    showConfirm(
+      `End ${meta.label}?`,
+      'Your session will be discarded — distance and route will be lost.',
+      `End ${meta.label}`,
+      'Keep going',
+      () => { discardRun(); _updateRunInProgressBanner(); },
+      null,
+      'danger'
+    );
+  } else if (confirm(`End ${meta.label}? Session will be discarded.`)) {
+    discardRun();
+    _updateRunInProgressBanner();
+  }
+}
+
 setInterval(() => {
-  if (!APP.runSession && !document.getElementById(_BANNER_ID)) return; // nothing to do
+  if (!APP.runSession && !document.getElementById(_BANNER_ID)) return;
   _updateRunInProgressBanner();
 }, 1000);
 
-// ── EXIT-ACTIVE-RUN CONFIRMATION ────────────────────────────────
-// Replacement for the old in-active-run back-arrow handler, which navigated
-// straight to dashboard while leaving GPS, wake-lock and silent audio all
-// still firing in the background. Now: pause first (which fully releases
-// every background resource via the rewritten togglePauseRun), then navigate.
-// The persistent banner lets the user resume or end the run from anywhere.
 function exitActiveRunWithConfirm() {
   if (!APP.runSession) {
     showPage('page-dashboard');
     if (typeof refreshDashboard === 'function') refreshDashboard();
     return;
   }
+  const meta = ACTIVITY_META[APP.runSession.activityType || _activityType] || ACTIVITY_META.run;
   if (typeof showConfirm === 'function') {
     showConfirm(
-      'Pause and exit?',
-      'Your run will be paused and GPS will stop. Return any time from the banner.',
+      `Pause and exit ${meta.label}?`,
+      'GPS will pause. Return any time using the live pill at the bottom.',
       'Pause & Exit',
       'Stay',
       () => {
@@ -2890,6 +2986,7 @@ function exitActiveRunWithConfirm() {
     _updateRunInProgressBanner();
   }
 }
+
 
 // ── BOOT-TIME ORPHAN CLEANUP ────────────────────────────────────
 // Defensive belt-and-suspenders: in case any previous app version (or a
