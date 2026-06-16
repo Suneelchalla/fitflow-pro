@@ -48,6 +48,25 @@ const ACTIVITY_META = {
 // Without this, global.ACTIVITY_META is undefined in run-video.js and
 // every generated video falls back to the hardcoded Run defaults.
 window.ACTIVITY_META = ACTIVITY_META;
+
+// Weight-adjusted calorie calc (MET-based, same as manual-activity.js).
+// Formula: kcal = distance_km × 1.036 × bodyWeightKg
+// Multipliers per activity type approximate MET differences.
+// Falls back to flat rate if no body weight is set.
+function _calcActivityKcal(distanceKm, activityType) {
+  const MET_MULT = { run: 1.036, walk: 0.74, cycle: 0.539 };
+  const mult = MET_MULT[activityType || 'run'] || MET_MULT.run;
+  try {
+    const uid = APP.currentUser && APP.currentUser.id;
+    const bp  = uid ? Store.get('ff_body_profile_' + uid, {}) : {};
+    const wt  = bp && bp.weight && +bp.weight > 0 ? +bp.weight : 70;
+    return Math.round(distanceKm * mult * wt);
+  } catch {
+    const meta = ACTIVITY_META[activityType || 'run'] || ACTIVITY_META.run;
+    return Math.round(distanceKm * meta.kcalPerKm);
+  }
+}
+
 let _activityType = 'run';   // selected on idle screen, saved with run
 
 // ── WARMUP + COOLDOWN GUIDES (per activity type) ─────────────────
@@ -466,12 +485,6 @@ window.addEventListener('appinstalled', () => {
 });
 
 function selectActivityType(type, el) {
-  // Block switching activity type while a session is alive
-  if (APP.runSession) {
-    const _am = ACTIVITY_META[APP.runSession.activityType || _activityType] || ACTIVITY_META.run;
-    showToast(`${_am.emoji} ${_am.label} is already active — end it first to switch.`, 'info');
-    return;
-  }
   _activityType = type;
   document.querySelectorAll('.activity-pill').forEach(p => p.classList.remove('active'));
   if (el) el.classList.add('active');
@@ -898,7 +911,7 @@ function _activityNotifPayload(type) {
     time:     fmtTime(elapsed),
     pace:     fmtPace(s.distance, elapsed),
     speed:    displaySpeed.toFixed(1),
-    kcal:     Math.round(s.distance * meta.kcalPerKm),
+    kcal:     _calcActivityKcal(s.distance, s.activityType || _activityType),
     paused:   !!s.paused,
   };
 }
@@ -1261,7 +1274,7 @@ function _saveRunSession() {
   if (coordsToSave.length > 2000) {
     coordsToSave = coordsToSave.filter((_, i) => i % 2 === 0);
   }
-  Store.set(RUN_SESSION_KEY, {
+  const _saved = Store.set(RUN_SESSION_KEY, {
     startTime:    APP.runSession.startTime,
     pausedAt:     APP.runSession.pausedAt    || null,
     totalPaused:  APP.runSession.totalPaused || 0,
@@ -1269,9 +1282,24 @@ function _saveRunSession() {
     paused:       APP.runSession.paused,
     activityType: APP.runSession.activityType || _activityType,
     locationName: APP.runSession.locationName || '',
-    locked:       !!APP.runSession.locked,  // preserve activity-lock state across backgrounding / app restart
+    locked:       !!APP.runSession.locked,
     coords:       coordsToSave,
   });
+  if (!_saved) {
+    // Storage quota exceeded — try without coords to at least save progress
+    Store.set(RUN_SESSION_KEY, {
+      startTime:    APP.runSession.startTime,
+      pausedAt:     APP.runSession.pausedAt    || null,
+      totalPaused:  APP.runSession.totalPaused || 0,
+      distance:     APP.runSession.distance,
+      paused:       APP.runSession.paused,
+      activityType: APP.runSession.activityType || _activityType,
+      locationName: APP.runSession.locationName || '',
+      locked:       !!APP.runSession.locked,
+      coords:       [],
+    });
+    if (typeof showToast === 'function') showToast('⚠️ Storage almost full — clear old history to preserve route data.', 'info');
+  }
 }
 
 function _clearRunSession() {
@@ -1284,7 +1312,7 @@ function _calcElapsed(session) {
   const paused     = session.totalPaused || 0;
   const pauseExtra = (session.paused && session.pausedAt)
                      ? (now - session.pausedAt) : 0;
-  return Math.floor((now - session.startTime - paused - pauseExtra) / 1000);
+  return Math.max(0, Math.floor((now - session.startTime - paused - pauseExtra) / 1000));
 }
 
 // ── FIX #3: Save on pagehide (fires reliably on Android before kill) ──
@@ -1999,6 +2027,7 @@ let _gpsWarmupCount  = 0;          // counts received fixes during warmup phase
 let _gpsLastGoodFix  = null;       // last confirmed-accurate position
 let _stillSince      = null;       // timestamp when user stopped moving (for auto-pause)
 let _currentGpsSpeed = null;       // real-time speed from GPS (km/h), null if unavailable
+let _lastGpsSpeedTs  = 0;          // timestamp of last GPS fix that included speed
 const AUTO_PAUSE_STILL_MS = 180000; // suggest auto-pause after 180s (3 min) of no movement
 
 // ── LOCK SCREEN AUTO-PAUSE ───────────────────────────────────────
@@ -2168,6 +2197,7 @@ function _doStartRun() {
   _locationLastAttemptTs   = 0;
   _locationAttempts        = 0;
   _currentGpsSpeed = null;
+  _lastGpsSpeedTs  = 0;
   _userPanned      = false;  // reset pan lock so map auto-centers from first GPS fix
   _rotationEnabled = true;   // re-enable rotation for new activity
   _mapBearing      = 0;
@@ -2381,18 +2411,33 @@ function startGPS() {
         _gpsLastGoodFix = { lat, lon, ts: nowTs };
       }
 
-      // Track real-time GPS speed for live display
+      // Track real-time GPS speed. Record timestamp so we can decay stale values.
       const _speedNow = pos.coords.speed != null ? pos.coords.speed * 3.6 : null;
-      if (_speedNow !== null && _speedNow >= 0) _currentGpsSpeed = _speedNow;
+      if (_speedNow !== null && _speedNow >= 0) {
+        _currentGpsSpeed = _speedNow;
+        _lastGpsSpeedTs  = nowTs;
+      } else if (_lastGpsSpeedTs && (nowTs - _lastGpsSpeedTs) > 5000) {
+        _currentGpsSpeed = null; // decay stale speed after 5s without a fresh reading
+      }
 
-      // Auto-pause detection: if speed < 0.5 km/h for AUTO_PAUSE_STILL_MS, prompt user
-      if (_speedNow !== null && _speedNow < 0.5) {
+      // Auto-pause detection.
+      // Primary: use GPS-reported speed. Fallback: derive from haversine displacement
+      // over last 30s for devices that don't report pos.coords.speed (common on Android).
+      let _effectiveSpeed = _speedNow;
+      if (_effectiveSpeed === null && _gpsLastGoodFix) {
+        const dtSec = (nowTs - _gpsLastGoodFix.ts) / 1000;
+        if (dtSec > 0 && dtSec < 30) {
+          const dKm = haversine(_gpsLastGoodFix.lat, _gpsLastGoodFix.lon, lat, lon);
+          _effectiveSpeed = (dKm / dtSec) * 3600;
+        }
+      }
+      if (_effectiveSpeed !== null && _effectiveSpeed < 0.5) {
         if (!_stillSince) _stillSince = nowTs;
         else if (nowTs - _stillSince > AUTO_PAUSE_STILL_MS && !APP.runSession.paused) {
           _stillSince = null;
           _showAutoPausePrompt();
         }
-      } else {
+      } else if (_effectiveSpeed !== null) {
         _stillSince = null;
       }
 
@@ -2465,7 +2510,7 @@ function updateRunDisplay() {
   if (distEl)  distEl.textContent  = s.distance.toFixed(2);
   if (paceEl)  paceEl.textContent  = fmtPace(s.distance, elapsed);
   if (speedEl) speedEl.textContent = displaySpeed.toFixed(1);
-  if (calEl)   calEl.textContent   = Math.round(s.distance * meta.kcalPerKm);
+  if (calEl)   calEl.textContent   = _calcActivityKcal(s.distance, s.activityType || _activityType);
 }
 
 // ── PAUSE / RESUME ────────────────────────────────────────────────
@@ -2500,6 +2545,7 @@ function togglePauseRun() {
     _gpsWarmupCount  = 0;
     _gpsLastGoodFix  = null;
     _currentGpsSpeed = null;
+    _lastGpsSpeedTs  = 0;
     _kalman.reset();   // fresh filter state after pause — GPS may have drifted
     startGPS();
     _requestWakeLock();             // re-acquire screen wake lock + keep-alive
@@ -2544,13 +2590,13 @@ function stopRun() {
   const s       = APP.runSession;
   const elapsed = s ? _calcElapsed(s) : 0;
 
-  if (!s || elapsed < 10) {
+  if (!s || elapsed < 10 || (s.distance || 0) < 0.01) {
     document.getElementById('run-idle').style.display = 'flex';
     document.getElementById('run-active').classList.add('hidden');
     APP.runSession = null;
     _clearRunSession();
-    stopActivityNotification(); // always clear notification — even for short/discarded runs
-    if (elapsed > 0) showToast('Run was too short — not saved.', 'info');
+    stopActivityNotification();
+    if (elapsed > 0) showToast('Activity too short — not saved.', 'info');
     return;
   }
 
@@ -2572,7 +2618,7 @@ function stopRun() {
   document.getElementById('sum-time').textContent  = fmtTime(elapsed);
   document.getElementById('sum-pace').textContent  = fmtPace(s.distance, elapsed);
   document.getElementById('sum-speed').textContent = speedKph.toFixed(1) + ' km/h';
-  document.getElementById('sum-cal').textContent   = Math.round(s.distance * meta.kcalPerKm) + ' kcal';
+  document.getElementById('sum-cal').textContent   = _calcActivityKcal(s.distance, s.activityType || _activityType) + ' kcal';
 
   _renderRunPBBadges(s.distance, elapsed);
   // Render km splits in summary
@@ -2617,11 +2663,10 @@ function showSaveActivity() {
 
   const strip = document.getElementById('save-stats-strip');
   if (strip) {
-    const kcal = Math.round(s.distance * meta.kcalPerKm);
     strip.innerHTML = [
       { label:'Distance', val: s.distance.toFixed(2)+' km', color: meta.color },
       { label:'Time',     val: fmtTime(elapsed),            color: 'var(--text)' },
-      { label:'Calories', val: kcal+' kcal',                color: 'var(--text)' },
+      { label:'Calories', val: _calcActivityKcal(s.distance, s.activityType || _activityType)+' kcal', color: 'var(--text)' },
     ].map(st => `<div style="background:var(--surface);border-radius:12px;padding:12px;
         border:1px solid var(--border);text-align:center">
         <div style="font-size:18px;font-weight:700;color:${st.color}">${st.val}</div>
@@ -2662,10 +2707,17 @@ function saveRun() {
     description:  activityDesc,
     locationName: s.locationName || '',   // start-area from reverse geocoding
     timestamp:    new Date(s.startTime).toISOString(),  // activity START time, not save time
-    // Save coords for history detail map (thin to max 500 points to keep storage small)
-    coords:       APP.gpsCoords.length > 500
-                    ? APP.gpsCoords.filter((_, i) => i % Math.ceil(APP.gpsCoords.length / 500) === 0)
-                    : APP.gpsCoords.slice(),
+    kcal:         _calcActivityKcal(s.distance, s.activityType || _activityType),
+    // Thin coords for storage using RDP (preserves timestamps + shape better than index-thinning)
+    coords:       (() => {
+      const raw = APP.gpsCoords;
+      if (raw.length <= 500) return raw.slice();
+      const lls = raw.map(c => [c.lat, c.lon]);
+      const kept = _simplifyRDP(lls, 6);
+      const keptSet = new Set(kept.map(p => p[0]+','+p[1]));
+      const out = raw.filter(c => keptSet.has(c.lat+','+c.lon));
+      return out.length <= 500 ? out : out.filter((_, i) => i % Math.ceil(out.length / 500) === 0);
+    })(),
   };
 
   Store.addRunLog(log);
@@ -2721,8 +2773,14 @@ function discardRun() {
   APP.runSession  = null;
   _gpsWarmupCount      = 0;
   _gpsLastGoodFix      = null;
-  _currentGpsSpeed     = null;
-  _lockedWhileRunning  = false;
+  _currentGpsSpeed         = null;
+  _lastGpsSpeedTs          = 0;
+  _stillSince              = null;
+  _locationFetched         = false;
+  _locationFetchInProgress = false;
+  _locationAttempts        = 0;
+  _bearingHistory          = [];
+  _lockedWhileRunning      = false;
   _kalman.reset();
   _clearRunSession();
   LockScreen.stop();
@@ -2762,281 +2820,122 @@ function discardRun() {
 // arrow, ended up on dashboard, and had no idea their run was still polling
 // GPS in the background. The pill has two actions: "Return" (back to the
 // running page) and "End" (fully clear the session — calls discardRun()).
-
-
-const _BANNER_ID = 'live-activity-pill';
-
-// One-time CSS: pulse animation + pill styles injected into <head> once
-function _injectPillStyles() {
-  if (document.getElementById('_lapKf')) return;
-  const st = document.createElement('style');
-  st.id = '_lapKf';
-  st.textContent = `
-    @keyframes _lapFadeIn {
-      from { transform: translateX(-50%) translateY(14px) scale(0.97); opacity: 0; }
-      to   { transform: translateX(-50%) translateY(0)    scale(1);    opacity: 1; }
-    }
-    @keyframes _lapPulse {
-      0%, 100% { opacity: 1;   transform: scale(1);    }
-      50%       { opacity: 0.3; transform: scale(0.75); }
-    }
-    #live-activity-pill {
-      position: fixed;
-      bottom: calc(env(safe-area-inset-bottom, 0px) + 68px);
-      left: 50%; transform: translateX(-50%);
-      width: calc(100% - 24px); max-width: 456px;
-      z-index: 9990;
-      background: rgba(7, 21, 16, 0.97);
-      border: 1.5px solid rgba(67, 160, 90, 0.55);
-      border-radius: 16px;
-      overflow: hidden;
-      box-shadow: 0 6px 28px rgba(0,0,0,0.55), 0 0 0 1px rgba(67,160,90,0.15);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      font-family: var(--font-body, sans-serif);
-      animation: _lapFadeIn .22s cubic-bezier(.22,.68,0,1.2) both;
-      cursor: pointer;
-    }
-    #live-activity-pill:active { filter: brightness(1.12); }
-    #live-activity-pill ._lap-inner {
-      display: flex; align-items: center; gap: 10px;
-      padding: 10px 10px 10px 14px;
-    }
-    #live-activity-pill ._lap-dot {
-      width: 9px; height: 9px; border-radius: 50%;
-      background: #e53935; flex-shrink: 0;
-      animation: _lapPulse 1.4s ease-in-out infinite;
-      box-shadow: 0 0 6px rgba(229,57,53,0.7);
-    }
-    #live-activity-pill[data-paused="true"] ._lap-dot {
-      background: #f0c040;
-      box-shadow: 0 0 6px rgba(240,192,64,0.6);
-      animation: none;
-    }
-    #live-activity-pill ._lap-text { flex: 1; min-width: 0; }
-    #live-activity-pill ._lap-top {
-      font-size: 10px; font-weight: 700; color: var(--g5, #7ed9a0);
-      text-transform: uppercase; letter-spacing: .08em; line-height: 1;
-    }
-    #live-activity-pill ._lap-stats {
-      font-size: 13px; font-weight: 500; color: #fff;
-      margin-top: 3px; white-space: nowrap;
-      overflow: hidden; text-overflow: ellipsis; line-height: 1;
-    }
-    #live-activity-pill ._lap-pace {
-      font-size: 11px; color: rgba(255,255,255,0.55);
-      margin-top: 2px; line-height: 1;
-    }
-    #live-activity-pill ._lap-actions {
-      display: flex; align-items: center; gap: 6px; flex-shrink: 0;
-    }
-    #live-activity-pill ._lap-return {
-      border: none;
-      background: linear-gradient(135deg, #2e7d46, #43a05a);
-      color: #fff; font-size: 12px; font-weight: 700;
-      padding: 8px 13px; border-radius: 10px; cursor: pointer;
-      white-space: nowrap;
-    }
-    #live-activity-pill ._lap-end {
-      border: 1px solid rgba(229,57,53,0.45);
-      background: transparent; color: #ef9a9a;
-      font-size: 11px; font-weight: 600;
-      padding: 7px 9px; border-radius: 10px; cursor: pointer;
-      white-space: nowrap;
-    }
-  `;
-  document.head.appendChild(st);
-}
+const _BANNER_ID = 'run-in-progress-banner';
 
 function _updateRunInProgressBanner() {
-  const existing      = document.getElementById(_BANNER_ID);
-  const onRunningPage = APP.currentPage === 'page-running';
-  const sessionAlive  = !!APP.runSession;
+  const existing = document.getElementById(_BANNER_ID);
+  // Only hide pill when the user is actually watching the full-screen run-active map.
+  // On page-running tabs (history, plans etc.) the pill should still show.
+  const runActiveVisible = APP.currentPage === 'page-running' &&
+    !document.getElementById('run-active')?.classList.contains('hidden');
+  const sessionAlive = !!APP.runSession;
 
-  if (!sessionAlive || onRunningPage) {
-    if (existing) {
-      existing.style.transition = 'opacity .18s, transform .18s';
-      existing.style.opacity   = '0';
-      existing.style.transform = 'translateX(-50%) translateY(10px)';
-      setTimeout(() => { if (existing.parentNode) existing.remove(); }, 180);
-    }
+  if (!sessionAlive || runActiveVisible) {
+    if (existing) existing.remove();
     return;
   }
 
-  _injectPillStyles();
-
-  const s       = APP.runSession;
-  const meta    = ACTIVITY_META[s.activityType || _activityType] || ACTIVITY_META.run;
-  const elapsed = _calcElapsed(s);
-  const distTxt = (s.distance || 0).toFixed(2) + ' km';
-  const timeTxt = fmtTime(elapsed);
-  const paceTxt = s.distance > 0.05 ? fmtPace(s.distance, elapsed) + '/km' : '—';
-  const isPaused = !!s.paused;
-  const stateLabel = isPaused ? '⏸ Paused' : `${meta.emoji} ${meta.label} · Recording`;
+  // Compute live snapshot for the label
+  const s        = APP.runSession;
+  const meta     = ACTIVITY_META[s.activityType || _activityType] || ACTIVITY_META.run;
+  const elapsed  = _calcElapsed(s);
+  const distTxt  = (s.distance || 0).toFixed(2) + ' km';
+  const timeTxt  = fmtTime(elapsed);
+  const stateTag = s.paused ? '⏸ Paused' : `${meta.emoji} ${meta.label}`;
 
   if (existing) {
-    existing.setAttribute('data-paused', isPaused ? 'true' : 'false');
-    const statsEl = existing.querySelector('._lap-stats');
-    const paceEl  = existing.querySelector('._lap-pace');
-    const topEl   = existing.querySelector('._lap-top');
-    if (statsEl) statsEl.textContent = `${distTxt}  ·  ${timeTxt}`;
-    if (paceEl)  paceEl.textContent  = isPaused ? 'Tap to return' : `Pace ${paceTxt}`;
-    if (topEl)   topEl.textContent   = stateLabel;
+    // Repaint label in place — preserves entry animation, no DOM churn
+    const lbl = existing.querySelector('[data-banner-label]');
+    if (lbl) lbl.textContent = `${stateTag}  ·  ${distTxt}  ·  ${timeTxt}`;
     return;
   }
 
+  // Build the banner from scratch
   const el = document.createElement('div');
   el.id = _BANNER_ID;
-  el.setAttribute('data-paused', isPaused ? 'true' : 'false');
-  el.setAttribute('role', 'button');
-  el.setAttribute('aria-label', 'Return to active ' + meta.label);
-
-  el.innerHTML = `
-    <div class="_lap-inner">
-      <div class="_lap-dot"></div>
-      <div class="_lap-text">
-        <div class="_lap-top">${stateLabel}</div>
-        <div class="_lap-stats">${distTxt}  ·  ${timeTxt}</div>
-        <div class="_lap-pace">${isPaused ? 'Tap to return' : 'Pace ' + paceTxt}</div>
-      </div>
-      <div class="_lap-actions">
-        <button class="_lap-return" aria-label="Return to run">Return</button>
-        <button class="_lap-end"    aria-label="End and clear">End</button>
-      </div>
-    </div>
+  el.style.cssText = `
+    position:fixed;left:12px;right:12px;
+    bottom:calc(env(safe-area-inset-bottom,0px) + 76px);
+    z-index:9990;
+    background:rgba(7,21,16,0.96);
+    border:1px solid rgba(67,160,90,0.5);
+    border-radius:14px;
+    padding:10px 12px 10px 14px;
+    display:flex;align-items:center;gap:10px;
+    box-shadow:0 8px 24px rgba(0,0,0,0.5);
+    backdrop-filter:blur(10px);
+    font-family:var(--font-body);
+    animation:_rbnFadeIn .25s ease;
   `;
-
+  el.innerHTML = `
+    <div style="flex:1;min-width:0">
+      <div style="font-size:10px;font-weight:700;color:var(--g5);text-transform:uppercase;letter-spacing:.08em">Run in progress</div>
+      <div data-banner-label style="font-size:13px;color:#fff;font-weight:500;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${stateTag}  ·  ${distTxt}  ·  ${timeTxt}</div>
+    </div>
+    <button data-banner-return aria-label="Return to run"
+      style="flex-shrink:0;border:none;background:linear-gradient(135deg,#2e7d46,#43a05a);color:#fff;font-size:12px;font-weight:700;padding:8px 12px;border-radius:10px;cursor:pointer">
+      Return
+    </button>
+    <button data-banner-end aria-label="End run and clear"
+      style="flex-shrink:0;border:1px solid rgba(229,57,53,0.5);background:transparent;color:#ef9a9a;font-size:12px;font-weight:600;padding:8px 10px;border-radius:10px;cursor:pointer">
+      End
+    </button>
+  `;
+  // One-time CSS keyframe injection
+  if (!document.getElementById('_rbnKf')) {
+    const st = document.createElement('style');
+    st.id = '_rbnKf';
+    st.textContent = '@keyframes _rbnFadeIn{from{transform:translateY(12px);opacity:0}to{transform:translateY(0);opacity:1}}';
+    document.head.appendChild(st);
+  }
   document.body.appendChild(el);
 
-  el.addEventListener('click', e => {
-    if (e.target.closest('._lap-end')) return;
-    _returnToActivity();
-  });
-
-  el.querySelector('._lap-end').addEventListener('click', e => {
+  el.querySelector('[data-banner-return]').addEventListener('click', e => {
     e.stopPropagation();
-    _confirmEndActivity();
+    if (typeof openModule === 'function') openModule('running');
+    else showPage('page-running');
+  });
+  el.querySelector('[data-banner-end]').addEventListener('click', e => {
+    e.stopPropagation();
+    if (typeof showConfirm === 'function') {
+      showConfirm(
+        'End run?',
+        'This clears the saved session — distance and route will be lost.',
+        'End run',
+        'Keep',
+        () => { discardRun(); _updateRunInProgressBanner(); },
+        null,
+        'danger'
+      );
+    } else if (confirm('End run? Saved session will be discarded.')) {
+      discardRun(); _updateRunInProgressBanner();
+    }
   });
 }
 
-function _returnToActivity() {
-  showPage('page-running');
-  if (typeof _syncRunPageState === 'function') {
-    _syncRunPageState();
-  } else {
-    const active = document.getElementById('run-active');
-    const idle   = document.getElementById('run-idle');
-    if (active && APP.runSession) active.classList.remove('hidden');
-    if (idle)                     idle.style.display = 'none';
-  }
-  if (typeof window.refreshBottomNav === 'function') window.refreshBottomNav();
-}
-
-function _confirmEndActivity() {
-  const meta = APP.runSession
-    ? ACTIVITY_META[APP.runSession.activityType || _activityType] || ACTIVITY_META.run
-    : ACTIVITY_META.run;
-  if (typeof showConfirm === 'function') {
-    showConfirm(
-      `End ${meta.label}?`,
-      'Your session will be discarded — distance and route will be lost.',
-      `End ${meta.label}`,
-      'Keep going',
-      () => { discardRun(); _updateRunInProgressBanner(); },
-      null,
-      'danger'
-    );
-  } else if (confirm(`End ${meta.label}? Session will be discarded.`)) {
-    discardRun();
-    _updateRunInProgressBanner();
-  }
-}
-
+// Refresh the banner every second so the live time/distance stay current
+// while the user is on dashboard / other pages with an active run alive.
+// Also self-heals if a page transition happens — re-adds the banner when
+// returning from page-running, removes it when leaving for page-running.
 setInterval(() => {
-  if (!APP.runSession && !document.getElementById(_BANNER_ID)) return;
+  if (!APP.runSession && !document.getElementById(_BANNER_ID)) return; // nothing to do
   _updateRunInProgressBanner();
 }, 1000);
 
+// ── EXIT-ACTIVE-RUN CONFIRMATION ────────────────────────────────
+// Replacement for the old in-active-run back-arrow handler, which navigated
+// straight to dashboard while leaving GPS, wake-lock and silent audio all
+// still firing in the background. Now: pause first (which fully releases
+// every background resource via the rewritten togglePauseRun), then navigate.
+// The persistent banner lets the user resume or end the run from anywhere.
 function exitActiveRunWithConfirm() {
-  if (!APP.runSession) {
-    showPage('page-dashboard');
-    if (typeof refreshDashboard === 'function') refreshDashboard();
-    return;
-  }
-
-  // ── HIGH-Z CONFIRM OVERLAY ─────────────────────────────────────
-  // modal-confirm is z-index:500 which is hidden behind the run-active
-  // map overlay at z-index:1100. We need our own overlay that sits above
-  // the map so the user can actually see and tap the confirm dialog.
-  const meta = ACTIVITY_META[APP.runSession.activityType || _activityType] || ACTIVITY_META.run;
-
-  // Remove any existing overlay (safety)
-  document.getElementById('_exitRunOverlay')?.remove();
-
-  const ov = document.createElement('div');
-  ov.id = '_exitRunOverlay';
-  ov.style.cssText = [
-    'position:fixed', 'inset:0', 'z-index:9000',
-    'background:rgba(0,0,0,0.72)',
-    'display:flex', 'align-items:flex-end', 'justify-content:center',
-    'backdrop-filter:blur(4px)',
-    '-webkit-backdrop-filter:blur(4px)',
-  ].join(';');
-
-  ov.innerHTML = `
-    <div style="
-      background:#071510;
-      border-radius:20px 20px 0 0;
-      padding:24px 20px 36px;
-      width:100%; max-width:480px;
-      border:1px solid rgba(67,160,90,0.25);
-      border-bottom:none;
-    ">
-      <div style="width:36px;height:4px;border-radius:2px;background:rgba(255,255,255,0.2);margin:0 auto 20px;"></div>
-      <div style="font-size:18px;font-weight:700;color:#fff;margin-bottom:8px;">
-        Pause and exit ${meta.label}?
-      </div>
-      <div style="font-size:13px;color:rgba(255,255,255,0.6);line-height:1.6;margin-bottom:22px;">
-        GPS will stop. Your progress is saved — return any time using the pill at the bottom.
-      </div>
-      <div style="display:flex;gap:10px;">
-        <button id="_exitRunStay"
-          style="flex:1;padding:14px;border-radius:14px;
-            border:1px solid rgba(255,255,255,0.2);
-            background:transparent;color:rgba(255,255,255,0.8);
-            font-size:15px;font-weight:600;cursor:pointer;">
-          Stay
-        </button>
-        <button id="_exitRunConfirm"
-          style="flex:2;padding:14px;border-radius:14px;
-            border:none;
-            background:linear-gradient(135deg,#2e7d46,#43a05a);
-            color:#fff;font-size:15px;font-weight:700;cursor:pointer;">
-          Pause &amp; Exit
-        </button>
-      </div>
-    </div>`;
-
-  document.body.appendChild(ov);
-
-  document.getElementById('_exitRunStay').addEventListener('click', () => {
-    ov.remove();
-  });
-
-  document.getElementById('_exitRunConfirm').addEventListener('click', () => {
-    ov.remove();
-    if (APP.runSession && !APP.runSession.paused) togglePauseRun();
-    showPage('page-dashboard');
-    if (typeof refreshDashboard === 'function') refreshDashboard();
-    _updateRunInProgressBanner();
-  });
-
-  // Tap backdrop to dismiss (= Stay)
-  ov.addEventListener('click', e => {
-    if (e.target === ov) ov.remove();
-  });
+  // No confirmation, no blocking — navigate immediately.
+  // GPS keeps running in the background.
+  // The live-activity-pill floats on every page so the user can return in one tap.
+  showPage('page-dashboard');
+  if (typeof refreshDashboard === 'function') refreshDashboard();
+  if (typeof _updateRunInProgressBanner === 'function') _updateRunInProgressBanner();
 }
-
 
 // ── BOOT-TIME ORPHAN CLEANUP ────────────────────────────────────
 // Defensive belt-and-suspenders: in case any previous app version (or a
