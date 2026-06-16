@@ -2963,28 +2963,78 @@ function exitActiveRunWithConfirm() {
     if (typeof refreshDashboard === 'function') refreshDashboard();
     return;
   }
+
+  // ── HIGH-Z CONFIRM OVERLAY ─────────────────────────────────────
+  // modal-confirm is z-index:500 which is hidden behind the run-active
+  // map overlay at z-index:1100. We need our own overlay that sits above
+  // the map so the user can actually see and tap the confirm dialog.
   const meta = ACTIVITY_META[APP.runSession.activityType || _activityType] || ACTIVITY_META.run;
-  if (typeof showConfirm === 'function') {
-    showConfirm(
-      `Pause and exit ${meta.label}?`,
-      'GPS will pause. Return any time using the live pill at the bottom.',
-      'Pause & Exit',
-      'Stay',
-      () => {
-        if (APP.runSession && !APP.runSession.paused) togglePauseRun();
-        showPage('page-dashboard');
-        if (typeof refreshDashboard === 'function') refreshDashboard();
-        _updateRunInProgressBanner();
-      },
-      null,
-      null
-    );
-  } else if (confirm('Pause run and go back?')) {
+
+  // Remove any existing overlay (safety)
+  document.getElementById('_exitRunOverlay')?.remove();
+
+  const ov = document.createElement('div');
+  ov.id = '_exitRunOverlay';
+  ov.style.cssText = [
+    'position:fixed', 'inset:0', 'z-index:9000',
+    'background:rgba(0,0,0,0.72)',
+    'display:flex', 'align-items:flex-end', 'justify-content:center',
+    'backdrop-filter:blur(4px)',
+    '-webkit-backdrop-filter:blur(4px)',
+  ].join(';');
+
+  ov.innerHTML = `
+    <div style="
+      background:#071510;
+      border-radius:20px 20px 0 0;
+      padding:24px 20px 36px;
+      width:100%; max-width:480px;
+      border:1px solid rgba(67,160,90,0.25);
+      border-bottom:none;
+    ">
+      <div style="width:36px;height:4px;border-radius:2px;background:rgba(255,255,255,0.2);margin:0 auto 20px;"></div>
+      <div style="font-size:18px;font-weight:700;color:#fff;margin-bottom:8px;">
+        Pause and exit ${meta.label}?
+      </div>
+      <div style="font-size:13px;color:rgba(255,255,255,0.6);line-height:1.6;margin-bottom:22px;">
+        GPS will stop. Your progress is saved — return any time using the pill at the bottom.
+      </div>
+      <div style="display:flex;gap:10px;">
+        <button id="_exitRunStay"
+          style="flex:1;padding:14px;border-radius:14px;
+            border:1px solid rgba(255,255,255,0.2);
+            background:transparent;color:rgba(255,255,255,0.8);
+            font-size:15px;font-weight:600;cursor:pointer;">
+          Stay
+        </button>
+        <button id="_exitRunConfirm"
+          style="flex:2;padding:14px;border-radius:14px;
+            border:none;
+            background:linear-gradient(135deg,#2e7d46,#43a05a);
+            color:#fff;font-size:15px;font-weight:700;cursor:pointer;">
+          Pause &amp; Exit
+        </button>
+      </div>
+    </div>`;
+
+  document.body.appendChild(ov);
+
+  document.getElementById('_exitRunStay').addEventListener('click', () => {
+    ov.remove();
+  });
+
+  document.getElementById('_exitRunConfirm').addEventListener('click', () => {
+    ov.remove();
     if (APP.runSession && !APP.runSession.paused) togglePauseRun();
     showPage('page-dashboard');
     if (typeof refreshDashboard === 'function') refreshDashboard();
     _updateRunInProgressBanner();
-  }
+  });
+
+  // Tap backdrop to dismiss (= Stay)
+  ov.addEventListener('click', e => {
+    if (e.target === ov) ov.remove();
+  });
 }
 
 
