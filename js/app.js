@@ -174,14 +174,16 @@ const Sheets = {
     const cfg = Store.getSheetsConfig();
     if (!cfg.webAppUrl) return null;
     try {
-      const qs = new URLSearchParams({ action, ...params }).toString();
-      const r  = await fetch(`${cfg.webAppUrl}?${qs}`);
-      // Guard against HTML error pages from Apps Script
+      const ctrl = new AbortController();
+      const tid  = setTimeout(() => ctrl.abort(), 12000);
+      const qs   = new URLSearchParams({ action, ...params }).toString();
+      const r    = await fetch(`${cfg.webAppUrl}?${qs}`, { signal: ctrl.signal });
+      clearTimeout(tid);
       const text = await r.text();
       try { return JSON.parse(text); }
       catch { console.warn('[Sheets.get '+action+'] non-JSON:', text.substring(0,150)); return null; }
     } catch (e) {
-      console.warn('[Sheets.get '+action+'] network:', e.message);
+      if (e.name !== 'AbortError') console.warn('[Sheets.get '+action+'] network:', e.message);
       return null;
     }
   },
@@ -189,16 +191,20 @@ const Sheets = {
     const cfg = Store.getSheetsConfig();
     if (!cfg.webAppUrl) return null;
     try {
-      const r = await fetch(cfg.webAppUrl, {
+      const ctrl = new AbortController();
+      const tid  = setTimeout(() => ctrl.abort(), 12000);
+      const r    = await fetch(cfg.webAppUrl, {
         method:  'POST',
         body:    JSON.stringify({ action, ...data }),
-        headers: { 'Content-Type': 'text/plain' }, // text/plain avoids CORS preflight
+        headers: { 'Content-Type': 'text/plain' },
+        signal:  ctrl.signal,
       });
+      clearTimeout(tid);
       const text = await r.text();
       try { return JSON.parse(text); }
       catch { console.warn('[Sheets.post '+action+'] non-JSON:', text.substring(0,150)); return null; }
     } catch (e) {
-      console.warn('[Sheets.post '+action+'] network:', e.message);
+      if (e.name !== 'AbortError') console.warn('[Sheets.post '+action+'] network:', e.message);
       return null;
     }
   },
@@ -412,11 +418,7 @@ window.addEventListener('popstate', e => {
   }
   // For non-root pages, use goBack which uses PAGE_PARENT map
   // This prevents falling through to browser back (which exits the app)
-  // Block back navigation from running page during an ACTIVE run
-  if (APP.currentPage === 'page-running' && APP.runSession) {
-    window.history.pushState({ page: APP.currentPage }, '', '#' + APP.currentPage);
-    return;
-  }
+  // No run block — user can always go back; pill lets them return
   goBack();
 });
 
@@ -466,15 +468,10 @@ window.addEventListener('popstate', e => {
     // If finger moved more than 30px vertically at any point → it was a scroll
     if (maxDy > 30) return;
 
-    // Swipe-back: left swipe > 80px, horizontal dominates vertical, not a root page
-    // Special case: block swipe on running page ONLY when a run is active
-    const runBlocked = APP.currentPage === 'page-running' && APP.runSession;
-
-    // If a modal is open, swipe left closes it — don't navigate away from the page
+    // If a modal is open, swipe left closes it
     const openModal = document.querySelector('.modal-overlay.open');
     if (dx < -80 && dy < 40 && Math.abs(dx) > dy * 2 && openModal) {
       openModal.classList.remove('open');
-      // Clean up run detail map if it was open
       if (openModal.id === 'modal-run-detail' && typeof _detailMapInst !== 'undefined' && _detailMapInst) {
         _detailMapInst.remove();
         _detailMapInst = null;
@@ -482,7 +479,7 @@ window.addEventListener('popstate', e => {
       return;
     }
 
-    if (dx < -80 && dy < 40 && Math.abs(dx) > dy * 2 && !ROOT_PAGES.includes(APP.currentPage) && !runBlocked) {
+    if (dx < -80 && dy < 40 && Math.abs(dx) > dy * 2 && !ROOT_PAGES.includes(APP.currentPage)) {
       goBack();
     }
   }, { passive: true });
@@ -511,37 +508,8 @@ function setActiveNav(tab) {
 }
 
 function navTo(tab) {
-  // ── ACTIVE RUN GUARD ──────────────────────────────────────────────
-  // If a run is actively tracking (not paused) and the user taps a nav
-  // button that would leave page-running, intercept and show a
-  // "Pause & Exit" confirmation instead of silently orphaning the session.
-  // Tapping "running" while a run is active just returns to the run — no confirmation.
-  if (APP.runSession && !APP.runSession.paused && tab !== 'running') {
-    const _destTab = tab;
-    if (typeof showConfirm === 'function') {
-      showConfirm(
-        'Pause and exit?',
-        'Your activity will be paused and GPS will stop. Return any time from the banner.',
-        'Pause & Exit',
-        'Stay',
-        () => {
-          if (APP.runSession && !APP.runSession.paused) {
-            if (typeof togglePauseRun === 'function') togglePauseRun();
-          }
-          _navToInternal(_destTab);
-          if (typeof _updateRunInProgressBanner === 'function') _updateRunInProgressBanner();
-        },
-        null,
-        null
-      );
-    } else if (confirm('Pause activity and navigate away?')) {
-      if (APP.runSession && !APP.runSession.paused) {
-        if (typeof togglePauseRun === 'function') togglePauseRun();
-      }
-      _navToInternal(tab);
-    }
-    return;
-  }
+  // No blocking — user can navigate freely even during an active run.
+  // The live-activity-pill appears on every page so they can return anytime.
   _navToInternal(tab);
 }
 
@@ -559,6 +527,7 @@ function _navToInternal(tab) {
 
 // ── HELPERS ───────────────────────────────────────────────────────
 function fmtTime(secs) {
+  secs = Math.max(0, Math.floor(secs));
   const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = secs % 60;
   return h > 0
     ? `${h}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
@@ -566,7 +535,9 @@ function fmtTime(secs) {
 }
 function fmtPace(km, secs) {
   if (km < 0.05) return '--:--';
-  const p = secs / 60 / km, pm = Math.floor(p), ps = Math.round((p - pm) * 60);
+  const p = secs / 60 / km;
+  let pm = Math.floor(p), ps = Math.round((p - pm) * 60);
+  if (ps === 60) { pm++; ps = 0; }
   return `${pm}:${String(ps).padStart(2, '0')}`;
 }
 function todayStr() {
