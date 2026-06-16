@@ -325,7 +325,8 @@ function _buildWeekBreakdownHtml(user, logs, runs) {
 // ── MODULE ORDER STORAGE ─────────────────────────────────────────
 const ALL_MODULES = [
   { id: 'cardio',        name: 'Home Cardio',       emoji: '🏠',    color: 'grad-cardio',     sub: '8-9 exercises · 6 days' },
-  { id: 'gym',           name: 'Gym Workouts',      emoji: '🏋️',    color: 'grad-gym',        sub: '8 exercises · 6 days' },
+  { id: 'gym',           name: 'Gym Workouts',      emoji: '🏋️',    color: 'grad-gym',        sub: '7 exercises · 6 days' },
+  { id: 'gymSplit',      name: 'Physique Split',    emoji: '💪',    color: 'grad-gymsplit',   sub: '2 muscle groups · 6 days' },
   { id: 'yoga',          name: 'Yoga',              emoji: '🧘',    color: 'grad-yoga',       sub: '8-12 poses · 6 days' },
   { id: 'running',       name: 'Running & Walking', emoji: '🏃',    color: 'grad-running',    sub: 'GPS tracker + plans' },
   { id: 'stretching',    name: 'Stretching',        emoji: '🙆',    color: 'grad-stretch',    sub: '10 body parts · 100 stretches' },
