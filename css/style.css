@@ -30,6 +30,7 @@
   --font-display: 'Bebas Neue', sans-serif;
   --font-body: 'DM Sans', sans-serif;
   --font-mono: 'DM Mono', monospace;
+  --im-accent: #1e90d4;
 }
 
 /* ── RESET ─────────────────────────────────────────────────────── */
@@ -593,6 +594,7 @@ textarea.form-input { resize: vertical; min-height: 90px; line-height: 1.5; }
 .grad-cali    { background: linear-gradient(135deg, #3a1a1a, #5a2a0a); }
 .grad-crosstrain { background: linear-gradient(135deg, #1a1f3a, #2a0f4a); }
 .grad-core    { background: linear-gradient(135deg, #3a1a2d, #5a0f2a); }
+.grad-ironman { background: linear-gradient(135deg, #0a1f3a, #0e3060); }
 /* Manual activity utility tile — darker green than module tiles so it
    reads as a tool, not a per-day-completion module. Pairs with the
    .tile-full-width modifier below for the spans-both-columns layout. */
@@ -840,6 +842,7 @@ html.theme-light {
   --white: #ffffff;
   --shadow: 0 8px 32px rgba(0,0,0,0.08);
   --shadow-sm: 0 2px 12px rgba(0,0,0,0.06);
+  --im-accent: #1565c0;
 }
 
 /* Adjustments specific to elements that need contrast tweaks in light mode */
