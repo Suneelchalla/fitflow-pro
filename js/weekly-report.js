@@ -75,14 +75,14 @@ function wrNav(dir) {
 function _wrEmoji(mod) {
   if (typeof getModuleEmoji === 'function') return getModuleEmoji(mod);
   return { cardio:'🏠', gym:'🏋️', yoga:'🧘', stretching:'🙆', running:'🏃',
-           calisthenics:'🤸', crosstraining:'💪', core:'🔥', custom:'✏️' }[mod] || '💪';
+           calisthenics:'🤸', crosstraining:'💪', core:'🔥', ironman:'🏅', custom:'✏️' }[mod] || '💪';
 }
 function _wrName(mod) {
   if (typeof getModuleName === 'function') return getModuleName(mod);
   return { cardio:'Home Cardio', gym:'Gym Workouts', yoga:'Yoga',
            stretching:'Stretching', running:'Running',
            calisthenics:'Calisthenics', crosstraining:'Cross Training',
-           core:'Core & Abs', custom:'Custom' }[mod] || mod;
+           core:'Core & Abs', ironman:'Half Iron Man', custom:'Custom' }[mod] || mod;
 }
 
 function renderWeeklyReport() {
