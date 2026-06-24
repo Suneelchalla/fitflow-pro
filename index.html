@@ -3082,6 +3082,7 @@ window.addEventListener('DOMContentLoaded', function() {
 <script src="js/data-cali.js?v=75"></script>
 <script src="js/data-crosstraining.js?v=1"></script>
 <script src="js/data-activities.js?v=4"></script>
+<script src="js/data-ironman.js?v=1"></script>
 <script src="js/app.js?v=88"></script>
 <script src="js/auth.js?v=88"></script>
 <script src="js/dashboard.js?v=96"></script>
@@ -3094,6 +3095,7 @@ window.addEventListener('DOMContentLoaded', function() {
 <script src="push.js?v=8"></script>
 <script src="js/custom-workouts.js?v=75"></script>
 <script src="js/weekly-report.js?v=77"></script>
+<script src="js/ironman.js?v=1"></script>
 <script>
 
 // ── PROFILE DROPDOWN ──────────────────────────────────────────
@@ -3391,6 +3393,41 @@ document.addEventListener('DOMContentLoaded', () => {
       <div style="width:38px"></div>
     </div>
     <div id="ct-day-content"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PAGE: HALF IRON MAN                                             -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="page-ironman" class="page">
+  <div class="scroll-content pb-nav">
+    <div class="top-bar">
+      <button class="back-btn" onclick="showPage('page-dashboard');refreshDashboard()">‹</button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:24px">🏅</span>
+        <span class="top-bar-title">Half Iron Man</span>
+      </div>
+      <div style="width:38px"></div>
+    </div>
+    <div id="im-page-content"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<!-- PAGE: IRONMAN — DAY DETAIL                                      -->
+<!-- Opened from the Plan tab via openImDayDetail(week, day).        -->
+<!-- ═══════════════════════════════════════════════════════════════ -->
+<div id="page-im-day" class="page">
+  <div class="scroll-content pb-nav">
+    <div class="top-bar">
+      <button class="back-btn" onclick="goBack()">‹</button>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:24px">🏅</span>
+        <span class="top-bar-title">Iron Man Session</span>
+      </div>
+      <div style="width:38px"></div>
+    </div>
+    <div id="im-day-content"></div>
   </div>
 </div>
 
