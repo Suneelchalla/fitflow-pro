@@ -2187,6 +2187,7 @@ function _showHistoryWorkoutDetail(moduleId, date, day) {
   const isYogaModule   = moduleId === 'yoga';
   const isCaliModule   = moduleId === 'calisthenics';
   const isCrossTrainModule = moduleId === 'crosstraining';
+  const isIronManModule    = moduleId === 'ironman';
   const isCustomModule = moduleId.startsWith('custom_');
 
   let dayExercises = [];
@@ -2232,6 +2233,42 @@ function _showHistoryWorkoutDetail(moduleId, date, day) {
     warmups  = (window.APP_DATA_DEFAULT||window.APP_DATA).warmups?.crosstraining   || [];
     cooldowns = (window.APP_DATA_DEFAULT||window.APP_DATA).cooldowns?.crosstraining || [];
 
+  } else if (moduleId === 'ironman') {
+    // Half Ironman — exercises are keyed by sessionType (strength_a, swim_run, bike,
+    // strength_b, swim, brick, long_run), not by weekday. Read sessionType from the
+    // log row that completeImDay() wrote (stored as l.sessionType).
+    const imLog = Store.getUserLogs(user.id).find(l =>
+      l.module === 'ironman' && l.day === day && l.date === date);
+    const imMod = (window.APP_DATA_DEFAULT||window.APP_DATA).modules?.ironman;
+    const sessionType = imLog?.sessionType || '';
+    if (imMod && sessionType) {
+      if (sessionType === 'strength_a') {
+        dayExercises = imMod.strength_a || [];
+        warmups   = (window.APP_DATA_DEFAULT||window.APP_DATA).warmups?.ironman_strength  || [];
+        cooldowns = (window.APP_DATA_DEFAULT||window.APP_DATA).cooldowns?.ironman_strength || [];
+      } else if (sessionType === 'strength_b') {
+        dayExercises = imMod.strength_b || [];
+        warmups   = (window.APP_DATA_DEFAULT||window.APP_DATA).warmups?.ironman_strength  || [];
+        cooldowns = (window.APP_DATA_DEFAULT||window.APP_DATA).cooldowns?.ironman_strength || [];
+      } else if (sessionType === 'swim_run' || sessionType === 'swim') {
+        dayExercises = imMod.swim_drills || [];
+        warmups   = (window.APP_DATA_DEFAULT||window.APP_DATA).warmups?.ironman_swim || [];
+        cooldowns = (window.APP_DATA_DEFAULT||window.APP_DATA).cooldowns?.ironman_run || [];
+      } else if (sessionType === 'brick') {
+        dayExercises = imMod.brick_structure || [];
+        warmups   = (window.APP_DATA_DEFAULT||window.APP_DATA).warmups?.ironman_bike  || [];
+        cooldowns = (window.APP_DATA_DEFAULT||window.APP_DATA).cooldowns?.ironman_run || [];
+      } else if (sessionType === 'long_run') {
+        dayExercises = imMod.long_run_structure || [];
+        warmups   = (window.APP_DATA_DEFAULT||window.APP_DATA).warmups?.ironman_run  || [];
+        cooldowns = (window.APP_DATA_DEFAULT||window.APP_DATA).cooldowns?.ironman_run || [];
+      } else if (sessionType === 'bike') {
+        dayExercises = [];
+        warmups   = (window.APP_DATA_DEFAULT||window.APP_DATA).warmups?.ironman_bike  || [];
+        cooldowns = (window.APP_DATA_DEFAULT||window.APP_DATA).cooldowns?.ironman_bike || [];
+      }
+    }
+
   } else if (isCustomModule) {
     // Custom workouts: exercises from CW store — no warmup/cooldown
     const workoutId = moduleId.replace('custom_', '');
@@ -2267,7 +2304,7 @@ function _showHistoryWorkoutDetail(moduleId, date, day) {
   const rawDoneSets = Object.values(sessionData).flat().length;
   const totalSets   = allExercises.reduce((a, ex) => a + (parseInt(ex.sets) || 1), 0);
   const noSetData   = rawDoneSets === 0;
-  const treatAsFull = wasLogged && (isGymModule || isYogaModule || isCaliModule || isCustomModule || noSetData); // isGymModule already includes gymSplit
+  const treatAsFull = wasLogged && (isGymModule || isYogaModule || isCaliModule || isCustomModule || isIronManModule || noSetData); // isGymModule already includes gymSplit
   const doneSets    = treatAsFull ? totalSets : rawDoneSets;
   const pct         = totalSets > 0 ? Math.round(doneSets / totalSets * 100) : (wasLogged ? 100 : 0);
 
@@ -2724,14 +2761,14 @@ function getModuleEmoji(mod) {
     const act = window.APP_DATA?.getActivity?.(mod.replace(/^activity_/, ''));
     if (act) return act.emoji;
   }
-  return { cardio: '🏠', gym: '🏋️', gymSplit: '💪', yoga: '🧘', stretching: '🙆', running: '🏃', calisthenics: '🤸‍♂️', crosstraining: '💪', core: '🔥' }[mod] || '💪';
+  return { cardio: '🏠', gym: '🏋️', gymSplit: '💪', yoga: '🧘', stretching: '🙆', running: '🏃', calisthenics: '🤸‍♂️', crosstraining: '💪', core: '🔥', ironman: '🏅' }[mod] || '💪';
 }
 function getModuleName(mod) {
   if (typeof mod === 'string' && mod.startsWith('activity_')) {
     const act = window.APP_DATA?.getActivity?.(mod.replace(/^activity_/, ''));
     if (act) return act.name;
   }
-  return { cardio: 'Home Cardio', gym: 'Gym Workouts', gymSplit: 'Physique Split', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics', crosstraining: 'Cross Training', core: 'Core & Abs' }[mod] || mod;
+  return { cardio: 'Home Cardio', gym: 'Gym Workouts', gymSplit: 'Physique Split', yoga: 'Yoga', stretching: 'Stretching', running: 'Running', calisthenics: 'Calisthenics', crosstraining: 'Cross Training', core: 'Core & Abs', ironman: 'Half Iron Man' }[mod] || mod;
 }
 // Activity-aware emoji/label for GPS activities (run / walk / cycle)
 function _getActivityEmoji(activityType) {
