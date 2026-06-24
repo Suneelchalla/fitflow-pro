@@ -331,6 +331,7 @@ const ALL_MODULES = [
   { id: 'stretching',    name: 'Stretching',        emoji: '🙆',    color: 'grad-stretch',    sub: '10 body parts · 100 stretches' },
   { id: 'calisthenics',  name: 'Calisthenics',      emoji: '🤸‍♂️', color: 'grad-cali',       sub: '3 levels · skill tree' },
   { id: 'crosstraining', name: 'Cross Training',    emoji: '💪',    color: 'grad-crosstrain', sub: '8-week plan · 4×/wk' },
+  { id: 'ironman',       name: 'Half Iron Man',      emoji: '🏅',    color: 'grad-ironman',    sub: '24-week · Swim · Bike · Run' },
   { id: 'core',          name: 'Core & Abs',        emoji: '🔥',    color: 'grad-core',       sub: '6 exercises · 6 days' },
   // ── Manual activity logging — non-GPS sports (Badminton, Tennis, etc.)
   // Renders as a full-width tile via the special `tile_log_activity`
@@ -726,6 +727,7 @@ function openModule(moduleId) {
   if (moduleId === 'running') { showPage('page-running'); initRunningPage(); return; }
   if (moduleId === 'calisthenics') { showPage('page-calisthenics'); if (typeof initCalisthenicsPage === 'function') initCalisthenicsPage(); return; }
   if (moduleId === 'crosstraining') { showPage('page-cross-training'); if (typeof initCrossTrainingPage === 'function') initCrossTrainingPage(); return; }
+  if (moduleId === 'ironman') { showPage('page-ironman'); if (typeof initIronManPage === 'function') initIronManPage(); return; }
   if (moduleId === 'log_activity') { showPage('page-manual-log'); if (typeof initManualLogPage === 'function') initManualLogPage(); return; }
   if (moduleId === 'yoga') { showPage('page-module'); renderYogaProgressivePage(); return; }
   // Gym tile opens a program picker inside page-module
