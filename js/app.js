@@ -302,6 +302,8 @@ const PAGE_PARENT = {
   'page-cw-workout':      'page-custom-workouts',
   'page-admin-editor':    'page-admin',
   'page-ct-day':          'page-cross-training',
+  'page-ironman':         'page-dashboard',
+  'page-im-day':          'page-ironman',
   'page-manual-log':      'page-dashboard',
   'page-activity-card':   'page-dashboard',
 };
@@ -739,7 +741,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const restorablePages = ['page-dashboard','page-history-global','page-module',
       'page-profile','page-custom-workouts','page-weekly-report',
-      'page-calisthenics','page-my-plan'];
+      'page-calisthenics','page-ironman','page-my-plan'];
     // page-running is only restorable if there is an active session in storage.
     // Restoring to it without an active session calls initRunningPage() →
     // _tryRecoverRunSession() → GPS + activity notification fires unexpectedly.
@@ -795,6 +797,9 @@ document.addEventListener('DOMContentLoaded', () => {
       setActiveNav('running');
     } else if (targetPage === 'page-calisthenics') {
       if (typeof initCalisthenicsPage === 'function') initCalisthenicsPage();
+      setActiveNav('home');
+    } else if (targetPage === 'page-ironman') {
+      if (typeof initIronManPage === 'function') initIronManPage();
       setActiveNav('home');
     } else if (targetPage === 'page-custom-workouts') {
       if (typeof renderCustomWorkoutsList === 'function') renderCustomWorkoutsList();
@@ -1012,6 +1017,8 @@ document.addEventListener('DOMContentLoaded', () => {
         renderAdminPanel();
       } else if (page === 'page-calisthenics' && typeof initCalisthenicsPage === 'function') {
         initCalisthenicsPage();
+      } else if (page === 'page-ironman' && typeof initIronManPage === 'function') {
+        initIronManPage();
       } else if (page === 'page-custom-workouts' && typeof renderCustomWorkoutsList === 'function') {
         renderCustomWorkoutsList();
       }
