@@ -7,7 +7,7 @@
 // Import OneSignal's service worker — handles push notifications
 importScripts('https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js');
 
-const CACHE = 'fitflow-v170';
+const CACHE = 'fitflow-v171';
 const ASSETS = [
   './',
   './index.html',
@@ -16,6 +16,7 @@ const ASSETS = [
   './js/data-cali.js?v=75',
   './js/data-crosstraining.js?v=1',
   './js/data-activities.js?v=4',
+  './js/data-ironman.js?v=1',
   './js/app.js?v=88',
   './js/auth.js?v=88',
   './js/dashboard.js?v=96',
@@ -28,6 +29,7 @@ const ASSETS = [
   './push.js?v=8',
   './js/custom-workouts.js?v=75',
   './js/weekly-report.js?v=77',
+  './js/ironman.js?v=1',
   './manifest.json',
   './privacy.html',
   // Leaflet JS — critical to pre-cache. Without this, cold start has to fetch
