@@ -1,0 +1,83 @@
+/* ════════════════════════════════════════════════════════════════
+   FITFLOW PRO — enhancements.css v1
+   Search overlay · Streak details · Hide/show module buttons
+   ════════════════════════════════════════════════════════════════ */
+
+/* ── Search overlay ──────────────────────────────────────────── */
+#ff-search-overlay {
+  animation: ffSearchIn 0.2s ease;
+}
+@keyframes ffSearchIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+#ff-search-input::placeholder {
+  color: var(--text3);
+}
+#ff-search-results > div:last-child {
+  border-bottom: none !important;
+}
+#ff-search-btn {
+  transition: background 0.15s, transform 0.1s !important;
+}
+#ff-search-btn:hover {
+  background: rgba(255,255,255,0.08) !important;
+}
+#ff-search-btn:active {
+  transform: scale(0.92) !important;
+}
+
+/* ── Streak pill — tappable states ───────────────────────────── */
+.streak-pill {
+  transition: transform 0.1s ease, background 0.15s ease !important;
+}
+.streak-pill:hover {
+  background: rgba(240,192,64,0.2) !important;
+}
+.streak-pill:active {
+  transform: scale(0.93) !important;
+}
+
+/* ── Streak modal ────────────────────────────────────────────── */
+#ff-streak-modal {
+  animation: ffFadeIn 0.25s ease;
+}
+#ff-streak-modal > div {
+  animation: ffSlideUp 0.3s cubic-bezier(0.4,0,0.2,1);
+}
+@keyframes ffFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes ffSlideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+/* ── Module card hide (×) button ─────────────────────────────── */
+.ff-hide-btn {
+  opacity: 0;
+  transition: opacity 0.2s ease, background 0.15s ease, color 0.15s ease !important;
+}
+/* Touch devices: always semi-visible */
+@media (hover: none) {
+  .ff-hide-btn {
+    opacity: 0.65 !important;
+  }
+}
+/* Desktop: show on card hover */
+.module-card:hover .ff-hide-btn {
+  opacity: 1 !important;
+}
+.ff-hide-btn:hover {
+  background: rgba(229,57,53,0.65) !important;
+  color: #fff !important;
+}
+
+/* ── Manage Modules in Profile ───────────────────────────────── */
+#ff-manage-modules-list > div > div {
+  transition: transform 0.12s ease, background 0.12s ease;
+}
+#ff-manage-modules-list > div > div:active {
+  transform: scale(0.98);
+}
