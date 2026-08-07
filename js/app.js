@@ -280,6 +280,10 @@ function showPage(id, addToHistory = true) {
   if (APP.currentUser && !_skipPersist.includes(id)) {
     Store.set('ff_last_page_' + APP.currentUser.id, id);
   }
+  // sessionStorage tracks the "live" page — it survives task-switch / lock-screen
+  // but is wiped on swipe-to-kill. The boot code reads this to decide whether to
+  // resume or go home. localStorage above is kept for backward compat / admin use.
+  try { sessionStorage.setItem('ff_active_page', id); } catch(e) {}
   // Keep the global bottom nav in sync with the new page. The nav element has
   // inline `display:none` and _syncNav is the only thing that toggles it, so
   // without this call the nav stays hidden after login / navTo / etc.
@@ -352,6 +356,8 @@ function goBack() {
   }
   window.history.pushState({ page: target }, '', '#' + target);
   _syncNav(target);
+  // Track live page for resume-vs-fresh-launch detection (mirrors showPage)
+  try { sessionStorage.setItem('ff_active_page', target); } catch(e) {}
 }
 
 function _syncNav(pageId) {
@@ -731,9 +737,16 @@ document.addEventListener('DOMContentLoaded', () => {
       Store.set('ff_last_page_' + session.id, 'page-dashboard');
     }
 
-    // Restore to correct page INSTANTLY before any rendering
-    // This prevents the login page flash on pull-down / reload
-    const savedLastPage = Store.get('ff_last_page_' + session.id);
+    // ── PAGE RESTORE — resume vs fresh-launch detection ─────────────
+    // sessionStorage survives task-switch / lock-screen (app stays in
+    // memory) but is wiped on swipe-to-kill (process destroyed).
+    //   • sessionStorage has a page → user just switched away → RESUME
+    //   • sessionStorage empty       → app was killed          → HOME
+    // localStorage is still written by showPage() for admin/diagnostic
+    // purposes, but is NOT used for restore decisions anymore.
+    let _sessionPage = null;
+    try { _sessionPage = sessionStorage.getItem('ff_active_page'); } catch(e) {}
+
     const basePage = session.role === 'ADMIN'
       ? 'page-admin'
       : Store.get('ff_quote_' + session.id) === todayStr()
@@ -744,11 +757,13 @@ document.addEventListener('DOMContentLoaded', () => {
       'page-profile','page-custom-workouts','page-weekly-report',
       'page-calisthenics','page-cross-training','page-ironman','page-my-plan'];
     // page-running is only restorable if there is an active session in storage.
-    // Restoring to it without an active session calls initRunningPage() →
-    // _tryRecoverRunSession() → GPS + activity notification fires unexpectedly.
     const hasSavedRun = !!Store.get('ff_active_run');
     if (hasSavedRun) restorablePages.push('page-running');
-    const targetPage = (savedLastPage && restorablePages.includes(savedLastPage) && session.role !== 'ADMIN')
+
+    // Use sessionStorage page only if it's in the restorable list
+    const savedLastPage = (_sessionPage && restorablePages.includes(_sessionPage))
+      ? _sessionPage : null;
+    const targetPage = (savedLastPage && session.role !== 'ADMIN')
       ? savedLastPage : basePage;
 
     // Restore last module so module page re-renders correctly
@@ -764,6 +779,9 @@ document.addEventListener('DOMContentLoaded', () => {
     // bypasses showPage() ("no animation, no flash" — intentional), so we have
     // to call _syncNav manually here or the nav stays display:none.
     _syncNav(targetPage);
+
+    // Seed sessionStorage so a task-switch right after boot resumes correctly
+    try { sessionStorage.setItem('ff_active_page', targetPage); } catch(e) {}
 
     // Render immediately from local data
     initDashboard();
